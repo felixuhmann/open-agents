@@ -11,7 +11,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 
@@ -27,12 +27,34 @@ for (const path of ENV_CANDIDATES) {
   }
 }
 
+/**
+ * Why `process.env` and not Prisma's `env()` helper?
+ *
+ * `env("DATABASE_URL")` throws at config-load time when the variable is
+ * missing, which breaks any command that doesn't actually need a live DB.
+ * The Docker / Railpack / Dokploy build runs `prisma generate` (codegen
+ * only — Prisma 7 has no Rust query engine for SQL providers, so generate
+ * never connects) and there's no reason to inject a real `DATABASE_URL`
+ * into the build environment.
+ *
+ * The placeholder URL below is therefore ONLY ever read during codegen,
+ * `prisma format`, and similar offline tooling. Every command that
+ * actually opens a connection (`prisma migrate dev`, `prisma migrate
+ * deploy`, `prisma studio`, the API at runtime) is launched with the
+ * real `DATABASE_URL` already set — by `dotenv` above in dev, by the
+ * host in production. If you somehow run a connecting command without
+ * setting it, the connection itself will fail with a clear error long
+ * before this placeholder causes any confusion.
+ */
+const PLACEHOLDER_DATABASE_URL =
+  "postgresql://placeholder:placeholder@localhost:5432/placeholder";
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"),
+    url: process.env.DATABASE_URL ?? PLACEHOLDER_DATABASE_URL,
   },
 });

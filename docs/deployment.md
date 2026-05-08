@@ -221,6 +221,15 @@ Prisma 7 reads its connection URL from
 loads `DATABASE_URL` via `dotenv`. In CI / production, set
 `DATABASE_URL` directly on the host — no `.env` file is required.
 
+> **Build-time note.** `prisma generate` (run in `pnpm install`'s
+> `postinstall` and again in `pnpm build`) only does codegen — it
+> never opens a connection thanks to the v7 driver-adapter
+> architecture. The config therefore falls back to a placeholder
+> `DATABASE_URL` when the variable isn't set, so Docker / Railpack /
+> Dokploy builds don't need a live database. Anything that *does*
+> connect (`prisma migrate deploy`, the API at runtime) is launched
+> with the real value injected by the host.
+
 ## Health checks
 
 - `GET /health` — `200 OK` immediately. Use this for liveness.
