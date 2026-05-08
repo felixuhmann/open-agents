@@ -69,19 +69,27 @@ export async function createSkill(args: CreateSkillArgs) {
   try {
     const client = await getAnthropicClient();
     const beta = client.beta as unknown as {
-      skills?: { create(body: unknown): Promise<unknown> };
+      skills?: {
+        create(body: { display_title?: string; files?: unknown[] }): Promise<unknown>;
+      };
     };
     if (beta.skills?.create) {
+      // Anthropic's Skills API expects the bundle as an array of
+      // `Uploadable`s under `files[]` (the API extracts SKILL.md and
+      // any sibling assets from the zip). `display_title` is the
+      // human-readable label; descriptions are derived from SKILL.md
+      // and not part of the create payload.
       const file = await toFile(args.bytes, args.filename, { type: "application/zip" });
       const res = await beta.skills.create({
-        display_name: args.name,
-        ...(args.description ? { description: args.description } : {}),
-        bundle: file,
+        display_title: args.name,
+        files: [file],
       });
       if (res && typeof res === "object") {
-        const r = res as { id?: unknown; version?: unknown };
+        const r = res as { id?: unknown; latest_version?: unknown; version?: unknown };
         if (typeof r.id === "string") anthropicSkillId = r.id;
-        if (typeof r.version === "string") anthropicSkillVersion = r.version;
+        if (typeof r.latest_version === "string")
+          anthropicSkillVersion = r.latest_version;
+        else if (typeof r.version === "string") anthropicSkillVersion = r.version;
       }
     } else {
       log.warn("skills: SDK has no beta.skills.create — bundle stored locally only");
