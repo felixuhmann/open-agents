@@ -1,0 +1,12 @@
+# Admin-uploaded branding (agent profile pictures, deployment footer logo).
+# Lives outside source control so a fresh `pnpm install` doesn't blow it away
+# and uploaded customer assets aren't accidentally committed.
+*
+!.gitignore
+!.gitkeep
+!avatars/
+!footer/
+avatars/*
+footer/*
+!avatars/.gitkeep
+!footer/.gitkeep

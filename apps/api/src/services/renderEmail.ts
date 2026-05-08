@@ -18,37 +18,36 @@ const PREVIEW_CHAR_BUDGET = 120;
 const FALLBACK_AVATAR_FILENAME = "fallback.png";
 
 /**
- * Build an absolute URL for an asset in `src/emails/static/`. In dev the
- * react-email preview server hosts `/static/...` directly, in production
- * we need a fully-qualified URL because email clients fetch images
- * server-side.
+ * Resolve a stored asset reference to an absolute URL the email client
+ * can fetch. Email clients render images server-side, so URLs always
+ * need to be absolute in production — in dev the react-email preview
+ * server hosts `/static/...` directly so a relative path is fine.
+ *
+ * Accepts three flavours so the legacy `Agent.avatar` (just a filename
+ * inside `src/emails/static/`) and the new uploads (full
+ * `/static/uploads/...` URL paths) both work:
+ *
+ *  - `https?://…`        — used verbatim (admin pasted an external URL).
+ *  - `/static/…`         — prepended with `PUBLIC_BASE_URL` in production.
+ *  - bare filename       — treated as a file in `src/emails/static/` and
+ *                          mapped to `${PUBLIC_BASE_URL}/static/<file>`.
  */
-function resolveStaticUrl(filename: string): string {
+function resolveAssetUrl(value: string): string {
+  if (/^https?:\/\//i.test(value)) return value;
   const baseUrl =
     process.env.NODE_ENV === "production" ? (process.env.PUBLIC_BASE_URL ?? "") : "";
-  return `${baseUrl}/static/${filename}`;
+  if (value.startsWith("/static/")) return `${baseUrl}${value}`;
+  return `${baseUrl}/static/${value}`;
 }
 
 /**
- * Resolve the footer logo URL for outbound emails.
- *
- * - If the admin set `email_footer_logo_url` in **General settings** to an
- *   absolute URL (`https://...`), use it verbatim.
- * - If the value is a `/static/<file>` reference, prepend the public base
- *   URL in production so email clients (which fetch images server-side)
- *   get an absolute URL.
- * - When unset, return undefined and the template hides the image block.
+ * Resolve the footer logo URL for outbound emails. Returns undefined when
+ * unset so the template can hide the image block entirely.
  */
 async function resolveFooterLogoUrl(): Promise<string | undefined> {
   const raw = await getAppSetting(APP_SETTING_KEYS.EMAIL_FOOTER_LOGO_URL);
   if (!raw) return undefined;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (raw.startsWith("/static/")) {
-    const baseUrl =
-      process.env.NODE_ENV === "production" ? (process.env.PUBLIC_BASE_URL ?? "") : "";
-    return `${baseUrl}${raw}`;
-  }
-  return raw;
+  return resolveAssetUrl(raw);
 }
 
 /**
@@ -83,13 +82,14 @@ export async function renderAgentResponseHtml(args: {
   agentDisplayName: string;
   markdown: string;
   /**
-   * Filename of the agent avatar inside `src/emails/static/`. When
-   * undefined, falls back to the shared `fallback.png` so the email
-   * header always shows an avatar.
+   * Reference to the agent avatar — see `resolveAssetUrl` for accepted
+   * formats (bare filename, `/static/...` URL path, or absolute URL).
+   * When undefined, falls back to the shared `fallback.png` so the
+   * email header always shows an avatar.
    */
   avatarFilename?: string;
 }): Promise<string> {
-  const avatarUrl = resolveStaticUrl(args.avatarFilename ?? FALLBACK_AVATAR_FILENAME);
+  const avatarUrl = resolveAssetUrl(args.avatarFilename ?? FALLBACK_AVATAR_FILENAME);
   const footerLogoUrl = await resolveFooterLogoUrl();
   return render(
     AgentResponseEmail({

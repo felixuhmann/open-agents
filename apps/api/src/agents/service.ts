@@ -148,6 +148,13 @@ export type UpdateAgentArgs = {
   accessMode?: "everyone" | "specific";
   inboundLocalPart?: string;
   /**
+   * Reference stored on `Agent.avatar`. Pass `null` to clear and fall
+   * back to the bundled `fallback.png`. The avatar upload route
+   * (`POST /api/agents/:slug/avatar`) sets this to a `/static/uploads/...`
+   * URL once the file lands on disk.
+   */
+  avatar?: string | null;
+  /**
    * Replace-semantics: every binding the agent should have after the
    * patch, regardless of runtime. The transaction wipes existing rows
    * and re-creates them in one shot.
@@ -184,6 +191,7 @@ export async function updateAgent(
   if (args.inboundLocalPart !== undefined) {
     scalarUpdate.inboundLocalPart = args.inboundLocalPart;
   }
+  if (args.avatar !== undefined) scalarUpdate.avatar = args.avatar;
 
   await prisma.$transaction(async (tx) => {
     if (Object.keys(scalarUpdate).length > 0) {

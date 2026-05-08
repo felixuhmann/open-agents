@@ -1,3 +1,4 @@
+import { File } from "node:buffer";
 import { Hono } from "hono";
 import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
 import {
@@ -17,6 +18,11 @@ import {
 } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
+import {
+  deleteBrandingAsset,
+  MAX_BRANDING_BYTES,
+  saveBrandingImage,
+} from "../../services/uploads.js";
 
 export const agentsRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -25,6 +31,7 @@ function toSummary(agent: {
   slug: string;
   displayName: string;
   description: string | null;
+  avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;
   accessMode: string;
@@ -34,6 +41,7 @@ function toSummary(agent: {
     slug: agent.slug,
     displayName: agent.displayName,
     description: agent.description,
+    avatar: agent.avatar,
     emailEnabled: agent.emailEnabled,
     webEnabled: agent.webEnabled,
     accessMode: agent.accessMode,
@@ -146,8 +154,69 @@ agentsRoutes.delete("/:slug", async (c) => {
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
+  if (agent.avatar) {
+    await deleteBrandingAsset({ kind: "avatars", urlOrFilename: agent.avatar });
+  }
   await deleteAgent(agent.id);
   return c.json({ ok: true });
+});
+
+/**
+ * Upload (or replace) the agent's profile picture. Stored on disk under
+ * `apps/api/data/uploads/avatars/` and served from `/static/uploads/...`.
+ * The previous file (if any) is deleted so the upload directory doesn't
+ * accumulate orphans.
+ */
+agentsRoutes.post("/:slug/avatar", async (c) => {
+  requireAdmin(c);
+  const slug = c.req.param("slug");
+  const agent = await getAgentBySlug(slug);
+  if (!agent) throw new HttpError(404, "agent not found");
+
+  let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+  try {
+    form = await c.req.parseBody({ all: false });
+  } catch {
+    throw new HttpError(400, "invalid multipart body");
+  }
+  const file = form.file;
+  if (!(file instanceof File)) throw new HttpError(400, "missing 'file' field");
+  if (file.size === 0) throw new HttpError(400, "empty file");
+  if (file.size > MAX_BRANDING_BYTES) {
+    throw new HttpError(413, `file too large (>${MAX_BRANDING_BYTES} bytes)`);
+  }
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  let saved;
+  try {
+    saved = await saveBrandingImage({
+      kind: "avatars",
+      prefix: agent.slug,
+      bytes,
+      contentType: file.type || "application/octet-stream",
+      originalName: file.name || "avatar",
+    });
+  } catch (err) {
+    throw new HttpError(400, err instanceof Error ? err.message : String(err));
+  }
+
+  if (agent.avatar) {
+    await deleteBrandingAsset({ kind: "avatars", urlOrFilename: agent.avatar });
+  }
+  const updated = await updateAgent(agent.id, { avatar: saved.url });
+  return c.json(toDto(updated));
+});
+
+agentsRoutes.delete("/:slug/avatar", async (c) => {
+  requireAdmin(c);
+  const slug = c.req.param("slug");
+  const agent = await getAgentBySlug(slug);
+  if (!agent) throw new HttpError(404, "agent not found");
+  if (agent.avatar) {
+    await deleteBrandingAsset({ kind: "avatars", urlOrFilename: agent.avatar });
+  }
+  const updated = await updateAgent(agent.id, { avatar: null });
+  return c.json(toDto(updated));
 });
 
 /**

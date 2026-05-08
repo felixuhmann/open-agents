@@ -12,8 +12,9 @@ import {
   RobotIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { useAgents, useCurrentUser } from "@/lib/queries";
+import { avatarSrc, useAgents, useCurrentUser } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -144,8 +145,20 @@ export default function AgentsListPage() {
                   <TableCell className="font-medium">
                     <Link
                       to={`/agents/${a.slug}`}
-                      className="underline-offset-4 hover:underline"
+                      className="flex items-center gap-2 underline-offset-4 hover:underline"
                     >
+                      <Avatar size="sm" className="rounded-none">
+                        {a.avatar ? (
+                          <AvatarImage
+                            className="rounded-none"
+                            src={avatarSrc(a.avatar)}
+                            alt={a.displayName}
+                          />
+                        ) : null}
+                        <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                          {a.displayName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                       {a.displayName}
                     </Link>
                   </TableCell>

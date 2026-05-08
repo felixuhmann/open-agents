@@ -293,7 +293,10 @@ truncate `EmailAttachment`, `RunEvent`, or `MemoryDoc` — nothing else
 has the data.
 
 The `data/skills/` directory on disk should also be backed up (or
-mirrored to S3) since the zip bytes are not in Postgres.
+mirrored to S3) since the zip bytes are not in Postgres. Same goes for
+`data/uploads/` (admin-uploaded agent profile pictures + the
+deployment footer logo); override either path with `SKILL_BUNDLE_DIR` /
+`STATIC_UPLOADS_DIR` when mounting persistent volumes.
 
 ## Rotating secrets
 

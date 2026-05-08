@@ -43,6 +43,20 @@ export function useAgents() {
   });
 }
 
+/**
+ * Convert a stored avatar reference (bare filename, `/static/...` URL
+ * path, or absolute URL) into something a browser `<img src>` can load.
+ * Mirrors `resolveAssetUrl` on the server side; kept inline because the
+ * SPA never needs the production `PUBLIC_BASE_URL` prefix (the file is
+ * always served from the same origin).
+ */
+export function avatarSrc(avatar: string | null | undefined): string | undefined {
+  if (!avatar) return undefined;
+  if (/^https?:\/\//i.test(avatar)) return avatar;
+  if (avatar.startsWith("/static/")) return avatar;
+  return `/static/${avatar}`;
+}
+
 export type ToolRuntime = "managed" | "platform";
 
 export type FullAgentDto = {
@@ -52,6 +66,7 @@ export type FullAgentDto = {
   description: string | null;
   systemPrompt: string;
   model: string;
+  avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;
   accessMode: "everyone" | "specific";

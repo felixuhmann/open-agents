@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { EraserIcon, FloppyDiskIcon, ImageIcon } from "@phosphor-icons/react";
+import {
+  CloudArrowUpIcon,
+  EraserIcon,
+  FloppyDiskIcon,
+  ImageIcon,
+} from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import { useAppSettings } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
@@ -20,16 +25,31 @@ import { Spinner } from "@/components/ui/spinner";
 
 const LABELS: Record<string, { title: string; description: string }> = {
   email_footer_logo_url: {
-    title: "Email footer logo URL",
+    title: "Email footer logo",
     description:
-      "Logo image rendered at the bottom of every outbound agent email. Accepts an absolute https:// URL, or /static/<file> to reference an image dropped into apps/api/src/emails/static/. Leave empty to hide the footer image.",
+      "Logo image rendered at the bottom of every outbound agent email. Upload a file to host it locally, or paste an absolute https:// URL to use one you already host. Leave empty to hide the footer image.",
   },
 };
+
+/**
+ * Resolve a stored asset reference (`/static/...` URL path or absolute
+ * URL) into something a browser `<img src>` can load. Mirrors the
+ * server-side `resolveAssetUrl` minus the `PUBLIC_BASE_URL` prefix —
+ * the SPA always fetches uploads from the same origin.
+ */
+function previewSrc(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/static/")) return trimmed;
+  return undefined;
+}
 
 export default function GeneralSettingsPage() {
   const settings = useAppSettings();
   const qc = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!settings.data) return;
@@ -72,6 +92,32 @@ export default function GeneralSettingsPage() {
       }),
   });
 
+  const uploadFooter = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/settings/email-footer-logo", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new ApiError(r.status, body.error ?? r.statusText);
+      }
+      return (await r.json()) as { value: string };
+    },
+    onSuccess: async (resp) => {
+      setDrafts((d) => ({ ...d, email_footer_logo_url: resp.value }));
+      toast.success("Footer logo uploaded");
+      await qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: (e) =>
+      toast.error("Upload failed", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -91,6 +137,8 @@ export default function GeneralSettingsPage() {
               const draft = drafts[s.key] ?? "";
               const persisted = s.value ?? "";
               const dirty = draft.trim() !== persisted.trim();
+              const isFooter = s.key === "email_footer_logo_url";
+              const preview = isFooter ? previewSrc(persisted) : undefined;
               return (
                 <li key={s.key}>
                   <Card>
@@ -103,20 +151,64 @@ export default function GeneralSettingsPage() {
                     </CardHeader>
                     <CardContent>
                       <form
-                        className="flex flex-col gap-3"
+                        className="flex flex-col gap-4"
                         onSubmit={(e) => {
                           e.preventDefault();
                           setSetting.mutate({ key: s.key, value: draft });
                         }}
                       >
+                        {isFooter ? (
+                          <div className="flex items-center gap-4">
+                            <div className="flex h-16 w-32 items-center justify-center border bg-muted/30">
+                              {preview ? (
+                                <img
+                                  src={preview}
+                                  alt=""
+                                  className="max-h-full max-w-full object-contain"
+                                />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  No image
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) uploadFooter.mutate(file);
+                                e.target.value = "";
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={uploadFooter.isPending}
+                              onClick={() => fileInputRef.current?.click()}
+                            >
+                              {uploadFooter.isPending ? (
+                                <Spinner data-icon="inline-start" />
+                              ) : (
+                                <CloudArrowUpIcon data-icon="inline-start" />
+                              )}
+                              {persisted ? "Replace image" : "Upload image"}
+                            </Button>
+                          </div>
+                        ) : null}
                         <Field>
-                          <FieldLabel htmlFor={`setting-${s.key}`}>Value</FieldLabel>
+                          <FieldLabel htmlFor={`setting-${s.key}`}>
+                            {isFooter ? "URL" : "Value"}
+                          </FieldLabel>
                           <Input
                             id={`setting-${s.key}`}
                             value={draft}
                             placeholder={
-                              s.key === "email_footer_logo_url"
-                                ? "https://example.com/logo.png or /static/logo.png"
+                              isFooter
+                                ? "https://example.com/logo.png or /static/uploads/footer/<file>"
                                 : ""
                             }
                             onChange={(e) =>

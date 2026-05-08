@@ -6,8 +6,9 @@ import {
   PencilSimpleIcon,
   WarningOctagonIcon,
 } from "@phosphor-icons/react";
-import { useAgent, useCurrentUser } from "@/lib/queries";
+import { avatarSrc, useAgent, useCurrentUser } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +64,23 @@ export default function AgentDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={a.displayName}
+        title={
+          <span className="flex items-center gap-3">
+            <Avatar size="lg" className="rounded-none">
+              {a.avatar ? (
+                <AvatarImage
+                  className="rounded-none"
+                  src={avatarSrc(a.avatar)}
+                  alt={a.displayName}
+                />
+              ) : null}
+              <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                {a.displayName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {a.displayName}
+          </span>
+        }
         meta={a.slug}
         description={a.description ?? undefined}
         actions={

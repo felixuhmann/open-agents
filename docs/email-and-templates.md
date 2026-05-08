@@ -129,32 +129,50 @@ Today there's a single template:
 wraps `render(...)`, extracts a 120-char preheader, and resolves the
 agent avatar URL.
 
-### Per-agent avatar
+### Per-agent profile picture
 
-Avatars live on the `Agent.avatar` column (a static-asset filename). To
-ship a new one:
+Each agent can pin a profile picture rendered in the email header (and
+in the SPA agent list, detail page, and chat header). Upload it from
+`/agents/<slug>/edit` → **Profile picture** → **Upload**:
 
-1. Drop the image into
-   [`apps/api/src/emails/static/`](../apps/api/src/emails/static/) (PNG/JPG,
-   square, ~256×256 px).
-2. Set `avatar` from the agent edit page.
-3. Agents that omit `avatar` fall back to the shared `fallback.png`.
+1. The file is stored on disk under
+   [`apps/api/data/uploads/avatars/`](../apps/api/data/uploads/) (a
+   gitignored directory; mount a persistent volume here in production).
+2. `Agent.avatar` records the public URL
+   (`/static/uploads/avatars/<slug>-<random>.<ext>`); replacing or
+   removing the picture deletes the old file in the same transaction.
+3. Agents that leave the field empty fall back to the bundled
+   `fallback.png`.
+
+For backwards compatibility `Agent.avatar` also accepts a bare filename
+inside [`apps/api/src/emails/static/`](../apps/api/src/emails/static/)
+or an absolute `https://...` URL — the render service resolves all
+three flavours to an absolute URL before handing it to
+`AgentResponse.tsx`.
 
 ### Static assets
 
-Drop email images into
-[`apps/api/src/emails/static/`](../apps/api/src/emails/static/).
-**PNG/JPG only** — SVG/WEBP are unreliable in many email clients.
+Two roots are served under the same `/static/...` URL prefix:
 
-They are served two ways:
+- **Bundled assets** —
+  [`apps/api/src/emails/static/`](../apps/api/src/emails/static/) ships
+  with the repo. Use this for the `fallback.png` and any other shared
+  template images. **PNG/JPG only** for files in this folder — SVG/WEBP
+  are unreliable in many email clients. The build copies the folder
+  into `dist/emails/static/` so `node apps/api/dist/index.js` finds it.
+- **Admin uploads** —
+  [`apps/api/data/uploads/`](../apps/api/data/uploads/) holds files
+  uploaded through the SPA (per-agent avatars under `avatars/`, the
+  deployment footer logo under `footer/`). Gitignored; override the
+  root with `STATIC_UPLOADS_DIR` if you want to point it at a mounted
+  volume.
 
-- During `pnpm --filter @open-agents/api email`, react-email's preview
-  server serves `http://localhost:3001/static/<file>`.
-- In production,
-  [`routes/static.ts`](../apps/api/src/routes/static.ts) serves
-  `${PUBLIC_BASE_URL}/static/<file>`. The build copies
-  `apps/api/src/emails/static/` into `dist/emails/static/` so
-  `node apps/api/dist/index.js` finds them.
+[`routes/static.ts`](../apps/api/src/routes/static.ts) mounts both:
+`/static/uploads/*` resolves against the uploads dir, everything else
+against the bundled dir. During `pnpm --filter @open-agents/api email`
+react-email's preview server hosts the bundled folder at
+`http://localhost:3001/static/<file>` (uploaded files aren't visible in
+the preview — render the production app to see them).
 
 In templates, switch the base URL on `NODE_ENV`:
 
@@ -167,9 +185,11 @@ const baseURL =
 
 The `AgentResponse.tsx` template's footer logo is **not** hardcoded; it
 reads from the `email_footer_logo_url` value under
-**Settings → General** at send time. Absolute URLs pass through
-verbatim; `/static/<file>` references are joined with `PUBLIC_BASE_URL`
-in production. Leave it empty to omit the image entirely.
+**Settings → General** at send time. The settings page exposes both an
+**Upload image** action (which writes to `data/uploads/footer/` and
+sets the URL automatically) and a free-form URL field for absolute
+`https://...` URLs you host elsewhere. Leave it empty to omit the image
+entirely.
 
 ## Sandbox-uploaded attachments
 

@@ -10,8 +10,8 @@ import {
   WrenchIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { type ChatMessage, useAgent, useConversation } from "@/lib/queries";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { avatarSrc, type ChatMessage, useAgent, useConversation } from "@/lib/queries";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -175,6 +175,13 @@ export default function AgentChatPage() {
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
       <header className="flex items-center gap-3">
         <Avatar className="size-9 rounded-none">
+          {agent.data.avatar ? (
+            <AvatarImage
+              className="rounded-none"
+              src={avatarSrc(agent.data.avatar)}
+              alt={agent.data.displayName}
+            />
+          ) : null}
           <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
             {initials}
           </AvatarFallback>

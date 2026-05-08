@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import {
   CloudArrowUpIcon,
   FloppyDiskIcon,
   IdentificationCardIcon,
+  ImageIcon,
   PlusIcon,
   PuzzlePieceIcon,
   TrashIcon,
@@ -15,7 +16,14 @@ import {
   WrenchIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { type FullAgentDto, useAgent, useSkills, useTools } from "@/lib/queries";
+import {
+  avatarSrc,
+  type FullAgentDto,
+  useAgent,
+  useSkills,
+  useTools,
+} from "@/lib/queries";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,6 +168,47 @@ export default function AgentEditPage() {
       }),
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadAvatar = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch(`/api/agents/${slug}/avatar`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new ApiError(r.status, body.error ?? r.statusText);
+      }
+      return (await r.json()) as FullAgentDto;
+    },
+    onSuccess: async () => {
+      toast.success("Profile picture updated");
+      await qc.invalidateQueries({ queryKey: ["agents", slug] });
+      await qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+    onError: (e) =>
+      toast.error("Upload failed", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+
+  const removeAvatar = useMutation({
+    mutationFn: () => api(`/api/agents/${slug}/avatar`, { method: "DELETE" }),
+    onSuccess: async () => {
+      toast.success("Profile picture removed");
+      await qc.invalidateQueries({ queryKey: ["agents", slug] });
+      await qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+    onError: (e) =>
+      toast.error("Couldn't remove", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+
   const publishMutation = useMutation({
     mutationFn: () =>
       api<FullAgentDto>(`/api/agents/${slug}/publish`, { method: "POST" }),
@@ -253,6 +302,72 @@ export default function AgentEditPage() {
         </CardHeader>
         <CardContent>
           <FieldGroup>
+            <Field>
+              <FieldLabel>Profile picture</FieldLabel>
+              <div className="flex items-center gap-4">
+                <Avatar size="lg" className="rounded-none">
+                  {agent.data.avatar ? (
+                    <AvatarImage
+                      className="rounded-none"
+                      src={avatarSrc(agent.data.avatar)}
+                      alt={agent.data.displayName}
+                    />
+                  ) : null}
+                  <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                    {agent.data.displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadAvatar.mutate(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={uploadAvatar.isPending}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {uploadAvatar.isPending ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <ImageIcon data-icon="inline-start" />
+                      )}
+                      {agent.data.avatar ? "Replace" : "Upload"}
+                    </Button>
+                    {agent.data.avatar ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={removeAvatar.isPending}
+                        onClick={() => removeAvatar.mutate()}
+                      >
+                        {removeAvatar.isPending ? (
+                          <Spinner data-icon="inline-start" />
+                        ) : (
+                          <TrashIcon data-icon="inline-start" />
+                        )}
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
+                  <FieldDescription>
+                    PNG, JPG, GIF, WebP, or SVG up to 5 MB. Shown in the agent list, the
+                    chat header, and the email reply header.
+                  </FieldDescription>
+                </div>
+              </div>
+            </Field>
             <div className="grid gap-5 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="display-name">Display name</FieldLabel>

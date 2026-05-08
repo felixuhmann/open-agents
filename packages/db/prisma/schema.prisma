@@ -145,8 +145,15 @@ model Agent {
   slug               String   @unique
   displayName        String
   description        String?
-  /// Avatar filename inside `apps/api/src/emails/static/` (rendered in email
-  /// header) — kept simple for v1; UI uploads can come later.
+  /// Stored avatar reference. Three flavours are accepted:
+  ///   - `/static/uploads/avatars/<file>` — admin upload through the SPA
+  ///     (file lives under `apps/api/data/uploads/avatars/`);
+  ///   - bare filename — legacy reference into the bundled
+  ///     `apps/api/src/emails/static/` directory;
+  ///   - `https://...` — externally-hosted image.
+  /// `NULL` means "use the shared `fallback.png`". See
+  /// `apps/api/src/services/renderEmail.ts#resolveAssetUrl` for how the
+  /// value is normalised at render time.
   avatar             String?
   /// Optional agent system prompt mirrored locally for the editor; the
   /// canonical version lives on the Anthropic agent.

@@ -32,6 +32,14 @@ export const AgentDto = z.object({
   description: z.string().nullable(),
   systemPrompt: z.string(),
   model: z.string(),
+  /**
+   * Stored avatar reference. Either a bare filename inside the bundled
+   * `apps/api/src/emails/static/` directory, a `/static/...` URL path
+   * (e.g. `/static/uploads/avatars/<file>` for admin uploads), or an
+   * absolute `https://...` URL. `null` when the agent uses the default
+   * fallback avatar.
+   */
+  avatar: z.string().nullable(),
   emailEnabled: z.boolean(),
   webEnabled: z.boolean(),
   accessMode: AgentAccessMode,
@@ -48,6 +56,7 @@ export const AgentSummaryDto = AgentDto.pick({
   slug: true,
   displayName: true,
   description: true,
+  avatar: true,
   emailEnabled: true,
   webEnabled: true,
   accessMode: true,
@@ -80,6 +89,13 @@ export const UpdateAgentInput = z.object({
     .max(60)
     .regex(/^[a-z0-9][a-z0-9._-]*[a-z0-9]$/i)
     .optional(),
+  /**
+   * Replace-semantics for the agent avatar reference. Set via
+   * `POST /api/agents/:slug/avatar` (multipart upload) under the hood,
+   * but PATCH also accepts a string for legacy callers that want to
+   * switch back to a bundled filename, or `null` to clear.
+   */
+  avatar: z.string().max(1024).nullable().optional(),
   /**
    * Replace-semantics: every binding the agent should have after the
    * patch, regardless of runtime. Each entry references a `Tool.id`.
