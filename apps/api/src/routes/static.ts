@@ -34,11 +34,16 @@ const BUNDLED_STATIC_ROOT =
 
 export const staticRoutes = new Hono<{ Variables: AppVariables }>();
 
+// `rewriteRequestPath` receives the FULL request path (`/static/...`), not
+// the sub-path inside this sub-router — so the regex must include the
+// `/static` prefix. Forgetting that makes serveStatic look for the file
+// under the wrong root, fall through to the SPA catch-all, and return
+// `index.html` (with `Content-Type: text/html`) for image URLs.
 staticRoutes.use(
   "/uploads/*",
   serveStatic({
     root: UPLOADS_DIR,
-    rewriteRequestPath: (path) => path.replace(/^\/uploads/, ""),
+    rewriteRequestPath: (path) => path.replace(/^\/static\/uploads/, ""),
   }),
 );
 
