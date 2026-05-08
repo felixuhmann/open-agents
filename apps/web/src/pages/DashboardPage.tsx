@@ -6,8 +6,9 @@ import {
   PlusIcon,
   RobotIcon,
 } from "@phosphor-icons/react";
-import { useAgents, useConversations } from "@/lib/queries";
+import { avatarSrc, useAgents, useConversations } from "@/lib/queries";
 import { PageHeader, SectionHeading } from "@/components/PageHeader";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -62,7 +63,19 @@ export default function DashboardPage() {
               <li key={a.id}>
                 <Card className="h-full transition-colors hover:bg-accent/30">
                   <CardHeader>
-                    <CardTitle>
+                    <CardTitle className="flex items-center gap-3">
+                      <Avatar className="rounded-none">
+                        {a.avatar ? (
+                          <AvatarImage
+                            className="rounded-none"
+                            src={avatarSrc(a.avatar)}
+                            alt={a.displayName}
+                          />
+                        ) : null}
+                        <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                          {a.displayName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                       <Link
                         to={`/agents/${a.slug}`}
                         className="underline-offset-4 hover:underline"
@@ -169,7 +182,7 @@ function ConversationRow({
   conversation: {
     id: string;
     title: string;
-    agent: { slug: string; displayName: string };
+    agent: { slug: string; displayName: string; avatar: string | null };
     updatedAt: string;
   };
   showSeparator: boolean;
@@ -181,12 +194,26 @@ function ConversationRow({
         to={`/agents/${conversation.agent.slug}/chat/${conversation.id}`}
         className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-accent/30"
       >
-        <div className="flex min-w-0 flex-col">
-          <p className="truncate text-sm font-medium">{conversation.title}</p>
-          <p className="text-xs text-muted-foreground">
-            {conversation.agent.displayName} ·{" "}
-            {new Date(conversation.updatedAt).toLocaleString()}
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar size="sm" className="rounded-none">
+            {conversation.agent.avatar ? (
+              <AvatarImage
+                className="rounded-none"
+                src={avatarSrc(conversation.agent.avatar)}
+                alt={conversation.agent.displayName}
+              />
+            ) : null}
+            <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+              {conversation.agent.displayName.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex min-w-0 flex-col">
+            <p className="truncate text-sm font-medium">{conversation.title}</p>
+            <p className="text-xs text-muted-foreground">
+              {conversation.agent.displayName} ·{" "}
+              {new Date(conversation.updatedAt).toLocaleString()}
+            </p>
+          </div>
         </div>
         <ChatCircleDotsIcon className="size-4 shrink-0 text-muted-foreground" />
       </Link>

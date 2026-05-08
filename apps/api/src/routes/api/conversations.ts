@@ -22,7 +22,7 @@ conversationsRoutes.get("/", async (c) => {
   const conversations = await prisma.chatConversation.findMany({
     where: { userId: user.id },
     include: {
-      agent: { select: { id: true, slug: true, displayName: true } },
+      agent: { select: { id: true, slug: true, displayName: true, avatar: true } },
     },
     orderBy: { updatedAt: "desc" },
     take: 100,
@@ -66,7 +66,7 @@ conversationsRoutes.get("/:id", async (c) => {
   const conv = await prisma.chatConversation.findUnique({
     where: { id },
     include: {
-      agent: { select: { id: true, slug: true, displayName: true } },
+      agent: { select: { id: true, slug: true, displayName: true, avatar: true } },
       messages: { orderBy: { createdAt: "asc" } },
     },
   });

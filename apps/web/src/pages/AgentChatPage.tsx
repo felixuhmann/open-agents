@@ -218,6 +218,8 @@ export default function AgentChatPage() {
                   role={m.role}
                   content={m.content}
                   agentInitials={initials}
+                  agentDisplayName={agent.data.displayName}
+                  agentAvatar={agent.data.avatar}
                 />
               ))}
               {toolCalls.length > 0 ? (
@@ -235,6 +237,8 @@ export default function AgentChatPage() {
                   role="assistant"
                   content={streamingText}
                   agentInitials={initials}
+                  agentDisplayName={agent.data.displayName}
+                  agentAvatar={agent.data.avatar}
                   pending
                 />
               ) : null}
@@ -276,15 +280,20 @@ function Bubble({
   role,
   content,
   agentInitials,
+  agentDisplayName,
+  agentAvatar,
   pending,
 }: {
   role: string;
   content: string;
   agentInitials: string;
+  agentDisplayName: string;
+  agentAvatar: string | null;
   pending?: boolean;
 }) {
   const mine = role === "user";
   const isSystem = role === "system";
+  const showAgentImage = !mine && !isSystem && Boolean(agentAvatar);
   return (
     <div
       className={cn(
@@ -293,6 +302,13 @@ function Bubble({
       )}
     >
       <Avatar className="size-7 shrink-0 rounded-none">
+        {showAgentImage ? (
+          <AvatarImage
+            className="rounded-none"
+            src={avatarSrc(agentAvatar)}
+            alt={agentDisplayName}
+          />
+        ) : null}
         <AvatarFallback
           className={cn(
             "rounded-none text-[10px]",

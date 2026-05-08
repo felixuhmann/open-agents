@@ -168,7 +168,7 @@ export function useUsers() {
 export type ConversationListItem = {
   id: string;
   title: string;
-  agent: { id: string; slug: string; displayName: string };
+  agent: { id: string; slug: string; displayName: string; avatar: string | null };
   updatedAt: string;
 };
 
@@ -193,7 +193,7 @@ export type ChatMessage = {
 export type ConversationDetail = {
   id: string;
   title: string;
-  agent: { id: string; slug: string; displayName: string };
+  agent: { id: string; slug: string; displayName: string; avatar: string | null };
   messages: ChatMessage[];
 };
 
