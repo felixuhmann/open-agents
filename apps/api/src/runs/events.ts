@@ -108,7 +108,10 @@ export async function appendEvent(input: AppendEventInput): Promise<RunEventEnve
     payload: created.payload as RunEventPayload,
   };
   await ensureListener();
-  await listenerClient!.query(`NOTIFY ${NOTIFY_CHANNEL}, $1`, [
+  // NOTIFY does not accept bind parameters (its payload must be a string
+  // literal). Use pg_notify(channel, payload) which does.
+  await listenerClient!.query(`SELECT pg_notify($1, $2)`, [
+    NOTIFY_CHANNEL,
     JSON.stringify({ runId: input.runId, ...envelope }),
   ]);
   return envelope;
