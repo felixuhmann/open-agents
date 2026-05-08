@@ -24,14 +24,17 @@
     },
     "db:migrate": {
       "cache": false,
-      "interactive": true
+      "interactive": true,
+      "passThroughEnv": ["DATABASE_URL"]
     },
     "db:deploy": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
     },
     "db:studio": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["DATABASE_URL"]
     }
   }
 }

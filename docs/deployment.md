@@ -226,7 +226,7 @@ loads `DATABASE_URL` via `dotenv`. In CI / production, set
 > never opens a connection thanks to the v7 driver-adapter
 > architecture. The config therefore falls back to a placeholder
 > `DATABASE_URL` when the variable isn't set, so Docker / Railpack /
-> Dokploy builds don't need a live database. Anything that *does*
+> Dokploy builds don't need a live database. Anything that _does_
 > connect (`prisma migrate deploy`, the API at runtime) is launched
 > with the real value injected by the host.
 
