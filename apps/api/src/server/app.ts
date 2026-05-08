@@ -26,6 +26,7 @@ import {
 import { setupRoutes } from "../routes/setup.js";
 import { staticRoutes } from "../routes/static.js";
 import { uploadRoutes } from "../routes/upload.js";
+import { webRoutes } from "../routes/web.js";
 import { applyRequestLogMiddleware } from "./middleware/requestLog.js";
 import type { AppVariables } from "./types.js";
 
@@ -36,6 +37,7 @@ import type { AppVariables } from "./types.js";
  * 2. CORS so the SPA on `WEB_BASE_URL` can call the API with credentials.
  * 3. attachUser middleware globally so handlers can `requireUser(c)`.
  * 4. Mount each sub-router at its prefix.
+ * 5. Mount the SPA catch-all LAST so every prefixed router above wins.
  *
  * The Mailgun + MCP webhooks live alongside the API but are
  * machine-authenticated (HMAC + bearer respectively) and don't need
@@ -77,6 +79,12 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route(MCP_PREFIX, mcpRoutes);
   app.route(STATIC_PREFIX, staticRoutes);
   app.route("/", uploadRoutes);
+
+  // SPA catch-all — must be last so every prefixed router above wins. In
+  // production this serves the built `apps/web` bundle from `../web/dist`
+  // (CWD-relative, since `node` is launched from `apps/api/`); in dev it's
+  // dormant because Vite serves the SPA on its own port.
+  app.route("/", webRoutes);
 
   return app;
 }

@@ -4,10 +4,10 @@ Every capability an agent can call is a row in the unified `Tool`
 catalog, regardless of who runs the code. The discriminator is
 `Tool.runtime`:
 
-| Runtime    | Where the code lives                                               | Stored as                                                                                  | Examples                                                |
-| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| `managed`  | The agent backend's own compute (Anthropic's session container).   | `AgentToolBinding` → `Tool` row with `runtime = "managed"`.                                | Members of `agent_toolset_20260401`: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `web_fetch`, `web_search`. |
-| `platform` | This backend, served from `/mcp/<slug>`.                           | `AgentToolBinding` → `Tool` row with `runtime = "platform"`. `Tool.key` = `PlatformHandler.key`. | The shipped `memory` handler; future `drive`, `webhook`, … |
+| Runtime    | Where the code lives                                             | Stored as                                                                                        | Examples                                                                                                         |
+| ---------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `managed`  | The agent backend's own compute (Anthropic's session container). | `AgentToolBinding` → `Tool` row with `runtime = "managed"`.                                      | Members of `agent_toolset_20260401`: `bash`, `read`, `write`, `edit`, `glob`, `grep`, `web_fetch`, `web_search`. |
+| `platform` | This backend, served from `/mcp/<slug>`.                         | `AgentToolBinding` → `Tool` row with `runtime = "platform"`. `Tool.key` = `PlatformHandler.key`. | The shipped `memory` handler; future `drive`, `webhook`, …                                                       |
 
 External (user-supplied) MCP servers stay separate as `AgentThirdPartyMcp`
 — they are per-agent endpoints, not catalog entries.

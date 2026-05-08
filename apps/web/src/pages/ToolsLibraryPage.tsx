@@ -26,9 +26,9 @@ export default function ToolsLibraryPage() {
         title="Tool catalog"
         description={
           <>
-            Every capability admins can attach to an agent. <code>managed</code>{" "}
-            tools execute on Anthropic&apos;s container; <code>platform</code> tools
-            are code-shipped MCP handlers in <code>apps/api/src/mcp/platform/</code>.
+            Every capability admins can attach to an agent. <code>managed</code> tools
+            execute on Anthropic&apos;s container; <code>platform</code> tools are
+            code-shipped MCP handlers in <code>apps/api/src/mcp/platform/</code>.
           </>
         }
       />
@@ -46,8 +46,8 @@ export default function ToolsLibraryPage() {
             </EmptyMedia>
             <EmptyTitle>No tools registered</EmptyTitle>
             <EmptyDescription>
-              Restart the API so <code>seedToolCatalog()</code> can populate the
-              catalog from <code>PLATFORM_HANDLERS</code> + the managed toolset.
+              Restart the API so <code>seedToolCatalog()</code> can populate the catalog
+              from <code>PLATFORM_HANDLERS</code> + the managed toolset.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

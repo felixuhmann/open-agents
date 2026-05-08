@@ -398,13 +398,17 @@ export default function AgentEditPage() {
           {tools.data?.length ? (
             (["managed", "platform"] as const).map((runtime) => {
               const groupItems = (tools.data ?? []).filter(
-                (t) => t.runtime === runtime && (!t.deprecated || state.toolIds.includes(t.id)),
+                (t) =>
+                  t.runtime === runtime &&
+                  (!t.deprecated || state.toolIds.includes(t.id)),
               );
               if (groupItems.length === 0) return null;
               return (
                 <FieldSet key={runtime}>
                   <FieldLegend variant="label">
-                    {runtime === "managed" ? "Managed by Anthropic" : "Platform (this backend)"}
+                    {runtime === "managed"
+                      ? "Managed by Anthropic"
+                      : "Platform (this backend)"}
                   </FieldLegend>
                   <CheckboxGrid
                     items={groupItems.map((t) => ({

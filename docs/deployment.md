@@ -2,7 +2,8 @@
 
 This platform runs as a single Node process plus a Postgres database
 (and a static SPA bundle served from the same Node process). The
-reference target is [Railway](https://railway.app/) using
+reference targets are [Railway](https://railway.app/) and self-hosted
+[Dokploy](https://dokploy.com/) using
 [Railpack](https://railpack.com/), but anything that can run a Node 24
 app and reach Postgres works.
 
@@ -13,8 +14,16 @@ and get pushed to Anthropic on demand from the **Publish to Anthropic**
 button. There is no per-agent code; everything is data in the database.
 
 The SPA at `apps/web` builds to a static `dist/` and is served from the
-same Hono process via the `/static/web/*` route (or behind your own
-CDN/Caddy reverse-proxy if you'd rather).
+same Hono process via the catch-all route in
+[`apps/api/src/routes/web.ts`](../apps/api/src/routes/web.ts), which
+maps `/*` to `apps/web/dist/` with an `index.html` fallback for SPA
+deep links. That route is mounted last in
+[`apps/api/src/server/app.ts`](../apps/api/src/server/app.ts), so
+every prefixed router (`/api/*`, `/mcp/*`, `/mailgun/*`, `/setup/*`,
+`/health/*`, `/static/*`, plus the `/runs/...` and `/conversations/...`
+upload endpoints) wins. The whole platform deploys as a single Node
+service — no separate frontend container, no CDN required (though you
+can still front it with Caddy / Cloudflare if you want).
 
 ## Build & start
 
@@ -62,9 +71,12 @@ Set every variable from
 to generate the secrets. Concretely:
 
 - `DATABASE_URL`
-- `PORT` (Railway sets this for you)
+- `PORT` (Railway / Dokploy / Railpack inject it for you)
 - `PUBLIC_BASE_URL` — the deployed origin of the API, no trailing slash
-- `WEB_BASE_URL` — the deployed origin of the SPA (often == `PUBLIC_BASE_URL`)
+- `WEB_BASE_URL` — the deployed origin of the SPA. With the unified
+  deploy this **must equal** `PUBLIC_BASE_URL` (both set to e.g.
+  `https://agents.example.com`); the SPA hits the API same-origin so
+  cookies and CORS Just Work.
 - `MCP_AUTH_TOKEN`
 - `UPLOAD_SIGNING_SECRET`
 - `SECRET_ENCRYPTION_KEY` — **64 hex chars; never rotate without
@@ -84,6 +96,42 @@ openssl rand -hex 32   # BETTER_AUTH_SECRET
 v1. They are entered through the first-run setup wizard at `/setup` and
 stored AES-256-GCM-encrypted in the `Secret` table. Rotation happens
 through `/settings/secrets` in the UI.
+
+## Dokploy (self-hosted Railway-style)
+
+The Railpack build above is what Dokploy runs by default when you point
+it at this repo, so the only Dokploy-specific bits are the dashboard
+fields:
+
+- **Repository / Branch**: this repo, your default branch.
+- **Build Path**: leave at the repo root (`.`). `railpack.json` is
+  there.
+- **Watch Paths**: leave empty unless you want to filter rebuilds. With
+  Turborepo's caching the cost of a no-op build is small.
+- **Enable Submodules**: not needed.
+
+Then in the app's settings:
+
+- Provision a **Postgres database app** in Dokploy (or point at a
+  managed Postgres) and copy its connection string into `DATABASE_URL`.
+  The application has no other persistent state, so no volumes need
+  mounting.
+- Set the bootstrap env vars from
+  [`apps/api/.env.example`](../apps/api/.env.example). With the
+  unified deploy `WEB_BASE_URL` and `PUBLIC_BASE_URL` are the same
+  value (the app's public URL). Don't set `PORT` — Dokploy injects it.
+- Configure the **health check** path to `/health` (instant `200 OK`)
+  or `/health/ready` (runs `SELECT 1` against Postgres — slightly
+  slower but tells you the DB is reachable). Either is fine.
+- Trigger a build. Once deploys are green, open the public URL in a
+  browser and the SPA loads `/setup` for the first-run wizard. The
+  wizard captures the Anthropic + Mailgun credentials into the
+  encrypted `Secret` table.
+
+If you want push-to-deploy, the build hook you already have on the
+GitLab integration is enough — there's nothing else Dokploy needs to
+know about the monorepo because Turborepo handles the per-package
+build orchestration internally.
 
 ## One-time provisioning
 
