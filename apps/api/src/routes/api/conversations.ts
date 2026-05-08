@@ -67,7 +67,16 @@ conversationsRoutes.get("/:id", async (c) => {
     where: { id },
     include: {
       agent: { select: { id: true, slug: true, displayName: true, avatar: true } },
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: {
+        where: { role: { in: ["user", "assistant", "system"] } },
+        orderBy: { createdAt: "asc" },
+        include: {
+          attachments: {
+            select: { id: true, filename: true, contentType: true, sizeBytes: true },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      },
     },
   });
   if (!conv) throw new HttpError(404, "conversation not found");
@@ -84,6 +93,12 @@ conversationsRoutes.get("/:id", async (c) => {
       content: m.content,
       runId: m.runId,
       createdAt: m.createdAt.toISOString(),
+      attachments: m.attachments.map((a) => ({
+        id: a.id,
+        filename: a.filename,
+        contentType: a.contentType,
+        sizeBytes: a.sizeBytes,
+      })),
     })),
   });
 });
@@ -102,12 +117,38 @@ conversationsRoutes.post("/:id/messages", async (c) => {
   }
   if (!conv.agent.webEnabled) throw new HttpError(400, "web chat disabled");
 
-  const userMessage = await prisma.chatMessage.create({
-    data: {
-      conversationId: conv.id,
-      role: "user",
-      content: body.text,
-    },
+  // Pull any pending uploads (placeholder messages from
+  // `POST /conversations/:id/attachments`) that the user staged before
+  // sending and atomically reparent their ChatAttachments onto the real
+  // user message so the run-agent worker actually picks them up.
+  const userMessage = await prisma.$transaction(async (tx) => {
+    const pending = await tx.chatMessage.findMany({
+      where: { conversationId: conv.id, role: "pending_user_upload" },
+      include: { attachments: { select: { id: true } } },
+    });
+
+    const real = await tx.chatMessage.create({
+      data: {
+        conversationId: conv.id,
+        role: "user",
+        content: body.text,
+      },
+    });
+
+    if (pending.length > 0) {
+      const attachmentIds = pending.flatMap((m) => m.attachments.map((a) => a.id));
+      if (attachmentIds.length > 0) {
+        await tx.chatAttachment.updateMany({
+          where: { id: { in: attachmentIds } },
+          data: { chatMessageId: real.id },
+        });
+      }
+      await tx.chatMessage.deleteMany({
+        where: { id: { in: pending.map((m) => m.id) } },
+      });
+    }
+
+    return real;
   });
 
   const runId = await enqueueChatTurn({

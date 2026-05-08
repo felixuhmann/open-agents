@@ -4,11 +4,7 @@ import { requireUser } from "../auth/middleware.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import type { AppVariables } from "../server/types.js";
-import {
-  safeEqualHex,
-  signChatUploadUrl,
-  signRunUploadUrl,
-} from "../services/uploadSigning.js";
+import { safeEqualHex, signRunUploadUrl } from "../services/uploadSigning.js";
 
 /**
  * Note: this router registers `/runs/:runId/attachments` and
@@ -109,20 +105,16 @@ uploadRoutes.post("/runs/:runId/attachments", async (c) => {
 
 /**
  * Chat user upload: SPA POSTs a file the user attached to the next message
- * they're about to send. Cookie-authenticated and conversation-bound; the
- * `sig` query is a defence-in-depth check so the same URL can be reused if
- * we move uploads behind a different proxy later.
+ * they're about to send. Cookie-authenticated and conversation-bound — the
+ * caller must own the conversation (or be an admin). No signature check
+ * here because cookie auth already establishes the principal; the run-side
+ * upload endpoint above keeps its HMAC because it's called from the
+ * Anthropic sandbox without a browser session.
  */
 uploadRoutes.post("/conversations/:conversationId/attachments", async (c) => {
   const reqId = c.get("reqId");
   const user = requireUser(c);
   const conversationId = c.req.param("conversationId");
-  const providedSig = c.req.query("sig") ?? "";
-
-  const expected = signChatUploadUrl(conversationId);
-  if (!safeEqualHex(providedSig, expected)) {
-    return c.text("invalid signature", 401);
-  }
 
   const conv = await prisma.chatConversation.findUnique({
     where: { id: conversationId },
@@ -145,11 +137,15 @@ uploadRoutes.post("/conversations/:conversationId/attachments", async (c) => {
   if (file.size > MAX_BYTES) return c.text("file too large", 413);
 
   const buf = Buffer.from(await file.arrayBuffer());
+  // Placeholder ChatMessage so ChatAttachment has a parent; role is the
+  // sentinel `pending_user_upload` so the conversations GET filter can hide
+  // it and the next `POST /:id/messages` call can reparent its attachments
+  // onto the actual user message before enqueuing the run.
   const placeholder = await prisma.chatMessage.create({
     data: {
       conversationId: conv.id,
-      role: "user",
-      content: `[attachment placeholder] ${file.name || "attachment"}`,
+      role: "pending_user_upload",
+      content: file.name || "attachment",
     },
   });
   const row = await prisma.chatAttachment.create({

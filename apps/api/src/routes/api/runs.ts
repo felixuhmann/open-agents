@@ -10,6 +10,32 @@ import type { AppVariables } from "../../server/types.js";
 export const runsRoutes = new Hono<{ Variables: AppVariables }>();
 
 /**
+ * Resolve a run + assert the caller is allowed to see it. For chat surface
+ * runs that means the run's conversation belongs to the calling user (or
+ * the caller is an admin); for email surface runs we don't currently
+ * expose any per-user UI so admin-only is enforced.
+ */
+async function resolveRunForCaller(c: Parameters<typeof requireUser>[0], runId: string) {
+  const user = requireUser(c);
+  const run = await prisma.agentRun.findUnique({ where: { id: runId } });
+  if (!run) throw new HttpError(404, "run not found");
+  if (run.surface === "chat") {
+    if (!run.conversationId) throw new HttpError(404, "run not found");
+    const conv = await prisma.chatConversation.findUnique({
+      where: { id: run.conversationId },
+      select: { userId: true },
+    });
+    if (!conv) throw new HttpError(404, "run not found");
+    if (conv.userId !== user.id && user.role !== "admin") {
+      throw new HttpError(403, "not your run");
+    }
+  } else {
+    if (user.role !== "admin") throw new HttpError(403, "admin role required");
+  }
+  return { run, user };
+}
+
+/**
  * SSE endpoint for live run events with `Last-Event-ID` replay. Browser
  * sends `Last-Event-ID: <seq>` (handled automatically by EventSource on
  * reconnect); we read the backlog past that seq, then transition to
@@ -94,4 +120,56 @@ runsRoutes.get("/:runId/events", async (c) => {
       unsubscribe();
     }
   });
+});
+
+/**
+ * List attachments the agent uploaded back during a run (via the signed
+ * `REPLY_ATTACHMENT_UPLOAD_URL` we inject into the user message). Used by
+ * the SPA chat to render assistant-message attachments alongside the text.
+ */
+runsRoutes.get("/:runId/attachments", async (c) => {
+  const runId = c.req.param("runId");
+  await resolveRunForCaller(c, runId);
+  const rows = await prisma.agentAttachment.findMany({
+    where: { runId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      filename: true,
+      contentType: true,
+      sizeBytes: true,
+      createdAt: true,
+    },
+  });
+  return c.json({
+    attachments: rows.map((r) => ({
+      id: r.id,
+      filename: r.filename,
+      contentType: r.contentType,
+      sizeBytes: r.sizeBytes,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  });
+});
+
+/**
+ * Download a single agent-uploaded attachment. Cookie-authenticated and
+ * scoped through `resolveRunForCaller`, so a leaked attachment id by itself
+ * does not grant access — the caller must own the parent conversation
+ * (or be an admin).
+ */
+runsRoutes.get("/:runId/attachments/:attachmentId", async (c) => {
+  const runId = c.req.param("runId");
+  const attachmentId = c.req.param("attachmentId");
+  await resolveRunForCaller(c, runId);
+  const row = await prisma.agentAttachment.findUnique({
+    where: { id: attachmentId },
+  });
+  if (row?.runId !== runId) throw new HttpError(404, "attachment not found");
+  c.header("content-type", row.contentType || "application/octet-stream");
+  c.header("content-length", String(row.sizeBytes));
+  const safeName = row.filename.replace(/[^\w.\- ]+/g, "_") || "attachment";
+  c.header("content-disposition", `attachment; filename="${safeName}"`);
+  c.header("cache-control", "private, max-age=0, must-revalidate");
+  return c.body(new Uint8Array(row.bytes));
 });

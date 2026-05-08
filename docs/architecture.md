@@ -317,8 +317,11 @@ or `member`.
 ### Memory
 
 - `MemoryDoc` — `(agentId, collection, doc Json, …)`. The generic memory
-  tool (`memory_create` / `memory_read` / `memory_list` / `memory_update`
-  / `memory_delete`) operates on these scoped to the calling agent.
+  tool (`memory_collections` / `memory_create` / `memory_read` /
+  `memory_list` / `memory_update` / `memory_delete`) operates on these
+  scoped to the calling agent. Collections are free-form strings, so
+  `memory_collections` exists specifically for the agent to discover
+  what it has populated across sessions before reading or writing.
 
 ### Secrets
 

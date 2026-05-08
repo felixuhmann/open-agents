@@ -193,7 +193,15 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     payload: { type: "run.started", runId, sessionId },
   });
 
-  const output = await streamRunWithEvents(runId, sessionId, message.content);
+  // Mirror the email-surface attachment-return flow: inject a signed,
+  // run-scoped upload URL that the agent's bash tool can `curl -F file=@…`
+  // to. The bytes land in `AgentAttachment` and the SPA chat renders them
+  // attached to the assistant's message via `GET /api/runs/:runId/attachments`.
+  const uploadSig = signRunUploadUrl(runId);
+  const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
+  const userMessage = `${message.content}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
+
+  const output = await streamRunWithEvents(runId, sessionId, userMessage);
 
   await prisma.agentRun.update({
     where: { id: runId },

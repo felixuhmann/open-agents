@@ -5,8 +5,9 @@ import { defineTool, type PlatformHandler } from "../types.js";
 
 /**
  * Generic JSON-doc collection store scoped to one agent. The agent learns
- * the collection layout from its system prompt or an attached skill — no
- * schema enforcement in v1.
+ * the collection layout from its system prompt, an attached skill, or by
+ * calling `memory_collections` to inspect what it has already populated —
+ * there is no schema enforcement in v1.
  *
  * The `filter` accepted by `memory_list` is intentionally tiny: a flat
  * `{ field: value }` object that we apply as JSON `path` equality through
@@ -16,6 +17,8 @@ import { defineTool, type PlatformHandler } from "../types.js";
 
 const MAX_COLLECTION = 60;
 const MAX_LIST_PAGE = 200;
+
+const CollectionsInput = z.object({});
 
 const CreateInput = z.object({
   collection: z
@@ -50,11 +53,33 @@ export const memoryHandler: PlatformHandler = {
   key: "memory",
   name: "Workspace memory",
   description:
-    "Persistent JSON-doc collections scoped to this agent. Agents create, read, list, update and delete documents grouped under named collections.",
+    "Persistent JSON-doc collections scoped to this agent. Agents create, read, list, update and delete documents grouped under named collections. Collection names are case-sensitive and free-form, so call `memory_collections` first to reuse an existing name instead of inventing a new one.",
   tools: [
     defineTool({
+      name: "memory_collections",
+      description:
+        "List every collection that already has at least one document for this agent, with item counts. Call this BEFORE `memory_create` or `memory_list` whenever you are not 100% sure which collection name to use — the names are case-sensitive and a typo (e.g. `guest_list` vs `guestlist`) will read or write to a different store.",
+      input: CollectionsInput,
+      handler: async (_input, ctx) => {
+        const rows = await prisma.memoryDoc.groupBy({
+          by: ["collection"],
+          where: { agentId: ctx.agentId },
+          _count: { _all: true },
+          orderBy: { collection: "asc" },
+        });
+        return {
+          collections: rows.map((r) => ({
+            name: r.collection,
+            count: r._count._all,
+          })),
+        };
+      },
+    }),
+
+    defineTool({
       name: "memory_create",
-      description: "Create a new document in a collection. Returns the new document id.",
+      description:
+        "Create a new document in a collection. Returns the new document id. IMPORTANT: collection names are case-sensitive and not normalised — `guestlist` and `guest_list` are two different stores. If your system prompt or skill does not pin down the exact collection name, call `memory_collections` first and reuse an existing name when one fits.",
       input: CreateInput,
       handler: async (input, ctx) => {
         const row = await prisma.memoryDoc.create({
@@ -91,7 +116,7 @@ export const memoryHandler: PlatformHandler = {
     defineTool({
       name: "memory_list",
       description:
-        "List documents in a collection with optional flat equality filter on top-level fields. Returns documents and an opaque next cursor.",
+        "List documents in a collection with optional flat equality filter on top-level fields. Returns documents and an opaque next cursor. An empty `items` array means the named collection has no matching documents — it does NOT mean memory is broken; if you expected results, call `memory_collections` to confirm the collection name.",
       input: ListInput,
       handler: async (input, ctx) => {
         const filterClauses: Record<string, unknown>[] = [];

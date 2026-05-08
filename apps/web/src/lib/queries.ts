@@ -182,13 +182,49 @@ export function useConversations() {
   });
 }
 
+export type ChatAttachmentSummary = {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   runId: string | null;
   createdAt: string;
+  attachments: ChatAttachmentSummary[];
 };
+
+export type RunAttachmentSummary = {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
+/**
+ * Files the agent uploaded back during a run via the signed
+ * `REPLY_ATTACHMENT_UPLOAD_URL`. Used by the chat UI to render
+ * downloadable links on the assistant message bubble.
+ */
+export function useRunAttachments(runId: string | null | undefined) {
+  return useQuery({
+    enabled: Boolean(runId),
+    queryKey: ["runs", runId, "attachments"],
+    queryFn: () =>
+      api<{ attachments: RunAttachmentSummary[] }>(`/api/runs/${runId}/attachments`).then(
+        (r) => r.attachments,
+      ),
+  });
+}
+
+export function runAttachmentDownloadUrl(runId: string, attachmentId: string): string {
+  return `/api/runs/${runId}/attachments/${attachmentId}`;
+}
 
 export type ConversationDetail = {
   id: string;

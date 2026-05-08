@@ -210,3 +210,11 @@ The list of things that have actually surprised someone:
   are scoped to the calling agent's `agentId` from the MCP request
   context, so two agents can't read each other's memory. There's no
   cross-agent shared memory in v1.
+- **Attachment round-trip works on both surfaces.** The signed
+  `REPLY_ATTACHMENT_UPLOAD_URL` is now injected into chat runs as well
+  as email runs, and the SPA chat renders downloadable links for files
+  the agent uploaded back via that URL — no behaviour change needed in
+  the agent prompt to make file outputs work in chat. Inbound (user →
+  agent) chat uploads ride a placeholder `ChatMessage` with role
+  `pending_user_upload`; the next `POST messages` call reparents those
+  attachments onto the real user message before enqueuing the run.

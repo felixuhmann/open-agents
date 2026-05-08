@@ -194,7 +194,8 @@ entirely.
 ## Sandbox-uploaded attachments
 
 The agent might _produce_ files (PDFs, spreadsheets, etc.) it wants
-attached to the reply. The flow:
+attached to the reply. The flow is identical for email **and** chat
+runs:
 
 1. The run-agent worker signs an upload URL for the run id and injects
    it into the user message:
@@ -202,18 +203,30 @@ attached to the reply. The flow:
    REPLY_ATTACHMENT_UPLOAD_URL: https://<deploy>/runs/<runId>/attachments?sig=<hmac>
    ```
    The "how/why/when to upload" instructions live in the agent's
-   system prompt; we only inject the dynamic URL.
+   system prompt or attached skill; we only inject the dynamic URL.
 2. The sandbox `POST`s `multipart/form-data` with a `file` field to
    that URL.
 3. [`routes/upload.ts`](../apps/api/src/routes/upload.ts) verifies the
    HMAC, caps the size at 25 MB (Mailgun's per-message limit), and
    inserts an `AgentAttachment` row.
-4. The send-email worker queries `AgentAttachment` rows for the run and
-   attaches each one to the outbound Mailgun message.
+4. **Email surface:** the `send-email` worker queries `AgentAttachment`
+   rows for the run and attaches each one to the outbound Mailgun
+   message.
+   **Chat surface:** the SPA's chat page calls
+   `GET /api/runs/:runId/attachments` after the run terminates and
+   renders each entry as a downloadable link
+   (`GET /api/runs/:runId/attachments/:attachmentId`) on the assistant
+   message bubble. Both endpoints are cookie-authenticated and scoped
+   so only the conversation's owner (or an admin) can list/download.
 
-The same module also accepts user-uploaded files for chat conversations
-at `POST /conversations/:id/attachments` — that endpoint uses the
-session cookie instead of an HMAC signature.
+The same `routes/upload.ts` module also accepts user-uploaded files for
+chat conversations at `POST /conversations/:id/attachments`. That
+endpoint uses the session cookie (no HMAC signature) — uploads land as
+`ChatAttachment` rows on a placeholder `ChatMessage` with role
+`pending_user_upload`. The next `POST /api/conversations/:id/messages`
+call atomically reparents those attachments onto the real user message
+inside a transaction and deletes the placeholders, so the run-agent
+worker picks them up via `uploadPendingChatAttachments`.
 
 Why HMAC instead of a session token: the sandbox has outbound HTTP but
 no convenient way to surface a session-bound credential, and the upload
