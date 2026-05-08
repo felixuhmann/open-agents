@@ -193,14 +193,63 @@ export async function updateAgent(
   }
   if (args.avatar !== undefined) scalarUpdate.avatar = args.avatar;
 
+  // Resolve dangling foreign keys BEFORE the transaction. The SPA edit
+  // form can hold ids that no longer exist (e.g. user deleted a skill in
+  // another tab and saved the agent before refreshing). Replace-semantics
+  // means we should treat a vanished id the same as "client didn't include
+  // it" — silently drop and warn — instead of aborting the whole patch
+  // with a Prisma FK violation that wipes every other field change.
+  let resolvedToolBindings: UpdateAgentArgs["toolBindings"] = args.toolBindings;
+  if (args.toolBindings && args.toolBindings.length > 0) {
+    const ids = args.toolBindings.map((b) => b.toolId);
+    const existing = await prisma.tool.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((t) => t.id));
+    const missing = ids.filter((tid) => !existingIds.has(tid));
+    if (missing.length > 0) {
+      log.warn("agents: dropping unknown tool ids on update", { agentId: id, missing });
+      resolvedToolBindings = args.toolBindings.filter((b) => existingIds.has(b.toolId));
+    }
+  }
+
+  let resolvedSkillIds: string[] | undefined = args.skillIds;
+  if (args.skillIds && args.skillIds.length > 0) {
+    const existing = await prisma.skill.findMany({
+      where: { id: { in: args.skillIds } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((s) => s.id));
+    const missing = args.skillIds.filter((sid) => !existingIds.has(sid));
+    if (missing.length > 0) {
+      log.warn("agents: dropping unknown skill ids on update", { agentId: id, missing });
+      resolvedSkillIds = args.skillIds.filter((sid) => existingIds.has(sid));
+    }
+  }
+
+  let resolvedAccessUserIds: string[] | undefined = args.accessUserIds;
+  if (args.accessUserIds && args.accessUserIds.length > 0) {
+    const existing = await prisma.user.findMany({
+      where: { id: { in: args.accessUserIds } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((u) => u.id));
+    const missing = args.accessUserIds.filter((uid) => !existingIds.has(uid));
+    if (missing.length > 0) {
+      log.warn("agents: dropping unknown user ids on update", { agentId: id, missing });
+      resolvedAccessUserIds = args.accessUserIds.filter((uid) => existingIds.has(uid));
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     if (Object.keys(scalarUpdate).length > 0) {
       await tx.agent.update({ where: { id }, data: scalarUpdate });
     }
 
-    if (args.toolBindings) {
+    if (resolvedToolBindings) {
       await tx.agentToolBinding.deleteMany({ where: { agentId: id } });
-      for (const binding of args.toolBindings) {
+      for (const binding of resolvedToolBindings) {
         await tx.agentToolBinding.create({
           data: {
             agentId: id,
@@ -211,20 +260,20 @@ export async function updateAgent(
       }
     }
 
-    if (args.skillIds) {
+    if (resolvedSkillIds) {
       await tx.agentSkillBinding.deleteMany({ where: { agentId: id } });
-      if (args.skillIds.length > 0) {
+      if (resolvedSkillIds.length > 0) {
         await tx.agentSkillBinding.createMany({
-          data: args.skillIds.map((skillId) => ({ agentId: id, skillId })),
+          data: resolvedSkillIds.map((skillId) => ({ agentId: id, skillId })),
         });
       }
     }
 
-    if (args.accessUserIds) {
+    if (resolvedAccessUserIds) {
       await tx.agentAccess.deleteMany({ where: { agentId: id } });
-      if (args.accessUserIds.length > 0) {
+      if (resolvedAccessUserIds.length > 0) {
         await tx.agentAccess.createMany({
-          data: args.accessUserIds.map((userId) => ({ agentId: id, userId })),
+          data: resolvedAccessUserIds.map((userId) => ({ agentId: id, userId })),
         });
       }
     }

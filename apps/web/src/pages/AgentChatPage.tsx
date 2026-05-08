@@ -322,7 +322,7 @@ export default function AgentChatPage() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col border bg-card">
-        <ScrollArea className="flex-1 px-4 py-4">
+        <ScrollArea className="min-h-0 flex-1 px-4 py-4">
           {empty ? (
             <Empty className="h-full">
               <EmptyHeader>
@@ -375,7 +375,7 @@ export default function AgentChatPage() {
         </ScrollArea>
       </div>
 
-      <form onSubmit={submit} className="flex flex-col gap-2">
+      <form onSubmit={submit} className="flex shrink-0 flex-col gap-2">
         {pendingUploads.length > 0 || uploadingCount > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {pendingUploads.map((u) => (
