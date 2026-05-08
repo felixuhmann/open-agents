@@ -58,14 +58,14 @@ Captured by the first-run wizard at `/setup` and rotatable later from
 both the Anthropic client and the Mailgun client are lazy and auto-rebuild
 on rotation.
 
-| Key in `Secret.key`   | Used by                                                                                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anthropic_api_key`   | [`apps/api/src/agent-backend/instance.ts`](../apps/api/src/agent-backend/instance.ts) (the SDK client).                                                  |
-| `anthropic_vault_id`  | Passed as `vault_ids` on every `createSession` call so Anthropic can attach the MCP bearer.                                                              |
-| `mailgun_api_key`     | [`apps/api/src/mailgun/send.ts`](../apps/api/src/mailgun/send.ts) (outbound).                                                                            |
-| `mailgun_domain`      | Outbound + inbound recipient parsing.                                                                                                                    |
-| `mailgun_signing_key` | [`apps/api/src/routes/mailgun.ts`](../apps/api/src/routes/mailgun.ts) (HMAC verify of the inbound webhook).                                              |
-| `inbound_from`        | [`apps/api/src/jobs/sendEmail.ts`](../apps/api/src/jobs/sendEmail.ts) — last-resort `From:` for legacy threads. Per-thread `inboundAddress` always wins. |
+| Key in `Secret.key`   | Used by                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `anthropic_api_key`   | [`apps/api/src/agent-backend/instance.ts`](../apps/api/src/agent-backend/instance.ts) (the SDK client).                                                                                                                                                                                    |
+| `anthropic_vault_id`  | Passed as `vault_ids` on every `createSession` call so Anthropic can attach the MCP bearer. Auto-provisioned on first publish of a platform-bound agent (see [`anthropic/vault.ts`](../apps/api/src/anthropic/vault.ts)); admins only set it manually to share a vault across deployments. |
+| `mailgun_api_key`     | [`apps/api/src/mailgun/send.ts`](../apps/api/src/mailgun/send.ts) (outbound).                                                                                                                                                                                                              |
+| `mailgun_domain`      | Outbound + inbound recipient parsing.                                                                                                                                                                                                                                                      |
+| `mailgun_signing_key` | [`apps/api/src/routes/mailgun.ts`](../apps/api/src/routes/mailgun.ts) (HMAC verify of the inbound webhook).                                                                                                                                                                                |
+| `inbound_from`        | [`apps/api/src/jobs/sendEmail.ts`](../apps/api/src/jobs/sendEmail.ts) — last-resort `From:` for legacy threads. Per-thread `inboundAddress` always wins.                                                                                                                                   |
 
 The plaintext value is **never** returned by the API. The list endpoint
 only ever exposes `{ key, configured: boolean }`.

@@ -297,14 +297,14 @@ mirrored to S3) since the zip bytes are not in Postgres.
 
 ## Rotating secrets
 
-| Secret                              | How to rotate                                                                                                                                   |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MCP_AUTH_TOKEN` (env)              | Update env, restart, then update each agent's vault `static_bearer.token`. Brief tool-call failures during the gap.                             |
-| `UPLOAD_SIGNING_SECRET` (env)       | Update env, restart. Invalidates in-flight signed URLs (rare; runs are short).                                                                  |
-| `BETTER_AUTH_SECRET` (env)          | Update env, restart. **All sessions are invalidated** — every user has to sign in again.                                                        |
-| `SECRET_ENCRYPTION_KEY` (env)       | **Don't.** Requires a one-shot re-encrypt job (read-decrypt-with-old, encrypt-with-new) that doesn't exist in v1.                               |
-| `anthropic_api_key` (DB)            | `/settings/secrets` → save new value. The Anthropic client picks it up on the next request.                                                     |
-| `anthropic_vault_id` (DB)           | Same; resets the agent backend.                                                                                                                 |
-| `mailgun_api_key` / `_domain` (DB)  | Same; the Mailgun client lazy-rebuilds.                                                                                                         |
-| `mailgun_signing_key` (DB)          | Save the new key in `/settings/secrets` **before** flipping it on Mailgun's side; otherwise inbound webhooks `401` for the duration of the gap. |
-| Per-tool secrets (DB, scope `tool`) | Edit the tool binding on the agent edit page; the next MCP call sees the new value.                                                             |
+| Secret                              | How to rotate                                                                                                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_AUTH_TOKEN` (env)              | Update env, restart, then click **Publish** on every platform-bound agent so the publish flow PATCHes each vault `static_bearer.token`. Brief tool-call failures during the gap. |
+| `UPLOAD_SIGNING_SECRET` (env)       | Update env, restart. Invalidates in-flight signed URLs (rare; runs are short).                                                                                                   |
+| `BETTER_AUTH_SECRET` (env)          | Update env, restart. **All sessions are invalidated** — every user has to sign in again.                                                                                         |
+| `SECRET_ENCRYPTION_KEY` (env)       | **Don't.** Requires a one-shot re-encrypt job (read-decrypt-with-old, encrypt-with-new) that doesn't exist in v1.                                                                |
+| `anthropic_api_key` (DB)            | `/settings/secrets` → save new value. The Anthropic client picks it up on the next request.                                                                                      |
+| `anthropic_vault_id` (DB)           | Same; resets the agent backend.                                                                                                                                                  |
+| `mailgun_api_key` / `_domain` (DB)  | Same; the Mailgun client lazy-rebuilds.                                                                                                                                          |
+| `mailgun_signing_key` (DB)          | Save the new key in `/settings/secrets` **before** flipping it on Mailgun's side; otherwise inbound webhooks `401` for the duration of the gap.                                  |
+| Per-tool secrets (DB, scope `tool`) | Edit the tool binding on the agent edit page; the next MCP call sees the new value.                                                                                              |

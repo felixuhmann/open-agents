@@ -123,39 +123,19 @@ The page has two actions:
   Anthropic returned. Subsequent sessions reference this
   `anthropicAgentId`/`anthropicAgentVersion`.
 
+  If the agent has any platform tool bound, **Publish** also walks the
+  vault: it creates the deployment vault on the very first publish (and
+  saves its id under the `anthropic_vault_id` Secret key), then upserts a
+  `static_bearer` credential mapping `${PUBLIC_BASE_URL}/mcp/<slug>` to
+  `MCP_AUTH_TOKEN`. The credential id and bound URL are stored on the
+  `Agent` row so re-publishes refresh the bearer in place rather than
+  piling up duplicates. There is no manual `curl` step anymore.
+
 Until you publish at least once, the chat surface returns `503` and
 inbound email returns 200 + drop. The error toasts in the UI are
 explicit about it.
 
-## Step 5 — One-shot Anthropic vault entry (only if you bound platform tools)
-
-Anthropic's sandbox needs a `static_bearer` credential mapping the agent's
-MCP URL to your `MCP_AUTH_TOKEN`. The setup wizard can pre-create one for
-the deployment, but each new slug needs its own entry. From a shell with
-the API key:
-
-```bash
-curl -sS https://api.anthropic.com/v1/vaults/$VAULT_ID/credentials \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "anthropic-beta: managed-agents-2026-04-01" \
-  -H "content-type: application/json" \
-  -d '{
-        "type": "static_bearer",
-        "url": "https://<your-deploy>/mcp/<slug>",
-        "token": "<MCP_AUTH_TOKEN value>"
-      }'
-```
-
-Without it the sandbox can authenticate against `/mcp/<slug>` and tool
-calls fail with `401` (the agent reports a generic tool error).
-
-This is the only place where adding an agent still requires a manual
-step outside the UI; it exists because Anthropic's vault model wasn't
-designed for our turnkey UX. We may automate it in v1.5 by managing the
-vault from the Secret service.
-
-## Step 6 — Try it
+## Step 5 — Try it
 
 - Open `/agents/<slug>/chat` and send a message. Inspect the SSE stream
   in DevTools to confirm tool calls render correctly.

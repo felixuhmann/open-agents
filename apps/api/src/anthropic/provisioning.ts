@@ -21,6 +21,13 @@ export type ProvisionedTool = {
 export type ProvisioningPayload = {
   /** Existing Anthropic agent id, when updating. */
   existingAgentId: string | null;
+  /**
+   * Anthropic's agent version we last saw (1, 2, …). Required by
+   * `agents.update` for optimistic concurrency; ignored on first publish.
+   * Stored as a string in `Agent.anthropicAgentVersion`; pass through as
+   * a number here.
+   */
+  existingAgentVersion: number | null;
   /** Existing Anthropic environment id, when updating. */
   existingEnvironmentId: string | null;
   /** `Agent.slug` — used to derive the per-agent MCP server name. */
@@ -236,9 +243,26 @@ export async function upsertAnthropicAgent(
     version = pickVersion(agentRes);
     log.info("anthropic: agent created", { agentId, version });
   } else {
-    const agentRes = await getAgentsResource(client.beta).update(agentId, payload);
+    if (p.existingAgentVersion === null) {
+      throw new Error(
+        `Cannot update Anthropic agent ${agentId}: no stored version. ` +
+          `Anthropic's update endpoint requires the current version for ` +
+          `optimistic concurrency. Re-create the agent or backfill ` +
+          `Agent.anthropicAgentVersion first.`,
+      );
+    }
+    // Anthropic's `agents.update` requires `version` for optimistic
+    // concurrency. We always send the full configured shape — `tools`,
+    // `mcp_servers`, and `skills` are full replacements, every other
+    // field overwrites the prior value.
+    const updatePayload = { ...payload, version: p.existingAgentVersion };
+    const agentRes = await getAgentsResource(client.beta).update(agentId, updatePayload);
     version = pickVersion(agentRes);
-    log.info("anthropic: agent updated", { agentId, version });
+    log.info("anthropic: agent updated", {
+      agentId,
+      fromVersion: p.existingAgentVersion,
+      version,
+    });
   }
 
   return { agentId, environmentId, version, payload };

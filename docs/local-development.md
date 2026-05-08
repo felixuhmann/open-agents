@@ -54,8 +54,8 @@ wizard:
 
 1. Asks for the first admin email + password (creates the better-auth
    `User` row with `role = "admin"`).
-2. Stores the Anthropic API key (and optional vault id), Mailgun key,
-   domain, signing key, and default outbound `From:` address into the
+2. Stores the Anthropic API key, Mailgun key, domain, signing key, and
+   default outbound `From:` address into the
    encrypted `Secret` table.
 3. Marks setup complete; subsequent requests bypass the redirect.
 

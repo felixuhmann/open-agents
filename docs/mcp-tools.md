@@ -143,10 +143,20 @@ per-agent handler:
   generate with `openssl rand -hex 32`. Constant-time compare in
   [`routes/mcp.ts`](../apps/api/src/routes/mcp.ts).
 - **Anthropic side**: a `static_bearer` credential in the deployment
-  vault, mapping each `/mcp/<slug>` URL to the same value.
+  vault, mapping each `/mcp/<slug>` URL to the same value. Provisioned
+  automatically by [`anthropic/vault.ts`](../apps/api/src/anthropic/vault.ts)
+  during **Publish** — admins never touch the vault directly. The
+  deployment vault is also created on demand the first time anyone
+  publishes a platform-bound agent and stored under
+  `anthropic_vault_id` in the `Secret` table.
 
-Rotating the token requires updating both sides in lockstep. There's no
-multi-token grace period today.
+Rotating `MCP_AUTH_TOKEN` is a two-step lockstep change:
+
+1. Update the env value and roll the backend.
+2. Re-publish every agent that binds a platform tool. The publish flow
+   PATCHes each existing `static_bearer` credential to the new token, so
+   "click Publish on every agent" is the rotation procedure. There's no
+   multi-token grace period today.
 
 ## The shipped catalog
 

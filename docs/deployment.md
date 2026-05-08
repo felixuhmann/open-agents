@@ -135,8 +135,11 @@ build orchestration internally.
 
 ## One-time provisioning
 
-Two things have to be set up outside the application: the Mailgun domain
-and (only if any agent uses our MCP server) the Anthropic vault.
+The only piece that has to be set up outside the application is the
+Mailgun domain. The Anthropic vault used to need manual `curl`
+provisioning per slug; that's now automatic — see
+[`anthropic/vault.ts`](../apps/api/src/anthropic/vault.ts) and the
+"Anthropic vault" section below.
 
 ### 1. Mailgun: a single catch-all route
 
@@ -153,48 +156,32 @@ In the Mailgun control panel:
    parameter, no per-agent route.** The catch-all webhook resolves the
    target agent by parsing the recipient against `Agent.inboundLocalPart`.
 
-### 2. Anthropic vault for MCP auth (only if you'll use platform MCP tools)
+### 2. Anthropic vault for MCP auth — fully automated
 
-The Anthropic Managed Agents API attaches credentials to the MCP
-handshake via a _vault_. Create one once per deployment:
+Anthropic's Managed Agents API attaches credentials to the MCP handshake
+via a _vault_. The publish flow in
+[`agents/service.ts`](../apps/api/src/agents/service.ts) handles
+everything for you:
 
-```bash
-curl -sS https://api.anthropic.com/v1/vaults \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "anthropic-beta: managed-agents-2026-04-01" \
-  -H "content-type: application/json" \
-  -d '{"display_name":"open-agents-backend"}'
-```
+- The deployment vault is created on demand the first time anyone
+  clicks **Publish** on an agent that binds at least one platform tool.
+  Its id is persisted as `anthropic_vault_id` in the `Secret` table.
+- For each platform-bound agent, **Publish** upserts a `static_bearer`
+  credential mapping `${PUBLIC_BASE_URL}/mcp/<slug>` to `MCP_AUTH_TOKEN`.
+  The credential id and bound URL are saved on the `Agent` row, so
+  re-publishes refresh the bearer in place.
+- The backend forwards `vault_ids: [anthropic_vault_id]` on every
+  `createSession` call (see
+  [`agent-backend/anthropic.ts`](../apps/api/src/agent-backend/anthropic.ts)).
 
-The response contains `id: "vlt_..."`. Store it as `anthropic_vault_id`
-in the setup wizard (or rotate it later from `/settings/secrets`).
+What admins still own:
 
-For each agent you publish that has tool bindings, add a `static_bearer`
-credential to the vault that maps the agent's MCP URL to your
-`MCP_AUTH_TOKEN`:
-
-```bash
-curl -sS https://api.anthropic.com/v1/vaults/$VAULT_ID/credentials \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "anthropic-beta: managed-agents-2026-04-01" \
-  -H "content-type: application/json" \
-  -d '{
-        "type": "static_bearer",
-        "url": "https://<your-deploy>/mcp/<slug>",
-        "token": "<MCP_AUTH_TOKEN value>"
-      }'
-```
-
-The backend forwards `vault_ids: [anthropic_vault_id]` on every
-`createSession` call. Anthropic uses the vault to look up the bearer
-matching the MCP URL configured on the agent.
-
-> Adding a new agent through the UI does NOT auto-add a vault credential.
-> If the agent uses platform MCP tools, do step §2 manually — or, easier,
-> register one credential per slug ahead of time and just publish the
-> agent.
+- Pre-creating a vault and pasting its id into `/settings/secrets` if
+  you want to share one across multiple deployments. Otherwise leave it
+  blank and the publish flow takes care of it.
+- Re-publishing every platform-bound agent after rotating
+  `MCP_AUTH_TOKEN` so each credential's bearer gets PATCHed to the new
+  value.
 
 ## Database migrations
 

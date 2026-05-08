@@ -1,6 +1,7 @@
 import type { Agent, Prisma } from "@open-agents/db";
 import type { AgentModel } from "@open-agents/types";
 import { upsertAnthropicAgent } from "../anthropic/provisioning.js";
+import { ensureMcpCredential } from "../anthropic/vault.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
@@ -77,6 +78,19 @@ export async function getAgentByInboundLocalPart(
 export function invalidateAgent(slug?: string): void {
   if (slug) cache.delete(slug);
   else cache.clear();
+}
+
+/**
+ * Anthropic stores the agent version as a positive integer. We persist
+ * it as a string in `Agent.anthropicAgentVersion` (because that's what
+ * the SDK exposes loosely on the response). Convert back for the
+ * `agents.update` precondition; null when we have nothing on file.
+ */
+function parseAnthropicVersion(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
 }
 
 export async function listAgents(): Promise<HydratedAgent[]> {
@@ -267,6 +281,7 @@ export async function publishAgent(id: string): Promise<HydratedAgent> {
 
   const result = await upsertAnthropicAgent({
     existingAgentId: agent.anthropicAgentId,
+    existingAgentVersion: parseAnthropicVersion(agent.anthropicAgentVersion),
     existingEnvironmentId: agent.environmentId,
     slug: agent.slug,
     displayName: agent.displayName,
@@ -277,6 +292,22 @@ export async function publishAgent(id: string): Promise<HydratedAgent> {
     skillIds,
   });
 
+  // If this agent advertises any platform tool, Anthropic's sandbox needs
+  // a `static_bearer` vault credential bound to `${PUBLIC_BASE_URL}/mcp/<slug>`
+  // before it can `initialize` the MCP handshake. Provisioning the
+  // deployment vault (first-publish ever) and the per-agent credential
+  // happens here so the publish UX is "click button, done" — no manual
+  // curl required.
+  let credential: { id: string; url: string } | null = null;
+  const hasPlatformTools = tools.some((t) => t.runtime === "platform");
+  if (hasPlatformTools) {
+    credential = await ensureMcpCredential({
+      slug: agent.slug,
+      existingId: agent.anthropicMcpCredentialId,
+      existingUrl: agent.anthropicMcpCredentialUrl,
+    });
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.agent.update({
       where: { id: agent.id },
@@ -284,6 +315,12 @@ export async function publishAgent(id: string): Promise<HydratedAgent> {
         anthropicAgentId: result.agentId,
         environmentId: result.environmentId,
         anthropicAgentVersion: result.version,
+        ...(credential
+          ? {
+              anthropicMcpCredentialId: credential.id,
+              anthropicMcpCredentialUrl: credential.url,
+            }
+          : {}),
       },
     });
     await tx.agentVersion.create({

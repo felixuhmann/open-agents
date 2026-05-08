@@ -34,7 +34,6 @@ type Form = {
   adminName: string;
   adminPassword: string;
   anthropicApiKey: string;
-  anthropicVaultId: string;
   mailgunApiKey: string;
   mailgunDomain: string;
   mailgunSigningKey: string;
@@ -49,7 +48,6 @@ export default function SetupPage() {
     adminName: "",
     adminPassword: "",
     anthropicApiKey: "",
-    anthropicVaultId: "",
     mailgunApiKey: "",
     mailgunDomain: "",
     mailgunSigningKey: "",
@@ -66,7 +64,6 @@ export default function SetupPage() {
       await api("/api/setup", {
         json: {
           anthropicApiKey: form.anthropicApiKey,
-          anthropicVaultId: form.anthropicVaultId || undefined,
           mailgunApiKey: form.mailgunApiKey || undefined,
           mailgunDomain: form.mailgunDomain || undefined,
           mailgunSigningKey: form.mailgunSigningKey || undefined,
@@ -179,18 +176,10 @@ export default function SetupPage() {
                     value={form.anthropicApiKey}
                     onChange={update("anthropicApiKey")}
                   />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="anthropic-vault">
-                    Vault id
-                    <span className="text-muted-foreground">(optional)</span>
-                  </FieldLabel>
-                  <Input
-                    id="anthropic-vault"
-                    placeholder="vlt_…"
-                    value={form.anthropicVaultId}
-                    onChange={update("anthropicVaultId")}
-                  />
+                  <FieldDescription>
+                    The deployment vault is auto-provisioned the first time you publish an
+                    agent that uses platform tools.
+                  </FieldDescription>
                 </Field>
               </FieldSet>
 
