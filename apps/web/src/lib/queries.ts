@@ -172,13 +172,17 @@ export type ConversationListItem = {
   updatedAt: string;
 };
 
-export function useConversations() {
+export function useConversations(agentSlug?: string) {
   return useQuery({
-    queryKey: ["conversations"],
-    queryFn: () =>
-      api<{ conversations: ConversationListItem[] }>("/api/conversations").then(
+    queryKey: ["conversations", { agentSlug: agentSlug ?? null }],
+    queryFn: () => {
+      const url = agentSlug
+        ? `/api/conversations?agentSlug=${encodeURIComponent(agentSlug)}`
+        : "/api/conversations";
+      return api<{ conversations: ConversationListItem[] }>(url).then(
         (r) => r.conversations,
-      ),
+      );
+    },
   });
 }
 

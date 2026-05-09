@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import {
   ChatCircleDotsIcon,
+  ClockCounterClockwiseIcon,
   EnvelopeIcon,
   GlobeIcon,
   PencilSimpleIcon,
@@ -89,6 +90,12 @@ export default function AgentDetailPage() {
               <Link to={`/agents/${a.slug}/chat`}>
                 <ChatCircleDotsIcon data-icon="inline-start" />
                 Open chat
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to={`/agents/${a.slug}/conversations`}>
+                <ClockCounterClockwiseIcon data-icon="inline-start" />
+                History
               </Link>
             </Button>
             {isAdmin ? (

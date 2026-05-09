@@ -19,13 +19,21 @@ const SendMessageBody = z.object({
 
 conversationsRoutes.get("/", async (c) => {
   const user = requireUser(c);
+  const agentSlug = c.req.query("agentSlug");
+  let agentId: string | undefined;
+  if (agentSlug) {
+    const agent = await getAgentBySlug(agentSlug);
+    if (!agent) throw new HttpError(404, "agent not found");
+    await requireAgentAccess(c, agent.id);
+    agentId = agent.id;
+  }
   const conversations = await prisma.chatConversation.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, ...(agentId ? { agentId } : {}) },
     include: {
       agent: { select: { id: true, slug: true, displayName: true, avatar: true } },
     },
     orderBy: { updatedAt: "desc" },
-    take: 100,
+    take: agentId ? 500 : 100,
   });
   return c.json({
     conversations: conversations.map((conv) => ({

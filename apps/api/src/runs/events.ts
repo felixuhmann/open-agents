@@ -78,13 +78,25 @@ export type AppendEventInput = {
 };
 
 /**
- * Insert one event row + NOTIFY subscribers. Sequence is allocated via
- * a `MAX(seq)+1` CTE under a transaction to avoid races inside a single
- * worker; cross-worker contention is impossible because each AgentRun is
- * processed by exactly one pg-boss handler at a time.
+ * Insert one event row + NOTIFY subscribers.
+ *
+ * Sequence allocation must be atomic per-run: the run-agent worker fans out
+ * `appendEvent` calls fast enough that two transactions can both read the
+ * same `MAX(seq)` under READ COMMITTED and both try to insert `seq = N+1`
+ * → second one hits the `(runId, seq)` unique index. Even though pg-boss
+ * gives each AgentRun to exactly one worker at a time, that single worker
+ * still issues overlapping inserts.
+ *
+ * Fix: take a Postgres advisory **transaction** lock keyed on the runId at
+ * the start of the transaction. `pg_advisory_xact_lock` blocks any other
+ * transaction trying the same key until commit/rollback; concurrency
+ * between different runs is unaffected. The lock is process-wide, so it
+ * also covers the (rare) case of two pg-boss workers briefly believing
+ * they own the same run during a redeploy.
  */
 export async function appendEvent(input: AppendEventInput): Promise<RunEventEnvelope> {
   const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${input.runId}, 0))`;
     const last = await tx.runEvent.findFirst({
       where: { runId: input.runId },
       orderBy: { seq: "desc" },

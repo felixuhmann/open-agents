@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ChatCircleDotsIcon,
+  ClockCounterClockwiseIcon,
   DownloadSimpleIcon,
   FileIcon,
   PaperclipIcon,
@@ -311,7 +312,7 @@ export default function AgentChatPage() {
             {initials}
           </AvatarFallback>
         </Avatar>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="font-heading text-xl font-semibold leading-tight">
             {agent.data.displayName}
           </h1>
@@ -319,6 +320,12 @@ export default function AgentChatPage() {
             {conversation.data?.title ?? "New conversation"}
           </p>
         </div>
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/agents/${agent.data.slug}/conversations`}>
+            <ClockCounterClockwiseIcon data-icon="inline-start" />
+            History
+          </Link>
+        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col border bg-card">
