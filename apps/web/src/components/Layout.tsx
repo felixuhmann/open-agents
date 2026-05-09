@@ -18,6 +18,7 @@ import {
   StackIcon,
   UserCircleIcon,
   UsersIcon,
+  WarningCircleIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
 import {
@@ -74,6 +75,10 @@ const NAV_LIBRARY: Array<NavItem> = [
   { to: "/library/skills", label: "Skills", icon: PuzzlePieceIcon },
 ];
 
+const NAV_REVIEW: Array<NavItem> = [
+  { to: "/issues", label: "Issues", icon: WarningCircleIcon },
+];
+
 const NAV_SETTINGS: Array<NavItem> = [
   { to: "/settings/secrets", label: "Secrets", icon: KeyIcon },
   { to: "/settings/users", label: "Users", icon: UsersIcon },
@@ -85,6 +90,7 @@ const PATH_LABELS: Record<string, string> = {
   "/agents": "Agents",
   "/library/tools": "Tools",
   "/library/skills": "Skills",
+  "/issues": "Issues",
   "/settings/secrets": "Secrets",
   "/settings/users": "Users",
   "/settings/general": "General",
@@ -139,6 +145,7 @@ export function Layout({ user, children }: Props) {
           {isAdmin ? (
             <>
               <NavGroup label="Library" items={NAV_LIBRARY} />
+              <NavGroup label="Review" items={NAV_REVIEW} />
               <NavGroup label="Settings" items={NAV_SETTINGS} />
             </>
           ) : null}

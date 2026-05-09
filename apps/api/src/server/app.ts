@@ -4,6 +4,7 @@ import { attachUser } from "../auth/middleware.js";
 import { config } from "../config.js";
 import { agentsRoutes } from "../routes/api/agents.js";
 import { conversationsRoutes } from "../routes/api/conversations.js";
+import { issuesRoutes } from "../routes/api/issues.js";
 import { runsRoutes } from "../routes/api/runs.js";
 import { secretsRoutes } from "../routes/api/secrets.js";
 import { settingsRoutes } from "../routes/api/settings.js";
@@ -12,6 +13,7 @@ import { toolsRoutes } from "../routes/api/tools.js";
 import { usersRoutes } from "../routes/api/users.js";
 import { authRoutes } from "../routes/auth.js";
 import { healthRoutes } from "../routes/health.js";
+import { issueReportRoutes, ISSUE_REPORT_PREFIX } from "../routes/issueReport.js";
 import { mailgunRoutes } from "../routes/mailgun.js";
 import { mcpRoutes } from "../routes/mcp.js";
 import {
@@ -66,6 +68,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
 
   app.route("/api/agents", agentsRoutes);
   app.route("/api/conversations", conversationsRoutes);
+  app.route("/api/issues", issuesRoutes);
   app.route("/api/runs", runsRoutes);
   app.route("/api/secrets", secretsRoutes);
   app.route("/api/settings", settingsRoutes);
@@ -78,6 +81,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route(MAILGUN_PREFIX, mailgunRoutes);
   app.route(MCP_PREFIX, mcpRoutes);
   app.route(STATIC_PREFIX, staticRoutes);
+  app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
   app.route("/", uploadRoutes);
 
   // SPA catch-all — must be last so every prefixed router above wins. In

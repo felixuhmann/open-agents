@@ -42,6 +42,13 @@ export type AgentResponseEmailProps = {
    * "reply to continue" hint.
    */
   footerLogoUrl?: string;
+  /**
+   * Optional absolute URL of the "Report this conversation" link surfaced
+   * in the email footer. When set, recipients can flag a misbehaving
+   * agent reply without needing a deployment account; the link carries an
+   * HMAC-signed token bound to the EmailThread + recipient address.
+   */
+  reportUrl?: string;
 };
 
 const markdownStyles = {
@@ -85,6 +92,7 @@ export function AgentResponseEmail({
   markdown,
   preview,
   footerLogoUrl,
+  reportUrl,
 }: AgentResponseEmailProps): React.ReactElement {
   return (
     <Html lang="en">
@@ -145,6 +153,18 @@ export function AgentResponseEmail({
               <Text className="m-0 mt-3 text-xs text-muted">
                 Reply to this email to continue the conversation.
               </Text>
+              {reportUrl ? (
+                <Text className="m-0 mt-2 text-xs text-muted">
+                  Did the agent behave incorrectly?{" "}
+                  <a
+                    href={reportUrl}
+                    style={{ color: "#2563eb", textDecoration: "underline" }}
+                  >
+                    Report this conversation
+                  </a>
+                  .
+                </Text>
+              ) : null}
             </Section>
           </Container>
         </Body>

@@ -133,6 +133,8 @@ async function handleSendEmail(job: Job<SendEmailJobData>): Promise<void> {
       agentDisplayName: thread.agent.displayName,
       avatarFilename: thread.agent.avatar ?? undefined,
       markdown: body,
+      threadId: thread.id,
+      recipientEmail: thread.userEmail,
     });
 
     const sent = await sendEmail({

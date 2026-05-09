@@ -244,3 +244,102 @@ export function useConversation(id: string | undefined) {
     queryFn: () => api<ConversationDetail>(`/api/conversations/${id}`),
   });
 }
+
+export type IssueSurface = "chat" | "email";
+export type IssueStatus = "open" | "resolved";
+
+export type IssueListItem = {
+  id: string;
+  surface: IssueSurface;
+  status: IssueStatus;
+  description: string;
+  reporterEmail: string;
+  reporterUserId: string | null;
+  reporterName: string | null;
+  agent: { id: string; slug: string; displayName: string; avatar: string | null };
+  conversationId: string | null;
+  threadId: string | null;
+  sessionLabel: string;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
+export function useIssues(status?: IssueStatus) {
+  return useQuery({
+    queryKey: ["issues", { status: status ?? null }],
+    queryFn: () => {
+      const url = status
+        ? `/api/issues?status=${encodeURIComponent(status)}`
+        : "/api/issues";
+      return api<{ issues: IssueListItem[] }>(url).then((r) => r.issues);
+    },
+  });
+}
+
+export type IssueDetailRunEvent = {
+  seq: number;
+  type: string;
+  createdAt: string;
+  payload: unknown;
+};
+
+export type IssueDetailRun = {
+  id: string;
+  surface: IssueSurface;
+  status: string;
+  error: string | null;
+  output: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  events: IssueDetailRunEvent[];
+};
+
+export type IssueDetailMessage =
+  | {
+      kind: "chat";
+      id: string;
+      role: string;
+      content: string;
+      runId: string | null;
+      createdAt: string;
+    }
+  | {
+      kind: "email";
+      id: string;
+      direction: "inbound" | "outbound";
+      subject: string;
+      body: string;
+      createdAt: string;
+    };
+
+export type IssueDetail = {
+  id: string;
+  surface: IssueSurface;
+  status: IssueStatus;
+  description: string;
+  reporterEmail: string;
+  reporterUserId: string | null;
+  reporterName: string | null;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
+  resolvedByEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+  agent: { id: string; slug: string; displayName: string; avatar: string | null };
+  session: {
+    conversationId: string | null;
+    threadId: string | null;
+    label: string;
+    userEmail: string | null;
+  };
+  messages: IssueDetailMessage[];
+  runs: IssueDetailRun[];
+};
+
+export function useIssue(id: string | undefined) {
+  return useQuery({
+    enabled: Boolean(id),
+    queryKey: ["issues", id],
+    queryFn: () => api<IssueDetail>(`/api/issues/${id}`),
+  });
+}

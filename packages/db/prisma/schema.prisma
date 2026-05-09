@@ -44,6 +44,8 @@ model User {
   agentAccess     AgentAccess[]
   conversations   ChatConversation[]
   createdAgents   Agent[]   @relation("AgentCreatedBy")
+  reportedIssues  Issue[]   @relation("IssueReporter")
+  resolvedIssues  Issue[]   @relation("IssueResolver")
 
   @@map("user")
 }
@@ -201,6 +203,7 @@ model Agent {
   conversations      ChatConversation[]
   emailThreads       EmailThread[]
   runs               AgentRun[]
+  issues             Issue[]
 
   @@index([createdById])
 }
@@ -372,6 +375,7 @@ model ChatConversation {
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages            ChatMessage[]
   runs                AgentRun[]
+  issues              Issue[]
 
   @@index([agentId])
   @@index([userId])
@@ -495,6 +499,7 @@ model EmailThread {
   agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messages       EmailMessage[]
   runs           AgentRun[]
+  issues         Issue[]
 
   @@index([agentId])
   @@index([userEmail])
@@ -530,4 +535,52 @@ model EmailAttachment {
   emailMessage    EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
 
   @@index([emailMessageId])
+}
+
+// ---------------------------------------------------------------------------
+// User-filed issues. A reporter (chat user or email recipient) flags a
+// session where the agent misbehaved; admins triage the issue and review
+// the full conversation + raw run trace from the SPA.
+//
+// Exactly one of `conversationId` (surface = chat) or `threadId`
+// (surface = email) is set — `surface` mirrors `AgentRun.surface`.
+// ---------------------------------------------------------------------------
+
+model Issue {
+  id              String   @id @default(cuid())
+  agentId         String
+  /// `chat` | `email`. Mirrors AgentRun.surface — drives which session
+  /// FK is consulted and how the SPA renders the conversation history.
+  surface         String
+  /// Set when surface = `chat`.
+  conversationId  String?
+  /// Set when surface = `email`.
+  threadId        String?
+  /// Reporter's User row. Set for chat reports (cookie-authed) and for
+  /// email reports when the email matches a known User.
+  reporterUserId  String?
+  /// Reporter's email. Always set: mirrors User.email for chat reports
+  /// or EmailThread.userEmail for email-reported sessions. Used as the
+  /// public identifier in the admin list.
+  reporterEmail   String
+  /// Free-form description of what went wrong.
+  description     String
+  /// `open` | `resolved`.
+  status          String   @default("open")
+  resolvedAt      DateTime?
+  resolvedById    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agent          Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  conversation   ChatConversation?  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  thread         EmailThread?       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  reporter       User?              @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  resolvedBy     User?              @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([agentId])
+  @@index([conversationId])
+  @@index([threadId])
+  @@index([status])
+  @@index([reporterUserId])
 }

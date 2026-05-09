@@ -1,6 +1,7 @@
 import { render } from "react-email";
 import { AgentResponseEmail } from "../emails/AgentResponse.js";
 import { APP_SETTING_KEYS, getAppSetting } from "./appSettings.js";
+import { buildIssueReportUrl } from "./issueReportSigning.js";
 
 /**
  * Approximate character budget for the email preview snippet (the line gmail
@@ -88,9 +89,21 @@ export async function renderAgentResponseHtml(args: {
    * email header always shows an avatar.
    */
   avatarFilename?: string;
+  /**
+   * EmailThread id this reply belongs to. When set together with
+   * `recipientEmail`, the rendered email gains a "Report this
+   * conversation" footer link the recipient can click without needing
+   * a deployment account.
+   */
+  threadId?: string;
+  recipientEmail?: string;
 }): Promise<string> {
   const avatarUrl = resolveAssetUrl(args.avatarFilename ?? FALLBACK_AVATAR_FILENAME);
   const footerLogoUrl = await resolveFooterLogoUrl();
+  const reportUrl =
+    args.threadId && args.recipientEmail
+      ? buildIssueReportUrl({ threadId: args.threadId, email: args.recipientEmail })
+      : undefined;
   return render(
     AgentResponseEmail({
       agentDisplayName: args.agentDisplayName,
@@ -98,6 +111,7 @@ export async function renderAgentResponseHtml(args: {
       markdown: args.markdown,
       preview: buildPreview(args.markdown),
       footerLogoUrl,
+      reportUrl,
     }),
   );
 }

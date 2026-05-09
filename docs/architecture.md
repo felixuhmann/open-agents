@@ -114,17 +114,18 @@ Anthropic sessions.
 
 ## HTTP surface
 
-| Prefix                                                                                                                 | Purpose                                               | Auth                                |
-| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------- |
-| `/api/auth/*`                                                                                                          | better-auth catch-all (sign in, session, sign out)    | session cookie                      |
-| `/api/setup`, `/api/setup/status`                                                                                      | First-run wizard                                      | none until completed, then admin    |
-| `/api/agents`, `/api/users`, `/api/tools`, `/api/skills`, `/api/secrets`, `/api/conversations`, `/api/runs/:id/events` | Control-plane API consumed by the SPA                 | session cookie + role/access guards |
-| `/mailgun/inbound`                                                                                                     | Catch-all Mailgun webhook                             | Mailgun HMAC over `timestamp+token` |
-| `/mcp/:agentSlug`                                                                                                      | Streamable-HTTP MCP server, one logical handler/agent | Shared bearer (`MCP_AUTH_TOKEN`)    |
-| `/runs/:runId/attachments`                                                                                             | Sandbox uploads files for the email reply             | HMAC signature on the URL           |
-| `/conversations/:id/attachments`                                                                                       | User uploads files into a chat                        | session cookie                      |
-| `/health`, `/health/ready`                                                                                             | Liveness + DB ping                                    | none                                |
-| `/static/*`                                                                                                            | Email assets                                          | none                                |
+| Prefix                                                                                                                                | Purpose                                               | Auth                                |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------- |
+| `/api/auth/*`                                                                                                                         | better-auth catch-all (sign in, session, sign out)    | session cookie                      |
+| `/api/setup`, `/api/setup/status`                                                                                                     | First-run wizard                                      | none until completed, then admin    |
+| `/api/agents`, `/api/users`, `/api/tools`, `/api/skills`, `/api/secrets`, `/api/conversations`, `/api/issues`, `/api/runs/:id/events` | Control-plane API consumed by the SPA                 | session cookie + role/access guards |
+| `/mailgun/inbound`                                                                                                                    | Catch-all Mailgun webhook                             | Mailgun HMAC over `timestamp+token` |
+| `/mcp/:agentSlug`                                                                                                                     | Streamable-HTTP MCP server, one logical handler/agent | Shared bearer (`MCP_AUTH_TOKEN`)    |
+| `/runs/:runId/attachments`                                                                                                            | Sandbox uploads files for the email reply             | HMAC signature on the URL           |
+| `/conversations/:id/attachments`                                                                                                      | User uploads files into a chat                        | session cookie                      |
+| `/issues/report`                                                                                                                      | Public issue-report flow for email recipients         | HMAC-signed token in URL            |
+| `/health`, `/health/ready`                                                                                                            | Liveness + DB ping                                    | none                                |
+| `/static/*`                                                                                                                           | Email assets                                          | none                                |
 
 The app builder lives in
 [`apps/api/src/server/app.ts`](../apps/api/src/server/app.ts) and route
@@ -351,6 +352,21 @@ or `member`.
 - `AgentAttachment` — files the agent uploaded back via the signed
   `/runs/:runId/attachments` endpoint; the send-email worker attaches
   them to the outbound reply.
+
+### Issue reporting
+
+- `Issue` — a user-filed report against a single session. `surface`
+  mirrors `AgentRun.surface` and exactly one of `conversationId`
+  (chat) or `threadId` (email) is set. `description` is the
+  user-supplied note explaining what went wrong; `status` is
+  `open` or `resolved`. The chat surface uses a "Report" button
+  next to the conversation header that opens a description dialog;
+  the email surface uses an HMAC-signed link injected into outbound
+  emails (see `apps/api/src/services/issueReportSigning.ts` and the
+  public `POST /issues/report` form). Admins triage issues from
+  `/issues` in the SPA — the detail page renders the full conversation
+  history and the raw `RunEvent` log per run, with copy-to-clipboard
+  buttons for the trace JSON.
 
 ## Bootstrap order
 

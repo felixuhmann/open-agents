@@ -1,5 +1,6 @@
 import { AUTH_PREFIX } from "./auth.js";
 import { HEALTH_PREFIX } from "./health.js";
+import { ISSUE_REPORT_PREFIX } from "./issueReport.js";
 import { MAILGUN_PREFIX } from "./mailgun.js";
 import { MCP_PREFIX } from "./mcp.js";
 import { SETUP_PREFIX } from "./setup.js";
@@ -11,6 +12,7 @@ export const API_PREFIX = "/api";
 export {
   AUTH_PREFIX,
   HEALTH_PREFIX,
+  ISSUE_REPORT_PREFIX,
   MAILGUN_PREFIX,
   MCP_PREFIX,
   SETUP_PREFIX,
@@ -31,4 +33,5 @@ export const APP_ROUTE_PREFIXES = [
   SETUP_PREFIX,
   AUTH_PREFIX,
   API_PREFIX,
+  ISSUE_REPORT_PREFIX,
 ] as const;

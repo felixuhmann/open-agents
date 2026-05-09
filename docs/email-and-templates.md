@@ -129,6 +129,16 @@ Today there's a single template:
 wraps `render(...)`, extracts a 120-char preheader, and resolves the
 agent avatar URL.
 
+The footer also includes a "Report this conversation" link when the
+caller passes `threadId` + `recipientEmail` (the send-email worker
+always does). The link points at the public `GET /issues/report?token=…`
+flow with an HMAC-signed token bound to the `EmailThread` and the
+recipient address — see
+[`apps/api/src/services/issueReportSigning.ts`](../apps/api/src/services/issueReportSigning.ts).
+The recipient does **not** need a deployment account to file a report;
+the signature is the credential. Submitted reports show up under
+`/issues` in the SPA for admins to review.
+
 ### Per-agent profile picture
 
 Each agent can pin a profile picture rendered in the email header (and

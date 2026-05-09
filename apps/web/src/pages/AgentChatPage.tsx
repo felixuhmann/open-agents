@@ -11,6 +11,7 @@ import {
   PaperPlaneTiltIcon,
   RobotIcon,
   UserIcon,
+  WarningCircleIcon,
   WrenchIcon,
   XIcon,
 } from "@phosphor-icons/react";
@@ -34,6 +35,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -320,6 +331,9 @@ export default function AgentChatPage() {
             {conversation.data?.title ?? "New conversation"}
           </p>
         </div>
+        {conversationId && messages.length > 0 ? (
+          <ReportIssueDialog conversationId={conversationId} />
+        ) : null}
         <Button asChild variant="outline" size="sm">
           <Link to={`/agents/${agent.data.slug}/conversations`}>
             <ClockCounterClockwiseIcon data-icon="inline-start" />
@@ -575,6 +589,95 @@ function Bubble({
         {!mine && !isSystem && runId ? <AssistantRunAttachments runId={runId} /> : null}
       </div>
     </div>
+  );
+}
+
+function ReportIssueDialog({ conversationId }: { conversationId: string }) {
+  const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const submit = useMutation({
+    mutationFn: () =>
+      api<{ id: string }>("/api/issues", {
+        json: { conversationId, description: description.trim() },
+      }),
+    onSuccess: () => {
+      toast.success("Report filed", {
+        description: "An admin will review the conversation.",
+      });
+      setOpen(false);
+      setDescription("");
+    },
+    onError: (e) =>
+      toast.error("Couldn't file report", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <WarningCircleIcon data-icon="inline-start" />
+          Report
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Report this conversation</DialogTitle>
+          <DialogDescription>
+            Describe what the agent did wrong and what you expected instead. The full
+            conversation history will be shared with the admins so they can investigate.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          id="report-issue-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!description.trim()) return;
+            submit.mutate();
+          }}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="issue-description">What went wrong?</FieldLabel>
+              <Textarea
+                id="issue-description"
+                rows={5}
+                required
+                maxLength={4000}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="The agent claimed it had updated the spreadsheet but the file was unchanged."
+              />
+              <FieldDescription>
+                {description.trim().length} / 4000 characters
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={submit.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            form="report-issue-form"
+            type="submit"
+            disabled={submit.isPending || !description.trim()}
+          >
+            {submit.isPending ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <WarningCircleIcon data-icon="inline-start" />
+            )}
+            {submit.isPending ? "Submitting…" : "Submit report"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
