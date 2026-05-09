@@ -179,6 +179,9 @@ export type IssueDetailRunEvent = {
 export type IssueDetailRun = {
   id: string;
   surface: "chat" | "email";
+  /// Anthropic session id this run executed against. Differs across runs
+  /// in the same conversation when attachments forced a new session.
+  sessionId: string | null;
   status: string;
   error: string | null;
   output: string | null;
@@ -205,6 +208,54 @@ export type IssueDetailMessage =
       createdAt: string;
     };
 
+export type IssueDetailToolBinding = {
+  bindingId: string;
+  toolId: string;
+  key: string;
+  name: string;
+  runtime: "managed" | "platform";
+  deprecated: boolean;
+};
+
+export type IssueDetailSkillBinding = {
+  bindingId: string;
+  skillId: string;
+  name: string;
+  anthropicSkillId: string | null;
+  anthropicSkillVersion: string | null;
+};
+
+export type IssueDetailThirdPartyMcp = {
+  id: string;
+  label: string;
+  serverUrl: string;
+};
+
+export type IssueDetailAgent = {
+  id: string;
+  slug: string;
+  displayName: string;
+  avatar: string | null;
+  description: string | null;
+  model: string;
+  systemPrompt: string;
+  emailEnabled: boolean;
+  webEnabled: boolean;
+  inboundLocalPart: string;
+  anthropicAgentId: string | null;
+  environmentId: string | null;
+  anthropicAgentVersion: string | null;
+  tools: IssueDetailToolBinding[];
+  skills: IssueDetailSkillBinding[];
+  thirdPartyMcp: IssueDetailThirdPartyMcp[];
+  /// Snapshot of the most recent payload published to Anthropic for this
+  /// agent. Includes the system prompt, toolset configuration, and skill
+  /// references actually sent to `POST /v1/agents/:id`. May be null if
+  /// the agent has never been published.
+  publishedPayload: unknown;
+  publishedAt: string | null;
+};
+
 export type IssueDetail = {
   id: string;
   surface: "chat" | "email";
@@ -218,17 +269,15 @@ export type IssueDetail = {
   resolvedByEmail: string | null;
   createdAt: string;
   updatedAt: string;
-  agent: {
-    id: string;
-    slug: string;
-    displayName: string;
-    avatar: string | null;
-  };
+  agent: IssueDetailAgent;
   session: {
     conversationId: string | null;
     threadId: string | null;
     label: string;
     userEmail: string | null;
+    /// Distinct Anthropic session ids observed across the runs on this
+    /// session, oldest first. Most sessions have exactly one.
+    anthropicSessionIds: string[];
   };
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];
@@ -236,14 +285,24 @@ export type IssueDetail = {
 
 /**
  * Full detail for the admin issue viewer: reporter info, the raw
- * conversation/thread messages, and every AgentRun's RunEvent log so the
- * admin can inspect tool calls, thinking, and errors.
+ * conversation/thread messages, every `AgentRun`'s `RunEvent` log, and
+ * the agent context (identity, model, tools, skills, third-party MCPs,
+ * system prompt, and the most recent payload we published to Anthropic)
+ * so the admin can inspect tool calls, thinking, and errors against the
+ * configuration that produced them.
  */
 export async function getIssueDetail(id: string): Promise<IssueDetail> {
   const issue = await prisma.issue.findUnique({
     where: { id },
     include: {
-      agent: { select: { id: true, slug: true, displayName: true, avatar: true } },
+      agent: {
+        include: {
+          toolBindings: { include: { tool: true } },
+          skillBindings: { include: { skill: true } },
+          thirdPartyMcp: true,
+          versions: { orderBy: { createdAt: "desc" }, take: 1 },
+        },
+      },
       reporter: { select: { id: true, name: true } },
       resolvedBy: { select: { name: true, email: true } },
     },
@@ -281,21 +340,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
         runId: m.runId,
         createdAt: m.createdAt.toISOString(),
       }));
-      runs = conv.runs.map((r) => ({
-        id: r.id,
-        surface: r.surface as "chat" | "email",
-        status: r.status,
-        error: r.error,
-        output: r.output,
-        startedAt: r.startedAt.toISOString(),
-        completedAt: r.completedAt?.toISOString() ?? null,
-        events: r.events.map((e) => ({
-          seq: e.seq,
-          type: e.type,
-          createdAt: e.createdAt.toISOString(),
-          payload: e.payload,
-        })),
-      }));
+      runs = conv.runs.map(toIssueDetailRun);
     }
   } else if (issue.surface === "email" && issue.threadId) {
     const thread = await prisma.emailThread.findUnique({
@@ -319,23 +364,59 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
         body: m.body,
         createdAt: m.createdAt.toISOString(),
       }));
-      runs = thread.runs.map((r) => ({
-        id: r.id,
-        surface: r.surface as "chat" | "email",
-        status: r.status,
-        error: r.error,
-        output: r.output,
-        startedAt: r.startedAt.toISOString(),
-        completedAt: r.completedAt?.toISOString() ?? null,
-        events: r.events.map((e) => ({
-          seq: e.seq,
-          type: e.type,
-          createdAt: e.createdAt.toISOString(),
-          payload: e.payload,
-        })),
-      }));
+      runs = thread.runs.map(toIssueDetailRun);
     }
   }
+
+  const latestVersion = issue.agent.versions[0] ?? null;
+
+  // Distinct session ids in encounter order. Most sessions have one,
+  // but attachments force a new session so we may have 2+ — surfacing
+  // every id helps when correlating with Anthropic's dashboard.
+  const sessionIds: string[] = [];
+  for (const r of runs) {
+    if (r.sessionId && !sessionIds.includes(r.sessionId)) {
+      sessionIds.push(r.sessionId);
+    }
+  }
+
+  const agent: IssueDetailAgent = {
+    id: issue.agent.id,
+    slug: issue.agent.slug,
+    displayName: issue.agent.displayName,
+    avatar: issue.agent.avatar,
+    description: issue.agent.description,
+    model: issue.agent.model,
+    systemPrompt: issue.agent.systemPrompt,
+    emailEnabled: issue.agent.emailEnabled,
+    webEnabled: issue.agent.webEnabled,
+    inboundLocalPart: issue.agent.inboundLocalPart,
+    anthropicAgentId: issue.agent.anthropicAgentId,
+    environmentId: issue.agent.environmentId,
+    anthropicAgentVersion: issue.agent.anthropicAgentVersion,
+    tools: issue.agent.toolBindings.map((b) => ({
+      bindingId: b.id,
+      toolId: b.tool.id,
+      key: b.tool.key,
+      name: b.tool.name,
+      runtime: b.tool.runtime === "managed" ? "managed" : "platform",
+      deprecated: b.tool.deprecated,
+    })),
+    skills: issue.agent.skillBindings.map((b) => ({
+      bindingId: `${b.agentId}:${b.skillId}`,
+      skillId: b.skill.id,
+      name: b.skill.name,
+      anthropicSkillId: b.skill.anthropicSkillId,
+      anthropicSkillVersion: b.skill.anthropicSkillVersion,
+    })),
+    thirdPartyMcp: issue.agent.thirdPartyMcp.map((m) => ({
+      id: m.id,
+      label: m.label,
+      serverUrl: m.serverUrl,
+    })),
+    publishedPayload: latestVersion?.payload ?? null,
+    publishedAt: latestVersion?.createdAt.toISOString() ?? null,
+  };
 
   return {
     id: issue.id,
@@ -350,20 +431,47 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     resolvedByEmail: issue.resolvedBy?.email ?? null,
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
-    agent: {
-      id: issue.agent.id,
-      slug: issue.agent.slug,
-      displayName: issue.agent.displayName,
-      avatar: issue.agent.avatar,
-    },
+    agent,
     session: {
       conversationId: issue.conversationId,
       threadId: issue.threadId,
       label: sessionLabel,
       userEmail,
+      anthropicSessionIds: sessionIds,
     },
     messages,
     runs,
+  };
+}
+
+type RunWithEvents = {
+  id: string;
+  surface: string;
+  sessionId: string;
+  status: string;
+  error: string | null;
+  output: string | null;
+  startedAt: Date;
+  completedAt: Date | null;
+  events: Array<{ seq: number; type: string; payload: unknown; createdAt: Date }>;
+};
+
+function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
+  return {
+    id: r.id,
+    surface: r.surface as "chat" | "email",
+    sessionId: r.sessionId === "" ? null : r.sessionId,
+    status: r.status,
+    error: r.error,
+    output: r.output,
+    startedAt: r.startedAt.toISOString(),
+    completedAt: r.completedAt?.toISOString() ?? null,
+    events: r.events.map((e) => ({
+      seq: e.seq,
+      type: e.type,
+      createdAt: e.createdAt.toISOString(),
+      payload: e.payload,
+    })),
   };
 }
 

@@ -286,6 +286,7 @@ export type IssueDetailRunEvent = {
 export type IssueDetailRun = {
   id: string;
   surface: IssueSurface;
+  sessionId: string | null;
   status: string;
   error: string | null;
   output: string | null;
@@ -312,6 +313,50 @@ export type IssueDetailMessage =
       createdAt: string;
     };
 
+export type IssueDetailToolBinding = {
+  bindingId: string;
+  toolId: string;
+  key: string;
+  name: string;
+  runtime: ToolRuntime;
+  deprecated: boolean;
+};
+
+export type IssueDetailSkillBinding = {
+  bindingId: string;
+  skillId: string;
+  name: string;
+  anthropicSkillId: string | null;
+  anthropicSkillVersion: string | null;
+};
+
+export type IssueDetailThirdPartyMcp = {
+  id: string;
+  label: string;
+  serverUrl: string;
+};
+
+export type IssueDetailAgent = {
+  id: string;
+  slug: string;
+  displayName: string;
+  avatar: string | null;
+  description: string | null;
+  model: string;
+  systemPrompt: string;
+  emailEnabled: boolean;
+  webEnabled: boolean;
+  inboundLocalPart: string;
+  anthropicAgentId: string | null;
+  environmentId: string | null;
+  anthropicAgentVersion: string | null;
+  tools: IssueDetailToolBinding[];
+  skills: IssueDetailSkillBinding[];
+  thirdPartyMcp: IssueDetailThirdPartyMcp[];
+  publishedPayload: unknown;
+  publishedAt: string | null;
+};
+
 export type IssueDetail = {
   id: string;
   surface: IssueSurface;
@@ -325,12 +370,13 @@ export type IssueDetail = {
   resolvedByEmail: string | null;
   createdAt: string;
   updatedAt: string;
-  agent: { id: string; slug: string; displayName: string; avatar: string | null };
+  agent: IssueDetailAgent;
   session: {
     conversationId: string | null;
     threadId: string | null;
     label: string;
     userEmail: string | null;
+    anthropicSessionIds: string[];
   };
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];
