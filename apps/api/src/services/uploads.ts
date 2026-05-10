@@ -41,6 +41,8 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/gif",
   "image/webp",
   "image/svg+xml",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
 ]);
 
 const EXT_BY_TYPE: Record<string, string> = {
@@ -50,9 +52,11 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/gif": ".gif",
   "image/webp": ".webp",
   "image/svg+xml": ".svg",
+  "image/x-icon": ".ico",
+  "image/vnd.microsoft.icon": ".ico",
 };
 
-export type BrandingKind = "avatars" | "footer";
+export type BrandingKind = "avatars" | "footer" | "branding";
 
 export type SavedBranding = {
   /** Bare filename inside `UPLOADS_DIR/<kind>/`. */

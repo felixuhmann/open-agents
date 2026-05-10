@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -8,7 +8,7 @@ import {
   ImageIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { useAppSettings } from "@/lib/queries";
+import { assetSrc, useAppSettings } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 
 const LABELS: Record<string, { title: string; description: string }> = {
+  product_name: {
+    title: "Product name",
+    description:
+      "Name shown in the browser title, sign-in/setup screens, and sidebar header. Leave empty to use open-agents.",
+  },
+  favicon_url: {
+    title: "Favicon",
+    description:
+      "Browser tab icon for this deployment. Upload a file to host it locally, or paste an absolute https:// URL.",
+  },
+  sidebar_logo_url: {
+    title: "Sidebar logo",
+    description:
+      "Image shown in the sidebar brand mark. Upload a square or compact transparent image for best results.",
+  },
   email_footer_logo_url: {
     title: "Email footer logo",
     description:
@@ -31,25 +46,16 @@ const LABELS: Record<string, { title: string; description: string }> = {
   },
 };
 
-/**
- * Resolve a stored asset reference (`/static/...` URL path or absolute
- * URL) into something a browser `<img src>` can load. Mirrors the
- * server-side `resolveAssetUrl` minus the `PUBLIC_BASE_URL` prefix —
- * the SPA always fetches uploads from the same origin.
- */
-function previewSrc(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  if (trimmed.startsWith("/static/")) return trimmed;
-  return undefined;
-}
+const IMAGE_SETTING_KEYS = new Set([
+  "favicon_url",
+  "sidebar_logo_url",
+  "email_footer_logo_url",
+]);
 
 export default function GeneralSettingsPage() {
   const settings = useAppSettings();
   const qc = useQueryClient();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!settings.data) return;
@@ -70,6 +76,7 @@ export default function GeneralSettingsPage() {
         description: LABELS[key]?.title ?? key,
       });
       await qc.invalidateQueries({ queryKey: ["settings"] });
+      await qc.invalidateQueries({ queryKey: ["settings", "public"] });
     },
     onError: (e) =>
       toast.error("Save failed", {
@@ -85,6 +92,7 @@ export default function GeneralSettingsPage() {
         description: LABELS[key]?.title ?? key,
       });
       await qc.invalidateQueries({ queryKey: ["settings"] });
+      await qc.invalidateQueries({ queryKey: ["settings", "public"] });
     },
     onError: (e) =>
       toast.error("Couldn't clear", {
@@ -92,11 +100,11 @@ export default function GeneralSettingsPage() {
       }),
   });
 
-  const uploadFooter = useMutation({
-    mutationFn: async (file: File) => {
+  const uploadImage = useMutation({
+    mutationFn: async ({ key, file }: { key: string; file: File }) => {
       const fd = new FormData();
       fd.append("file", file);
-      const r = await fetch("/api/settings/email-footer-logo", {
+      const r = await fetch(`/api/settings/${key}/image`, {
         method: "POST",
         credentials: "include",
         body: fd,
@@ -107,10 +115,13 @@ export default function GeneralSettingsPage() {
       }
       return (await r.json()) as { value: string };
     },
-    onSuccess: async (resp) => {
-      setDrafts((d) => ({ ...d, email_footer_logo_url: resp.value }));
-      toast.success("Footer logo uploaded");
+    onSuccess: async (resp, { key }) => {
+      setDrafts((d) => ({ ...d, [key]: resp.value }));
+      toast.success("Image uploaded", {
+        description: LABELS[key]?.title ?? key,
+      });
       await qc.invalidateQueries({ queryKey: ["settings"] });
+      await qc.invalidateQueries({ queryKey: ["settings", "public"] });
     },
     onError: (e) =>
       toast.error("Upload failed", {
@@ -137,8 +148,8 @@ export default function GeneralSettingsPage() {
               const draft = drafts[s.key] ?? "";
               const persisted = s.value ?? "";
               const dirty = draft.trim() !== persisted.trim();
-              const isFooter = s.key === "email_footer_logo_url";
-              const preview = isFooter ? previewSrc(persisted) : undefined;
+              const isImage = IMAGE_SETTING_KEYS.has(s.key);
+              const preview = isImage ? assetSrc(persisted) : undefined;
               return (
                 <li key={s.key}>
                   <Card>
@@ -157,7 +168,7 @@ export default function GeneralSettingsPage() {
                           setSetting.mutate({ key: s.key, value: draft });
                         }}
                       >
-                        {isFooter ? (
+                        {isImage ? (
                           <div className="flex items-center gap-4">
                             <div className="flex h-16 w-32 items-center justify-center border bg-muted/30">
                               {preview ? (
@@ -173,13 +184,13 @@ export default function GeneralSettingsPage() {
                               )}
                             </div>
                             <input
-                              ref={fileInputRef}
+                              id={`setting-upload-${s.key}`}
                               type="file"
-                              accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                              accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon"
                               className="hidden"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
-                                if (file) uploadFooter.mutate(file);
+                                if (file) uploadImage.mutate({ key: s.key, file });
                                 e.target.value = "";
                               }}
                             />
@@ -187,10 +198,14 @@ export default function GeneralSettingsPage() {
                               type="button"
                               variant="outline"
                               size="sm"
-                              disabled={uploadFooter.isPending}
-                              onClick={() => fileInputRef.current?.click()}
+                              disabled={uploadImage.isPending}
+                              onClick={() =>
+                                document
+                                  .getElementById(`setting-upload-${s.key}`)
+                                  ?.click()
+                              }
                             >
-                              {uploadFooter.isPending ? (
+                              {uploadImage.isPending ? (
                                 <Spinner data-icon="inline-start" />
                               ) : (
                                 <CloudArrowUpIcon data-icon="inline-start" />
@@ -201,14 +216,14 @@ export default function GeneralSettingsPage() {
                         ) : null}
                         <Field>
                           <FieldLabel htmlFor={`setting-${s.key}`}>
-                            {isFooter ? "URL" : "Value"}
+                            {isImage ? "URL" : "Value"}
                           </FieldLabel>
                           <Input
                             id={`setting-${s.key}`}
                             value={draft}
                             placeholder={
-                              isFooter
-                                ? "https://example.com/logo.png or /static/uploads/footer/<file>"
+                              isImage
+                                ? "https://example.com/logo.png or /static/uploads/<folder>/<file>"
                                 : ""
                             }
                             onChange={(e) =>

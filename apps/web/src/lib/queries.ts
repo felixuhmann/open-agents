@@ -237,11 +237,36 @@ export function useSecrets() {
 
 export type AppSettingRow = { key: string; value: string | null };
 
+export const DEFAULT_PRODUCT_NAME = "open-agents";
+
+export type PublicBrandingSettings = {
+  productName: string;
+  faviconUrl: string | null;
+  sidebarLogoUrl: string | null;
+};
+
+export function assetSrc(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/static/")) return trimmed;
+  return undefined;
+}
+
 export function useAppSettings() {
   return useQuery({
     queryKey: ["settings"],
     queryFn: () =>
       api<{ settings: AppSettingRow[] }>("/api/settings").then((r) => r.settings),
+  });
+}
+
+export function usePublicBranding() {
+  return useQuery({
+    queryKey: ["settings", "public"],
+    queryFn: () => api<PublicBrandingSettings>("/api/settings/public"),
+    staleTime: 60_000,
   });
 }
 

@@ -55,7 +55,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { authClient } from "@/lib/auth";
-import { canOperateAgents, type CurrentUser } from "@/lib/queries";
+import {
+  assetSrc,
+  canOperateAgents,
+  DEFAULT_PRODUCT_NAME,
+  type CurrentUser,
+  usePublicBranding,
+} from "@/lib/queries";
 import { Badge } from "./ui/badge";
 
 type NavItem = {
@@ -107,6 +113,9 @@ export function Layout({ user, children }: Props) {
   const location = useLocation();
   const isAdmin = user.role === "admin";
   const canManageAgents = canOperateAgents(user.role);
+  const branding = usePublicBranding();
+  const productName = branding.data?.productName ?? DEFAULT_PRODUCT_NAME;
+  const sidebarLogo = assetSrc(branding.data?.sidebarLogoUrl);
   const initials = (user.name ?? user.email).slice(0, 2).toUpperCase();
   const crumbs = buildCrumbs(location.pathname);
 
@@ -124,14 +133,22 @@ export function Layout({ user, children }: Props) {
         <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild size="lg" tooltip="open-agents">
+              <SidebarMenuButton asChild size="lg" tooltip={productName}>
                 <Link to="/" className="flex items-center gap-2">
                   <div className="flex size-8 items-center justify-center bg-sidebar-primary text-sidebar-primary-foreground">
-                    <ChartLineIcon className="size-4" weight="fill" />
+                    {sidebarLogo ? (
+                      <img
+                        src={sidebarLogo}
+                        alt=""
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : (
+                      <ChartLineIcon className="size-4" weight="fill" />
+                    )}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-heading font-semibold">
-                      open-agents
+                      {productName}
                     </span>
                     <span className="truncate text-xs text-sidebar-foreground/70">
                       agents platform

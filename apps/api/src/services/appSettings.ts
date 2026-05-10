@@ -10,6 +10,12 @@ import { prisma } from "../db.js";
  */
 
 export const APP_SETTING_KEYS = {
+  /** Human-readable product name shown in the web app chrome and page title. */
+  PRODUCT_NAME: "product_name",
+  /** Absolute or `/static/...` URL of the browser favicon. */
+  FAVICON_URL: "favicon_url",
+  /** Absolute or `/static/...` URL of the image shown in the sidebar brand slot. */
+  SIDEBAR_LOGO_URL: "sidebar_logo_url",
   /** Absolute or `/static/...` URL of the logo image rendered in the
    *  outbound email footer. When empty, the footer omits the image. */
   EMAIL_FOOTER_LOGO_URL: "email_footer_logo_url",
@@ -18,6 +24,14 @@ export const APP_SETTING_KEYS = {
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[keyof typeof APP_SETTING_KEYS];
 
 const cache = new Map<string, string | null>();
+
+export const DEFAULT_PRODUCT_NAME = "open-agents";
+
+export type PublicBrandingSettings = {
+  productName: string;
+  faviconUrl: string | null;
+  sidebarLogoUrl: string | null;
+};
 
 export async function getAppSetting(key: AppSettingKey): Promise<string | null> {
   if (cache.has(key)) return cache.get(key) ?? null;
@@ -62,4 +76,13 @@ export async function listAppSettings(): Promise<
     out.push({ key, value: await getAppSetting(key) });
   }
   return out;
+}
+
+export async function getPublicBrandingSettings(): Promise<PublicBrandingSettings> {
+  return {
+    productName:
+      (await getAppSetting(APP_SETTING_KEYS.PRODUCT_NAME)) ?? DEFAULT_PRODUCT_NAME,
+    faviconUrl: await getAppSetting(APP_SETTING_KEYS.FAVICON_URL),
+    sidebarLogoUrl: await getAppSetting(APP_SETTING_KEYS.SIDEBAR_LOGO_URL),
+  };
 }

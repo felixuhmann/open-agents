@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ReactElement } from "react";
+import { Suspense, lazy, useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Spinner } from "@/components/ui/spinner";
@@ -13,9 +13,12 @@ import {
 import { WarningOctagonIcon } from "@phosphor-icons/react";
 import {
   canOperateAgents,
+  assetSrc,
+  DEFAULT_PRODUCT_NAME,
   type CurrentUser,
   type UserRole,
   useCurrentUser,
+  usePublicBranding,
   useSetupStatus,
 } from "./lib/queries";
 
@@ -156,7 +159,27 @@ function ProtectedRoutes() {
 
 export function App() {
   const setup = useSetupStatus();
+  const branding = usePublicBranding();
   const location = useLocation();
+  const productName = branding.data?.productName ?? DEFAULT_PRODUCT_NAME;
+
+  useEffect(() => {
+    document.title = productName;
+  }, [productName]);
+
+  useEffect(() => {
+    const favicon = assetSrc(branding.data?.faviconUrl);
+    const existing = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!favicon) {
+      existing?.remove();
+      return;
+    }
+    const link = existing ?? document.createElement("link");
+    link.rel = "icon";
+    link.href = favicon;
+    if (!existing) document.head.appendChild(link);
+  }, [branding.data?.faviconUrl]);
+
   if (setup.isLoading) return <FullScreenSpinner />;
   if (!setup.data) return <FullScreenError message="Backend unreachable" />;
   if (!setup.data.complete && location.pathname !== "/setup") {
@@ -168,8 +191,8 @@ export function App() {
   return (
     <Suspense fallback={<FullScreenSpinner />}>
       <Routes>
-        <Route path="/setup" element={<SetupPage />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/setup" element={<SetupPage productName={productName} />} />
+        <Route path="/login" element={<LoginPage productName={productName} />} />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </Suspense>

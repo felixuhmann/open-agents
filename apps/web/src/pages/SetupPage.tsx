@@ -40,7 +40,7 @@ type Form = {
   inboundFrom: string;
 };
 
-export default function SetupPage() {
+export default function SetupPage({ productName }: { productName: string }) {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<Form>({
@@ -96,7 +96,7 @@ export default function SetupPage() {
           <div className="mb-2 flex size-9 items-center justify-center bg-primary text-primary-foreground">
             <ChartLineIcon className="size-4" weight="fill" />
           </div>
-          <CardTitle>Welcome to open-agents</CardTitle>
+          <CardTitle>Welcome to {productName}</CardTitle>
           <CardDescription>
             Configure your deployment in one step. You can rotate any of these credentials
             later from <strong>Settings → Secrets</strong>.

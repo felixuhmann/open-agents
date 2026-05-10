@@ -16,7 +16,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
-export default function LoginPage() {
+export default function LoginPage({ productName }: { productName: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +46,7 @@ export default function LoginPage() {
           <div className="mb-2 flex size-9 items-center justify-center bg-primary text-primary-foreground">
             <ChartLineIcon className="size-4" weight="fill" />
           </div>
-          <CardTitle>Sign in to open-agents</CardTitle>
+          <CardTitle>Sign in to {productName}</CardTitle>
           <CardDescription>
             Welcome back. Enter your credentials to access your agents.
           </CardDescription>
