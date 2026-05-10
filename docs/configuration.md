@@ -8,10 +8,12 @@ Configuration is split in two:
    process start; missing/malformed values **throw** so a healthy
    `pnpm dev` startup is itself proof your env is sane.
 2. **Service credentials and per-tool secrets** — Anthropic API key,
-   Mailgun key/domain/signing key, default outbound `From:` address,
-   and any per-tool secrets. Stored AES-256-GCM encrypted in the
-   `Secret` table; managed entirely through the web UI
-   (`/setup` wizard the first time, then `/settings/secrets`).
+   Mailgun key/domain/signing key, and any per-tool secrets. Stored
+   AES-256-GCM encrypted in the `Secret` table; managed entirely through
+   the web UI (`/setup` wizard the first time, then `/settings/secrets`).
+3. **Plain app settings** — branding, email footer text, and the default
+   outbound `From:` address. Stored in plaintext in `AppSetting`; managed
+   from `/settings/general`.
 
 [`apps/api/.env.example`](../apps/api/.env.example) is the canonical
 template for the bootstrap layer.
@@ -58,13 +60,12 @@ Captured by the first-run wizard at `/setup` and rotatable later from
 both the Anthropic client and the Mailgun client are lazy and auto-rebuild
 on rotation.
 
-| Key in `Secret.key`   | Used by                                                                                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anthropic_api_key`   | [`apps/api/src/agent-backend/instance.ts`](../apps/api/src/agent-backend/instance.ts) (the SDK client).                                                  |
-| `mailgun_api_key`     | [`apps/api/src/mailgun/send.ts`](../apps/api/src/mailgun/send.ts) (outbound).                                                                            |
-| `mailgun_domain`      | Outbound + inbound recipient parsing.                                                                                                                    |
-| `mailgun_signing_key` | [`apps/api/src/routes/mailgun.ts`](../apps/api/src/routes/mailgun.ts) (HMAC verify of the inbound webhook).                                              |
-| `inbound_from`        | [`apps/api/src/jobs/sendEmail.ts`](../apps/api/src/jobs/sendEmail.ts) — last-resort `From:` for legacy threads. Per-thread `inboundAddress` always wins. |
+| Key in `Secret.key`   | Used by                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `anthropic_api_key`   | [`apps/api/src/agent-backend/instance.ts`](../apps/api/src/agent-backend/instance.ts) (the SDK client).     |
+| `mailgun_api_key`     | [`apps/api/src/mailgun/send.ts`](../apps/api/src/mailgun/send.ts) (outbound).                               |
+| `mailgun_domain`      | Outbound + inbound recipient parsing.                                                                       |
+| `mailgun_signing_key` | [`apps/api/src/routes/mailgun.ts`](../apps/api/src/routes/mailgun.ts) (HMAC verify of the inbound webhook). |
 
 The internal `anthropic_vault_id` row is also stored in `Secret` after the
 first platform-tool publish, but it is auto-provisioned and not managed from
@@ -72,6 +73,20 @@ the admin secrets UI.
 
 The plaintext value is **never** returned by the API. The list endpoint
 only ever exposes `{ key, configured: boolean }`.
+
+## Plain app settings
+
+These values are returned as plaintext by `/api/settings` and edited from
+`/settings/general`.
+
+| Key in `AppSetting.key` | Used by                                                                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `product_name`          | Browser title, setup/sign-in screens, and sidebar header.                                                                                                |
+| `favicon_url`           | Browser tab icon.                                                                                                                                        |
+| `sidebar_logo_url`      | Sidebar brand mark.                                                                                                                                      |
+| `email_footer_logo_url` | Outbound email footer image.                                                                                                                             |
+| `email_disclaimer`      | Outbound email footer paragraph.                                                                                                                         |
+| `inbound_from`          | [`apps/api/src/jobs/sendEmail.ts`](../apps/api/src/jobs/sendEmail.ts) — last-resort `From:` for legacy threads. Per-thread `inboundAddress` always wins. |
 
 ## Per-tool secrets
 

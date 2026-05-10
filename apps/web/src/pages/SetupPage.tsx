@@ -98,8 +98,9 @@ export default function SetupPage({ productName }: { productName: string }) {
           </div>
           <CardTitle>Welcome to {productName}</CardTitle>
           <CardDescription>
-            Configure your deployment in one step. You can rotate any of these credentials
-            later from <strong>Settings → Secrets</strong>.
+            Configure your deployment in one step. You can update credentials under{" "}
+            <strong>Settings → Secrets</strong> and plain configuration under{" "}
+            <strong>Settings → General</strong>.
           </CardDescription>
         </CardHeader>
         <CardContent>

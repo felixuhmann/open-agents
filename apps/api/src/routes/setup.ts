@@ -4,6 +4,7 @@ import { createUserWithPassword } from "../auth/index.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { resetAgentBackend } from "../agent-backend/instance.js";
+import { APP_SETTING_KEYS, setAppSetting } from "../services/appSettings.js";
 import {
   invalidateServiceSecret,
   isServiceSetupComplete,
@@ -75,7 +76,7 @@ setupRoutes.post("/", async (c) => {
     await setServiceSecret(SERVICE_KEYS.MAILGUN_SIGNING_KEY, body.mailgunSigningKey);
   }
   if (body.inboundFrom) {
-    await setServiceSecret(SERVICE_KEYS.INBOUND_FROM, body.inboundFrom);
+    await setAppSetting(APP_SETTING_KEYS.INBOUND_FROM, body.inboundFrom);
   }
   invalidateServiceSecret();
   resetAgentBackend();

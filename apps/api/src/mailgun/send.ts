@@ -4,6 +4,7 @@ import type { MailgunMessageData } from "mailgun.js/definitions";
 import { config } from "../config.js";
 import { log } from "../log.js";
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
+import { APP_SETTING_KEYS, getAppSetting } from "../services/appSettings.js";
 
 type MailgunClient = ReturnType<Mailgun["client"]>;
 
@@ -16,7 +17,7 @@ export type OutboundAttachment = {
 export type SendEmailInput = {
   /**
    * Full `From:` header (display name + address). When omitted falls back to
-   * the deployment's INBOUND_FROM service secret. Callers should pass an
+   * the deployment's INBOUND_FROM app setting. Callers should pass an
    * agent-specific value so the address matches the catch-all Mailgun route
    * and user replies thread back to the same agent.
    */
@@ -68,7 +69,9 @@ export function resetMailgunClient(): void {
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const attachments = input.attachments ?? [];
   const fallbackFrom =
-    (await getServiceSecret(SERVICE_KEYS.INBOUND_FROM)) ?? "agent@example.com";
+    (await getAppSetting(APP_SETTING_KEYS.INBOUND_FROM)) ??
+    (await getServiceSecret(SERVICE_KEYS.INBOUND_FROM)) ??
+    "agent@example.com";
   const from = input.from ?? fallbackFrom;
 
   const refs = (input.references ?? []).map(formatMessageId);

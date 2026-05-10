@@ -21,6 +21,8 @@ export const APP_SETTING_KEYS = {
   EMAIL_FOOTER_LOGO_URL: "email_footer_logo_url",
   /** Plain-text disclaimer paragraph rendered in the outbound email footer. */
   EMAIL_DISCLAIMER: "email_disclaimer",
+  /** Default outbound `From:` header for legacy email threads. */
+  INBOUND_FROM: "inbound_from",
 } as const;
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[keyof typeof APP_SETTING_KEYS];

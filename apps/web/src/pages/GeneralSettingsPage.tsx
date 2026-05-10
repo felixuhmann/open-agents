@@ -50,6 +50,11 @@ const LABELS: Record<string, { title: string; description: string }> = {
     description:
       "Footer paragraph rendered in every outbound agent email. Leave empty to use the default safety warning.",
   },
+  inbound_from: {
+    title: "Inbound From: address",
+    description:
+      "Fallback From: header for outbound agent email, for example Acme Helper <agent@mg.example.com>.",
+  },
 };
 
 const IMAGE_SETTING_KEYS = new Set([

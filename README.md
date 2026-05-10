@@ -5,10 +5,6 @@
 
 Deploy custom ai agents that bring real value to your org in minutes. No coding required. Upload your skill bundles. Select tools for the agent. Sandboxed in the cloud. Observable by default.
 
-
-
-
-
 Single-tenant agent platform powered by Anthropic **Claude Managed Agents**.
 One deployment per customer; admins create, configure, and share agents
 through a web UI without writing any code.
@@ -25,10 +21,10 @@ Browser SPA ──▶ Hono API ──▶ Postgres + pg-boss ──▶ Anthropic 
 Each agent has up to two surfaces:
 
 - **Web chat** at `/agents/<slug>/chat`. Durable: the worker streams Anthropic
-events into an append-only `RunEvent` log; the SSE handler replays the
-backlog on reconnect and switches to live `LISTEN/NOTIFY`.
+  events into an append-only `RunEvent` log; the SSE handler replays the
+  backlog on reconnect and switches to live `LISTEN/NOTIFY`.
 - **Email** at `<localPart>@<MAILGUN_DOMAIN>`, fed by a single catch-all
-Mailgun route. Email and chat never share state.
+  Mailgun route. Email and chat never share state.
 
 The agent definition (system prompt, tools, skills, third-party MCP servers,
 ACL, surface toggles) is owned by **our** Postgres and pushed to Anthropic
@@ -67,7 +63,6 @@ uploading skills, rotating secrets) happens in the SPA from there.
 
 Required bootstrap environment (see `[apps/api/.env.example](apps/api/.env.example)`):
 
-
 | Variable                | Purpose                                                    |
 | ----------------------- | ---------------------------------------------------------- |
 | `DATABASE_URL`          | Postgres URL (Prisma + pg-boss + LISTEN/NOTIFY share)      |
@@ -78,43 +73,43 @@ Required bootstrap environment (see `[apps/api/.env.example](apps/api/.env.examp
 | `PUBLIC_BASE_URL`       | Public origin of the API (signed URLs, MCP server URLs)    |
 | `UPLOAD_SIGNING_SECRET` | 32+ char HMAC secret for signed attachment upload URLs     |
 
+Anthropic API key and Mailgun key/domain/signing key are **not**
+environment variables. They live AES-GCM encrypted in the `Secret` table
+and are managed from **Settings → Secrets** in the UI.
 
-Anthropic API key, Mailgun key/domain/signing key, and `inboundFrom` are
-**not** environment variables. They live AES-GCM encrypted in the
-`Secret` table and are managed from **Settings → Secrets** in the UI.
-
-Branding values like the email-footer logo URL live in the plaintext
-`AppSetting` table and are edited from **Settings → General**.
+Branding values, email footer copy, and the default outbound `From:`
+header live in the plaintext `AppSetting` table and are edited from
+**Settings → General**.
 
 ## Documentation
 
 - `[AGENTS.md](AGENTS.md)` — repo-wide conventions and "where does X live"
-for coding agents.
+  for coding agents.
 - `[docs/architecture.md](docs/architecture.md)` — system overview, data
-model, and request lifecycles.
+  model, and request lifecycles.
 - `[docs/local-development.md](docs/local-development.md)` — full dev loop
-including the email preview server.
+  including the email preview server.
 - `[docs/deployment.md](docs/deployment.md)` — Railpack build, single
-Mailgun route, exposing `/mcp/:slug` to Anthropic.
+  Mailgun route, exposing `/mcp/:slug` to Anthropic.
 - `[docs/operations.md](docs/operations.md)` — logging, retries, and how
-to debug a sideways run.
+  to debug a sideways run.
 - `[docs/mcp-tools.md](docs/mcp-tools.md)` — registering platform MCP
-tools and how `mcp/server.ts` assembles them per request.
+  tools and how `mcp/server.ts` assembles them per request.
 
 ## Key technologies
 
 - [Hono](https://hono.dev/) — HTTP router (Web-standard fetch handlers).
 - [Prisma 7](https://www.prisma.io/) — Postgres schema + client.
 - [pg-boss](https://github.com/timgit/pg-boss) — durable job queue, on the
-same Postgres.
+  same Postgres.
 - [better-auth](https://www.better-auth.com/) — email/password auth +
-admin/member roles. Public sign-up is disabled.
+  admin/member roles. Public sign-up is disabled.
 - `[@anthropic-ai/sdk](https://www.npmjs.com/package/@anthropic-ai/sdk)` —
-Managed Agents (sessions, files, agents/environments/skills) + Files API.
+  Managed Agents (sessions, files, agents/environments/skills) + Files API.
 - `[@modelcontextprotocol/sdk](https://www.npmjs.com/package/@modelcontextprotocol/sdk)`
-— Streamable-HTTP MCP server primitives.
+  — Streamable-HTTP MCP server primitives.
 - [Vite](https://vitejs.dev/) + [React 19](https://react.dev/) +
-[TanStack Query](https://tanstack.com/query) — the SPA.
+  [TanStack Query](https://tanstack.com/query) — the SPA.
 - [Tailwind CSS 4](https://tailwindcss.com/) — styling.
 - `[mailgun.js](https://www.npmjs.com/package/mailgun.js)` — outbound API.
 - `[react-email](https://react.email/)` — HTML email templates for replies.

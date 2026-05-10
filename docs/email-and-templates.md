@@ -99,7 +99,7 @@ constructs a threaded reply:
   `Re:`.
 - **`From:`** — `<displayName> <inboundAddress>`. `inboundAddress` is
   the address Mailgun received the first message on (captured in the
-  thread). `inbound_from` from the `Secret` table is the last-resort
+  thread). `inbound_from` from the `AppSetting` table is the last-resort
   fallback.
 - **`In-Reply-To:`** — last inbound message-id on the thread.
 - **`References:`** — every prior message-id on the thread, in order.

@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { sendEmail } from "../mailgun/send.js";
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
+import { APP_SETTING_KEYS, getAppSetting } from "../services/appSettings.js";
 import { renderAgentResponseHtml } from "../services/renderEmail.js";
 import { getBoss } from "./queue.js";
 import { JOB_SEND_EMAIL, type SendEmailJobData } from "./types.js";
@@ -90,6 +91,7 @@ async function handleSendEmail(job: Job<SendEmailJobData>): Promise<void> {
 
   const subject = replySubject(thread.subject);
   const fallbackFrom =
+    (await getAppSetting(APP_SETTING_KEYS.INBOUND_FROM)) ??
     (await getServiceSecret(SERVICE_KEYS.INBOUND_FROM)) ??
     `${thread.agent.displayName} <${thread.agent.inboundLocalPart}@example.com>`;
 

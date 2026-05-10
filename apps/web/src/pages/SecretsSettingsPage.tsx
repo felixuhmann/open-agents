@@ -40,7 +40,6 @@ const LABELS: Record<string, string> = {
   mailgun_api_key: "Mailgun API key",
   mailgun_domain: "Mailgun domain (e.g. mg.example.com)",
   mailgun_signing_key: "Mailgun signing key (HTTP webhook signing)",
-  inbound_from: "Inbound From: address (display name <addr>)",
 };
 
 export default function SecretsSettingsPage() {
