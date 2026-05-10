@@ -1,5 +1,8 @@
 # open-agents
 
+<img width="2476" height="1393" alt="grafik" src="https://github.com/user-attachments/assets/164554bf-3143-4f6a-b9a4-48052fce315c" />
+
+
 Deploy custom ai agents that bring real value to your org in minutes. No coding required. Upload your skill bundles. Select tools for the agent. Sandboxed in the cloud. Observable by default.
 
 
