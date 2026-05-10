@@ -18,18 +18,6 @@ an arbitrary HTTPS endpoint with declarative request/response shapes.
 Sits in the catalog like `memory` does. Useful for "give the agent a
 read-only view of my CRM" without writing a custom MCP server.
 
-## Email disclaimers (v1.x)
-
-Footer paragraph in outbound mail warning users that agents can make
-mistakes and not to send PII. Editable per-deployment from
-`/settings/general`.
-
-## Skill bundle hot-rebind (v1.x)
-
-`/library/skills` currently models bundles as immutable: editing a
-skill is "delete + re-upload". Live rebind would store new versions
-alongside the old and let admins flip the active version per agent.
-
 ## SSO / SAML / OAuth login providers (v2)
 
 better-auth supports these out of the box. v1 sticks to email/password
@@ -58,3 +46,10 @@ permission models, ambiguous threading semantics.
 
 ## support for new models
 instead of anthropic only, we ideally also want to support gpt models and others. this will probably entail a large refactor of the product, as we need to use a different sandbox backend, currently we are heavily coupled to the anthropic solution.
+
+## intl
+we want to support different languages, at least english and german for now. configured by an admin through the settings for the whole instance globally. (also add a local overwrite in the profile settings)
+
+## s3 storage compatibility
+right now we write everything to disk. this is not acceptable, as a admin i want to be able
+to have a s3 compatible integration for all the stuff that needs persistent storage in the app (images, skills, other uploads, ...)
