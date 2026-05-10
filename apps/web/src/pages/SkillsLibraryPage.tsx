@@ -34,6 +34,7 @@ export default function SkillsLibraryPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [versionFiles, setVersionFiles] = useState<Record<string, File | null>>({});
 
   const upload = useMutation({
     mutationFn: async () => {
@@ -74,6 +75,32 @@ export default function SkillsLibraryPage() {
     },
     onError: (e) =>
       toast.error("Couldn't delete", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+
+  const uploadVersion = useMutation({
+    mutationFn: async ({ skillId, file }: { skillId: string; file: File }) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch(`/api/skills/${skillId}/versions`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new ApiError(r.status, body.error ?? r.statusText);
+      }
+      return (await r.json()) as { id: string };
+    },
+    onSuccess: async (_data, vars) => {
+      setVersionFiles((prev) => ({ ...prev, [vars.skillId]: null }));
+      toast.success("Skill version uploaded");
+      await qc.invalidateQueries({ queryKey: ["skills"] });
+    },
+    onError: (e) =>
+      toast.error("Version upload failed", {
         description: e instanceof ApiError ? e.message : String(e),
       }),
   });
@@ -194,7 +221,10 @@ export default function SkillsLibraryPage() {
                   </CardTitle>
                   <CardDescription>
                     {s.anthropicSkillId ? (
-                      <span className="font-mono">{s.anthropicSkillId}</span>
+                      <span className="font-mono">
+                        {s.anthropicSkillId}
+                        {s.latestVersionNumber ? ` · v${s.latestVersionNumber}` : ""}
+                      </span>
                     ) : (
                       <Badge variant="outline">local only</Badge>
                     )}
@@ -220,6 +250,44 @@ export default function SkillsLibraryPage() {
                       </span>
                     )}
                   </p>
+                  <div className="mt-4 flex flex-col gap-2 border-t pt-4">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {s.versions.map((v) => (
+                        <Badge key={v.id} variant="secondary">
+                          v{v.versionNumber}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        type="file"
+                        accept=".zip,application/zip"
+                        onChange={(e) =>
+                          setVersionFiles((prev) => ({
+                            ...prev,
+                            [s.id]: e.target.files?.[0] ?? null,
+                          }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!versionFiles[s.id] || uploadVersion.isPending}
+                        onClick={() => {
+                          const selected = versionFiles[s.id];
+                          if (selected)
+                            uploadVersion.mutate({ skillId: s.id, file: selected });
+                        }}
+                      >
+                        {uploadVersion.isPending ? (
+                          <Spinner data-icon="inline-start" />
+                        ) : (
+                          <CloudArrowUpIcon data-icon="inline-start" />
+                        )}
+                        Add version
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </li>

@@ -20,6 +20,7 @@ export type HydratedAgent = Agent & {
   })[];
   skillBindings: (Prisma.AgentSkillBindingGetPayload<true> & {
     skill: Prisma.SkillGetPayload<true>;
+    skillVersion: Prisma.SkillVersionGetPayload<true>;
   })[];
   thirdPartyMcp: Prisma.AgentThirdPartyMcpGetPayload<true>[];
   access: Prisma.AgentAccessGetPayload<true>[];
@@ -27,7 +28,7 @@ export type HydratedAgent = Agent & {
 
 const HYDRATED_INCLUDE = {
   toolBindings: { include: { tool: true } },
-  skillBindings: { include: { skill: true } },
+  skillBindings: { include: { skill: true, skillVersion: true } },
   thirdPartyMcp: true,
   access: true,
 } as const satisfies Prisma.AgentInclude;
@@ -161,6 +162,7 @@ export type UpdateAgentArgs = {
    */
   toolBindings?: { toolId: string; configJson?: Record<string, unknown> }[];
   skillIds?: string[];
+  skillBindings?: { skillId: string; skillVersionId: string }[];
   thirdPartyMcp?: { id?: string; label: string; serverUrl: string; bearer?: string }[];
   accessUserIds?: string[];
 };
@@ -214,18 +216,51 @@ export async function updateAgent(
     }
   }
 
-  let resolvedSkillIds: string[] | undefined = args.skillIds;
-  if (args.skillIds && args.skillIds.length > 0) {
-    const existing = await prisma.skill.findMany({
-      where: { id: { in: args.skillIds } },
-      select: { id: true },
+  let resolvedSkillBindings: { skillId: string; skillVersionId: string }[] | undefined;
+  if (args.skillBindings) {
+    const requested = args.skillBindings;
+    const versions = await prisma.skillVersion.findMany({
+      where: { id: { in: requested.map((s) => s.skillVersionId) } },
+      select: { id: true, skillId: true },
     });
-    const existingIds = new Set(existing.map((s) => s.id));
-    const missing = args.skillIds.filter((sid) => !existingIds.has(sid));
+    const versionById = new Map(versions.map((v) => [v.id, v]));
+    const missing = requested.filter((s) => {
+      const version = versionById.get(s.skillVersionId);
+      return version?.skillId !== s.skillId;
+    });
     if (missing.length > 0) {
-      log.warn("agents: dropping unknown skill ids on update", { agentId: id, missing });
-      resolvedSkillIds = args.skillIds.filter((sid) => existingIds.has(sid));
+      log.warn("agents: dropping unknown skill bindings on update", {
+        agentId: id,
+        missing,
+      });
     }
+    resolvedSkillBindings = requested.filter((s) => {
+      const version = versionById.get(s.skillVersionId);
+      return version?.skillId === s.skillId;
+    });
+  } else if (args.skillIds) {
+    const skills = await prisma.skill.findMany({
+      where: { id: { in: args.skillIds } },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    });
+    const latestBySkillId = new Map(
+      skills
+        .map((s) => [s.id, s.versions[0]?.id] as const)
+        .filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+    );
+    const missing = args.skillIds.filter((sid) => !latestBySkillId.has(sid));
+    if (missing.length > 0) {
+      log.warn("agents: dropping unknown or versionless skill ids on update", {
+        agentId: id,
+        missing,
+      });
+    }
+    resolvedSkillBindings = args.skillIds
+      .map((skillId) => {
+        const skillVersionId = latestBySkillId.get(skillId);
+        return skillVersionId ? { skillId, skillVersionId } : null;
+      })
+      .filter((v): v is { skillId: string; skillVersionId: string } => Boolean(v));
   }
 
   let resolvedAccessUserIds: string[] | undefined = args.accessUserIds;
@@ -260,11 +295,11 @@ export async function updateAgent(
       }
     }
 
-    if (resolvedSkillIds) {
+    if (resolvedSkillBindings) {
       await tx.agentSkillBinding.deleteMany({ where: { agentId: id } });
-      if (resolvedSkillIds.length > 0) {
+      if (resolvedSkillBindings.length > 0) {
         await tx.agentSkillBinding.createMany({
-          data: resolvedSkillIds.map((skillId) => ({ agentId: id, skillId })),
+          data: resolvedSkillBindings.map((binding) => ({ agentId: id, ...binding })),
         });
       }
     }
@@ -323,7 +358,7 @@ export async function publishAgent(id: string): Promise<HydratedAgent> {
     runtime: b.tool.runtime as "managed" | "platform",
   }));
   const skillIds = agent.skillBindings
-    .map((b) => b.skill.anthropicSkillId)
+    .map((b) => b.skillVersion.anthropicSkillId)
     .filter((v): v is string => Boolean(v));
   const thirdPartyMcp = agent.thirdPartyMcp.map((tp) => ({
     name: tp.label,

@@ -47,23 +47,11 @@ export type CreateSkillArgs = {
   bytes: Buffer;
 };
 
-/**
- * Persist a new skill bundle locally and reflect it to Anthropic via the
- * Skills API. Returns the new Skill row.
- */
-export async function createSkill(args: CreateSkillArgs) {
-  const validation = await validateSkillBundle(args.bytes);
-  if (!validation.ok) {
-    throw new Error(`Invalid skill bundle: ${validation.reason}`);
-  }
-
-  await mkdir(SKILL_BUNDLE_DIR, { recursive: true });
-  const localPath = join(
-    SKILL_BUNDLE_DIR,
-    `${Date.now()}-${args.name.replace(/[^a-z0-9_-]+/gi, "_")}.zip`,
-  );
-  await writeFile(localPath, args.bytes);
-
+async function uploadSkillVersion(args: {
+  name: string;
+  filename: string;
+  bytes: Buffer;
+}): Promise<{ anthropicSkillId: string | null; anthropicSkillVersion: string | null }> {
   let anthropicSkillId: string | null = null;
   let anthropicSkillVersion: string | null = null;
   try {
@@ -74,11 +62,6 @@ export async function createSkill(args: CreateSkillArgs) {
       };
     };
     if (beta.skills?.create) {
-      // Anthropic's Skills API expects the bundle as an array of
-      // `Uploadable`s under `files[]` (the API extracts SKILL.md and
-      // any sibling assets from the zip). `display_title` is the
-      // human-readable label; descriptions are derived from SKILL.md
-      // and not part of the create payload.
       const file = await toFile(args.bytes, args.filename, { type: "application/zip" });
       const res = await beta.skills.create({
         display_title: args.name,
@@ -99,15 +82,53 @@ export async function createSkill(args: CreateSkillArgs) {
       err: err instanceof Error ? err.message : String(err),
     });
   }
+  return { anthropicSkillId, anthropicSkillVersion };
+}
+
+async function persistBundle(args: {
+  name: string;
+  filename: string;
+  bytes: Buffer;
+  versionNumber: number;
+}): Promise<string> {
+  await mkdir(SKILL_BUNDLE_DIR, { recursive: true });
+  const safeName = args.name.replace(/[^a-z0-9_-]+/gi, "_");
+  const localPath = join(
+    SKILL_BUNDLE_DIR,
+    `${Date.now()}-${safeName}-v${args.versionNumber}.zip`,
+  );
+  await writeFile(localPath, args.bytes);
+  return localPath;
+}
+
+/**
+ * Persist a new skill bundle locally and reflect it to Anthropic via the
+ * Skills API. Returns the new Skill row.
+ */
+export async function createSkill(args: CreateSkillArgs) {
+  const validation = await validateSkillBundle(args.bytes);
+  if (!validation.ok) {
+    throw new Error(`Invalid skill bundle: ${validation.reason}`);
+  }
+
+  const localPath = await persistBundle({ ...args, versionNumber: 1 });
+  const { anthropicSkillId, anthropicSkillVersion } = await uploadSkillVersion(args);
 
   const skill = await prisma.skill.create({
     data: {
       name: args.name,
       description: args.description ?? null,
-      bundleStorageRef: localPath,
-      anthropicSkillId,
-      anthropicSkillVersion,
+      versions: {
+        create: {
+          versionNumber: 1,
+          filename: args.filename,
+          bundleStorageRef: localPath,
+          anthropicSkillId,
+          anthropicSkillVersion,
+        },
+      },
     },
+    include: { versions: { orderBy: { versionNumber: "desc" } } },
   });
   log.info("skills: created", {
     id: skill.id,
@@ -118,22 +139,82 @@ export async function createSkill(args: CreateSkillArgs) {
   return skill;
 }
 
+export type CreateSkillVersionArgs = {
+  skillId: string;
+  filename: string;
+  bytes: Buffer;
+};
+
+export async function createSkillVersion(args: CreateSkillVersionArgs) {
+  const validation = await validateSkillBundle(args.bytes);
+  if (!validation.ok) {
+    throw new Error(`Invalid skill bundle: ${validation.reason}`);
+  }
+
+  const skill = await prisma.skill.findUnique({
+    where: { id: args.skillId },
+    include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+  });
+  if (!skill) throw new Error(`Skill not found: ${args.skillId}`);
+
+  const versionNumber = (skill.versions[0]?.versionNumber ?? 0) + 1;
+  const localPath = await persistBundle({
+    name: skill.name,
+    filename: args.filename,
+    bytes: args.bytes,
+    versionNumber,
+  });
+  const { anthropicSkillId, anthropicSkillVersion } = await uploadSkillVersion({
+    name: skill.name,
+    filename: args.filename,
+    bytes: args.bytes,
+  });
+
+  const version = await prisma.skillVersion.create({
+    data: {
+      skillId: skill.id,
+      versionNumber,
+      filename: args.filename,
+      bundleStorageRef: localPath,
+      anthropicSkillId,
+      anthropicSkillVersion,
+    },
+  });
+  await prisma.skill.update({
+    where: { id: skill.id },
+    data: { updatedAt: new Date() },
+  });
+  log.info("skills: version created", {
+    skillId: skill.id,
+    versionId: version.id,
+    versionNumber,
+    bytes: args.bytes.byteLength,
+    anthropicSkillId,
+  });
+  return version;
+}
+
 export async function deleteSkill(id: string): Promise<void> {
-  const skill = await prisma.skill.findUnique({ where: { id } });
+  const skill = await prisma.skill.findUnique({
+    where: { id },
+    include: { versions: true },
+  });
   if (!skill) return;
-  try {
-    await unlink(skill.bundleStorageRef);
-  } catch {
-    // bundle may already be gone
+  for (const version of skill.versions) {
+    try {
+      await unlink(version.bundleStorageRef);
+    } catch {
+      // bundle may already be gone
+    }
   }
   await prisma.skill.delete({ where: { id } });
 }
 
-export async function readSkillBundle(id: string): Promise<Buffer | null> {
-  const skill = await prisma.skill.findUnique({ where: { id } });
-  if (!skill) return null;
+export async function readSkillBundle(versionId: string): Promise<Buffer | null> {
+  const version = await prisma.skillVersion.findUnique({ where: { id: versionId } });
+  if (!version) return null;
   try {
-    return await readFile(skill.bundleStorageRef);
+    return await readFile(version.bundleStorageRef);
   } catch {
     return null;
   }

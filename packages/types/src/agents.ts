@@ -109,6 +109,14 @@ export const UpdateAgentInput = z.object({
     )
     .optional(),
   skillIds: z.array(z.string()).optional(),
+  skillBindings: z
+    .array(
+      z.object({
+        skillId: z.string(),
+        skillVersionId: z.string(),
+      }),
+    )
+    .optional(),
   thirdPartyMcp: z
     .array(
       z.object({

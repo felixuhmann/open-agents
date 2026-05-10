@@ -298,7 +298,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
       agent: {
         include: {
           toolBindings: { include: { tool: true } },
-          skillBindings: { include: { skill: true } },
+          skillBindings: { include: { skill: true, skillVersion: true } },
           thirdPartyMcp: true,
           versions: { orderBy: { createdAt: "desc" }, take: 1 },
         },
@@ -406,8 +406,8 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
       bindingId: `${b.agentId}:${b.skillId}`,
       skillId: b.skill.id,
       name: b.skill.name,
-      anthropicSkillId: b.skill.anthropicSkillId,
-      anthropicSkillVersion: b.skill.anthropicSkillVersion,
+      anthropicSkillId: b.skillVersion.anthropicSkillId,
+      anthropicSkillVersion: b.skillVersion.anthropicSkillVersion,
     })),
     thirdPartyMcp: issue.agent.thirdPartyMcp.map((m) => ({
       id: m.id,

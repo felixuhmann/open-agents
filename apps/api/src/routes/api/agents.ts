@@ -77,9 +77,15 @@ function toDto(agent: Awaited<ReturnType<typeof listAgents>>[number]) {
       configJson: b.configJson,
     })),
     skillIds: agent.skillBindings.map((s) => s.skillId),
+    skillBindings: agent.skillBindings.map((s) => ({
+      skillId: s.skillId,
+      skillVersionId: s.skillVersionId,
+    })),
     skills: agent.skillBindings.map((s) => ({
       id: s.skill.id,
       name: s.skill.name,
+      versionId: s.skillVersion.id,
+      versionNumber: s.skillVersion.versionNumber,
     })),
     thirdPartyMcp: agent.thirdPartyMcp.map((m) => ({
       id: m.id,

@@ -33,8 +33,21 @@ export const SkillDto = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  latestVersionId: z.string().nullable(),
+  latestVersionNumber: z.number().nullable(),
   anthropicSkillId: z.string().nullable(),
   anthropicSkillVersion: z.string().nullable(),
+  versions: z.array(
+    z.object({
+      id: z.string(),
+      versionNumber: z.number(),
+      filename: z.string(),
+      anthropicSkillId: z.string().nullable(),
+      anthropicSkillVersion: z.string().nullable(),
+      createdAt: z.string(),
+    }),
+  ),
   createdAt: z.string(),
+  updatedAt: z.string(),
 });
 export type SkillDto = z.infer<typeof SkillDto>;

@@ -104,7 +104,7 @@ type EditState = {
   accessMode: "everyone" | "specific";
   inboundLocalPart: string;
   toolIds: string[];
-  skillIds: string[];
+  skillBindings: Array<{ skillId: string; skillVersionId: string }>;
   thirdPartyMcp: Array<{ id?: string; label: string; serverUrl: string }>;
 };
 
@@ -119,7 +119,9 @@ function fromDto(a: FullAgentDto): EditState {
     accessMode: a.accessMode,
     inboundLocalPart: a.inboundLocalPart,
     toolIds: a.toolBindings.map((b) => b.toolId),
-    skillIds: a.skillIds,
+    skillBindings:
+      a.skillBindings ??
+      a.skills.map((s) => ({ skillId: s.id, skillVersionId: s.versionId })),
     thirdPartyMcp: a.thirdPartyMcp.map((m) => ({
       id: m.id,
       label: m.label,
@@ -154,7 +156,7 @@ export default function AgentEditPage() {
           accessMode: s.accessMode,
           inboundLocalPart: s.inboundLocalPart,
           toolBindings: s.toolIds.map((id) => ({ toolId: id })),
-          skillIds: s.skillIds,
+          skillBindings: s.skillBindings,
           thirdPartyMcp: s.thirdPartyMcp,
         },
       }),
@@ -569,20 +571,79 @@ export default function AgentEditPage() {
         </CardHeader>
         <CardContent>
           {skills.data?.length ? (
-            <CheckboxGrid
-              items={skills.data.map((s) => ({
-                id: s.id,
-                title: s.name,
-                description: s.description ?? undefined,
-              }))}
-              selected={state.skillIds}
-              onToggle={(id, on) => {
-                const next = new Set(state.skillIds);
-                if (on) next.add(id);
-                else next.delete(id);
-                setS({ skillIds: [...next] });
-              }}
-            />
+            <div data-slot="checkbox-group" className="grid gap-3 md:grid-cols-2">
+              {skills.data.map((skill) => {
+                const binding = state.skillBindings.find((b) => b.skillId === skill.id);
+                const checked = Boolean(binding);
+                const versionId = binding?.skillVersionId ?? skill.latestVersionId ?? "";
+                return (
+                  <Field key={skill.id} orientation="horizontal" data-checked={checked}>
+                    <Checkbox
+                      id={`skill-${skill.id}`}
+                      checked={checked}
+                      disabled={!skill.latestVersionId}
+                      onCheckedChange={(v) => {
+                        const on = v === true;
+                        if (!on) {
+                          setS({
+                            skillBindings: state.skillBindings.filter(
+                              (b) => b.skillId !== skill.id,
+                            ),
+                          });
+                          return;
+                        }
+                        if (!skill.latestVersionId) return;
+                        setS({
+                          skillBindings: [
+                            ...state.skillBindings.filter((b) => b.skillId !== skill.id),
+                            {
+                              skillId: skill.id,
+                              skillVersionId: skill.latestVersionId,
+                            },
+                          ],
+                        });
+                      }}
+                    />
+                    <FieldContent>
+                      <FieldLabel htmlFor={`skill-${skill.id}`}>
+                        <FieldTitle>{skill.name}</FieldTitle>
+                        {checked ? <Badge variant="secondary">on</Badge> : null}
+                      </FieldLabel>
+                      {skill.description ? (
+                        <FieldDescription>{skill.description}</FieldDescription>
+                      ) : null}
+                      {checked ? (
+                        <Select
+                          value={versionId}
+                          onValueChange={(nextVersionId) =>
+                            setS({
+                              skillBindings: state.skillBindings.map((b) =>
+                                b.skillId === skill.id
+                                  ? { ...b, skillVersionId: nextVersionId }
+                                  : b,
+                              ),
+                            })
+                          }
+                        >
+                          <SelectTrigger size="sm" className="mt-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {skill.versions.map((version) => (
+                                <SelectItem key={version.id} value={version.id}>
+                                  v{version.versionNumber}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      ) : null}
+                    </FieldContent>
+                  </Field>
+                );
+              })}
+            </div>
           ) : (
             <Empty className="py-6">
               <EmptyHeader>

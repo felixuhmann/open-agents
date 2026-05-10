@@ -25,27 +25,27 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String    @id
-  email           String    @unique
-  name            String?
-  emailVerified   Boolean   @default(false)
-  image           String?
+  id            String    @id
+  email         String    @unique
+  name          String?
+  emailVerified Boolean   @default(false)
+  image         String?
   /// Application role: `admin`, `contributor`, or `member`.
-  role            String    @default("member")
+  role          String    @default("member")
   /// `false` while the admin-created account hasn't yet set a password.
-  banned          Boolean   @default(false)
-  banReason       String?
-  banExpires      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  banned        Boolean   @default(false)
+  banReason     String?
+  banExpires    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  sessions        Session[]
-  accounts        Account[]
-  agentAccess     AgentAccess[]
-  conversations   ChatConversation[]
-  createdAgents   Agent[]   @relation("AgentCreatedBy")
-  reportedIssues  Issue[]   @relation("IssueReporter")
-  resolvedIssues  Issue[]   @relation("IssueResolver")
+  sessions       Session[]
+  accounts       Account[]
+  agentAccess    AgentAccess[]
+  conversations  ChatConversation[]
+  createdAgents  Agent[]            @relation("AgentCreatedBy")
+  reportedIssues Issue[]            @relation("IssueReporter")
+  resolvedIssues Issue[]            @relation("IssueResolver")
 
   @@map("user")
 }
@@ -116,20 +116,20 @@ model AppSetting {
 // ---------------------------------------------------------------------------
 
 model Secret {
-  id              String   @id @default(cuid())
+  id             String            @id @default(cuid())
   /// `service` (e.g. anthropic_api_key, mailgun_api_key) or `tool` (per-binding).
-  scope           String
+  scope          String
   /// Stable lookup key inside its scope. For `service` this is e.g.
   /// `anthropic_api_key`; for `tool` this is e.g. `bearer` or `notion_token`.
-  key             String
-  encryptedValue  Bytes
-  iv              Bytes
-  authTag         Bytes
+  key            String
+  encryptedValue Bytes
+  iv             Bytes
+  authTag        Bytes
   /// Set when scope = `tool`; FK to AgentToolBinding.
-  toolBindingId   String?
-  toolBinding     AgentToolBinding? @relation(fields: [toolBindingId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  toolBindingId  String?
+  toolBinding    AgentToolBinding? @relation(fields: [toolBindingId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@unique([scope, key, toolBindingId])
   @@index([toolBindingId])
@@ -142,11 +142,11 @@ model Secret {
 // ---------------------------------------------------------------------------
 
 model Agent {
-  id                 String   @id @default(cuid())
+  id           String  @id @default(cuid())
   /// URL slug, also the local part of the agent's inbound email by default.
-  slug               String   @unique
-  displayName        String
-  description        String?
+  slug         String  @unique
+  displayName  String
+  description  String?
   /// Stored avatar reference. Three flavours are accepted:
   ///   - `/static/uploads/avatars/<file>` — admin upload through the SPA
   ///     (file lives under `apps/api/data/uploads/avatars/`);
@@ -156,18 +156,18 @@ model Agent {
   /// `NULL` means "use the shared `fallback.png`". See
   /// `apps/api/src/services/renderEmail.ts#resolveAssetUrl` for how the
   /// value is normalised at render time.
-  avatar             String?
+  avatar       String?
   /// Optional agent system prompt mirrored locally for the editor; the
   /// canonical version lives on the Anthropic agent.
-  systemPrompt       String   @default("")
+  systemPrompt String  @default("")
   /// Anthropic model identifier the published agent should run on
   /// (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`). Plain string so we can
   /// add new models without a schema migration.
-  model              String   @default("claude-opus-4-7")
+  model        String  @default("claude-opus-4-7")
 
   /// IDs returned by Anthropic. Nullable while the create call is in flight.
-  anthropicAgentId   String?
-  environmentId      String?
+  anthropicAgentId      String?
+  environmentId         String?
   /// Pinned Anthropic agent version this deployment is currently using.
   anthropicAgentVersion String?
 
@@ -181,29 +181,29 @@ model Agent {
   /// the slug changed and we need to recreate the credential.
   anthropicMcpCredentialUrl String?
 
-  emailEnabled       Boolean  @default(false)
-  webEnabled         Boolean  @default(true)
+  emailEnabled     Boolean @default(false)
+  webEnabled       Boolean @default(true)
   /// `everyone` (any deployment user can chat) or `specific` (only users in AgentAccess).
-  accessMode         String   @default("everyone")
+  accessMode       String  @default("everyone")
   /// Local part for inbound mail (`<inboundLocalPart>@<MAILGUN_DOMAIN>`).
   /// Defaults to the slug; admin can override.
-  inboundLocalPart   String   @unique
+  inboundLocalPart String  @unique
 
-  createdById        String?
-  createdBy          User?    @relation("AgentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdById String?
+  createdBy   User?    @relation("AgentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  versions           AgentVersion[]
-  access             AgentAccess[]
-  toolBindings       AgentToolBinding[]
-  skillBindings      AgentSkillBinding[]
-  thirdPartyMcp      AgentThirdPartyMcp[]
-  memoryDocs         MemoryDoc[]
-  conversations      ChatConversation[]
-  emailThreads       EmailThread[]
-  runs               AgentRun[]
-  issues             Issue[]
+  versions      AgentVersion[]
+  access        AgentAccess[]
+  toolBindings  AgentToolBinding[]
+  skillBindings AgentSkillBinding[]
+  thirdPartyMcp AgentThirdPartyMcp[]
+  memoryDocs    MemoryDoc[]
+  conversations ChatConversation[]
+  emailThreads  EmailThread[]
+  runs          AgentRun[]
+  issues        Issue[]
 
   @@index([createdById])
 }
@@ -211,14 +211,14 @@ model Agent {
 /// Snapshot of every payload we sent to Anthropic for this agent.
 /// Used to correlate runs with the version of the agent that ran them.
 model AgentVersion {
-  id                String   @id @default(cuid())
-  agentId           String
-  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  agentId          String
+  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   /// The version string Anthropic returned (their internal version).
-  anthropicVersion  String?
+  anthropicVersion String?
   /// JSON snapshot of system + tools + skills + mcp_servers payload we sent.
-  payload           Json
-  createdAt         DateTime @default(now())
+  payload          Json
+  createdAt        DateTime @default(now())
 
   @@index([agentId])
 }
@@ -253,27 +253,27 @@ model AgentAccess {
 /// External (user-supplied) MCP servers stay in `AgentThirdPartyMcp` as
 /// per-agent endpoints; they are not catalog entries.
 model Tool {
-  id              String  @id @default(cuid())
+  id              String             @id @default(cuid())
   /// Stable identifier. For `managed`: the toolset member name (`bash`,
   /// `read`, …). For `platform`: the `PlatformHandler.key`.
-  key             String  @unique
+  key             String             @unique
   /// Display name shown in the UI catalog (e.g. "Workspace memory").
   name            String
   /// One-paragraph description rendered in the tool picker / catalog page.
   description     String
   /// `managed` or `platform` — see model doc-comment.
-  runtime         String  @default("platform")
+  runtime         String             @default("platform")
   /// JSON shape describing per-binding configuration (rendered as a form
   /// in the agent edit page). Empty object when there's nothing to configure.
-  configSchema    Json    @default("{}")
+  configSchema    Json               @default("{}")
   /// Whether this tool needs at least one Secret value per binding.
-  requiresSecrets Boolean @default(false)
+  requiresSecrets Boolean            @default(false)
   /// Marks tools that no longer back a live capability (e.g. retired
   /// Anthropic toolset member). Existing bindings keep working until an
   /// admin migrates; the picker hides deprecated rows.
-  deprecated      Boolean @default(false)
+  deprecated      Boolean            @default(false)
   bindings        AgentToolBinding[]
-  createdAt       DateTime @default(now())
+  createdAt       DateTime           @default(now())
 }
 
 /// Binding row joining an Agent to a `Tool` (any runtime). Per-agent
@@ -297,47 +297,68 @@ model AgentToolBinding {
 /// Sent to Anthropic on the agent's `mcp_servers` list; Anthropic's sandbox
 /// hits it directly — this backend does not proxy traffic.
 model AgentThirdPartyMcp {
-  id            String  @id @default(cuid())
-  agentId       String
+  id           String   @id @default(cuid())
+  agentId      String
   /// Human-friendly label shown in the UI.
-  label         String
-  serverUrl     String
+  label        String
+  serverUrl    String
   /// Optional bearer token stored in Secret (FK by toolBindingId is awkward
   /// here — we just store it inline encrypted for v1).
-  bearerCipher  Bytes?
-  bearerIv      Bytes?
-  bearerTag     Bytes?
-  agent         Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
+  bearerCipher Bytes?
+  bearerIv     Bytes?
+  bearerTag    Bytes?
+  agent        Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
 
   @@index([agentId])
 }
 
-/// Skill bundle uploaded by an admin. Reflected to Anthropic via the
-/// Skills API; the local `bundleStorageRef` points to the on-disk zip
-/// kept for re-uploading (e.g. when an agent is migrated).
+/// Stable skill family shown in the library. Bundle uploads are immutable
+/// SkillVersion rows so agents can pin or switch versions independently.
 model Skill {
-  id                     String   @id @default(cuid())
-  name                   String   @unique
-  description            String?
-  /// Local relative path inside `apps/api/data/skills/` of the bundle zip.
-  bundleStorageRef       String
-  anthropicSkillId       String?
-  anthropicSkillVersion  String?
-  bindings               AgentSkillBinding[]
-  createdAt              DateTime @default(now())
+  id          String              @id @default(cuid())
+  name        String              @unique
+  description String?
+  versions    SkillVersion[]
+  bindings    AgentSkillBinding[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 }
 
-/// Many-to-many between Agent and Skill.
+/// Immutable uploaded bundle for a Skill. Reflected to Anthropic via the
+/// Skills API; the local `bundleStorageRef` points to the on-disk zip
+/// kept for re-uploading (e.g. when an agent is migrated).
+model SkillVersion {
+  id                    String              @id @default(cuid())
+  skillId               String
+  versionNumber         Int
+  /// Original upload filename for display/debugging.
+  filename              String
+  /// Local relative path inside `apps/api/data/skills/` of the bundle zip.
+  bundleStorageRef      String
+  anthropicSkillId      String?
+  anthropicSkillVersion String?
+  skill                 Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  bindings              AgentSkillBinding[]
+  createdAt             DateTime            @default(now())
+
+  @@unique([skillId, versionNumber])
+  @@index([skillId])
+}
+
+/// Many-to-many between Agent and Skill, pinned to one uploaded version.
 model AgentSkillBinding {
-  agentId   String
-  skillId   String
-  agent     Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  skill     Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  agentId        String
+  skillId        String
+  skillVersionId String
+  agent          Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillVersion   SkillVersion @relation(fields: [skillVersionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
 
   @@id([agentId, skillId])
   @@index([skillId])
+  @@index([skillVersionId])
 }
 
 // ---------------------------------------------------------------------------
@@ -363,37 +384,37 @@ model MemoryDoc {
 // ---------------------------------------------------------------------------
 
 model ChatConversation {
-  id                  String   @id @default(cuid())
-  agentId             String
-  userId              String
+  id                 String        @id @default(cuid())
+  agentId            String
+  userId             String
   /// Anthropic session id; rotated when attachments force a new session.
-  anthropicSessionId  String?  @unique
-  title               String   @default("New chat")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  agent               Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages            ChatMessage[]
-  runs                AgentRun[]
-  issues              Issue[]
+  anthropicSessionId String?       @unique
+  title              String        @default("New chat")
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  agent              Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages           ChatMessage[]
+  runs               AgentRun[]
+  issues             Issue[]
 
   @@index([agentId])
   @@index([userId])
 }
 
 model ChatMessage {
-  id              String   @id @default(cuid())
-  conversationId  String
+  id             String           @id @default(cuid())
+  conversationId String
   /// `user` | `assistant` | `system`.
-  role            String
+  role           String
   /// Plain-text or markdown content. For tool events we persist a marker row
   /// only; the canonical event log is RunEvent.
-  content         String
+  content        String
   /// Optional FK back to the run that produced this message.
-  runId           String?
-  createdAt       DateTime @default(now())
-  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  attachments     ChatAttachment[]
+  runId          String?
+  createdAt      DateTime         @default(now())
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments    ChatAttachment[]
 
   @@index([conversationId])
 }
@@ -401,7 +422,7 @@ model ChatMessage {
 /// Files uploaded by the user inside a chat conversation. Persisted as
 /// bytes; uploaded to Anthropic Files API on the next session create.
 model ChatAttachment {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   chatMessageId   String
   filename        String
   contentType     String
@@ -409,7 +430,7 @@ model ChatAttachment {
   bytes           Bytes
   anthropicFileId String?
   mountPath       String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime    @default(now())
   chatMessage     ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
 
   @@index([chatMessageId])
@@ -420,28 +441,28 @@ model ChatAttachment {
 // ---------------------------------------------------------------------------
 
 model AgentRun {
-  id              String   @id @default(cuid())
-  agentId         String
+  id             String            @id @default(cuid())
+  agentId        String
   /// `email` | `chat`.
-  surface         String
+  surface        String
   /// Set when surface = `email`.
-  threadId        String?
+  threadId       String?
   /// Set when surface = `chat`.
-  conversationId  String?
+  conversationId String?
   /// Anthropic session this run executed against.
-  sessionId       String
+  sessionId      String
   /// `pending` | `running` | `succeeded` | `failed`.
-  status          String   @default("pending")
-  error           String?
+  status         String            @default("pending")
+  error          String?
   /// Final aggregated assistant text. Populated for both surfaces.
-  output          String?
-  startedAt       DateTime @default(now())
-  completedAt     DateTime?
-  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  thread          EmailThread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  conversation    ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  events          RunEvent[]
-  attachments     AgentAttachment[]
+  output         String?
+  startedAt      DateTime          @default(now())
+  completedAt    DateTime?
+  agent          Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  thread         EmailThread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  conversation   ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events         RunEvent[]
+  attachments    AgentAttachment[]
 
   @@index([agentId])
   @@index([threadId])
@@ -486,17 +507,17 @@ model AgentAttachment {
 // ---------------------------------------------------------------------------
 
 model EmailThread {
-  id             String   @id @default(cuid())
+  id             String         @id @default(cuid())
   agentId        String
   userEmail      String
   inboundAddress String?
   subject        String
-  rootMessageId  String   @unique
+  rootMessageId  String         @unique
   /// Anthropic session id this thread is currently bound to.
-  sessionId      String?  @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sessionId      String?        @unique
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  agent          Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
   messages       EmailMessage[]
   runs           AgentRun[]
   issues         Issue[]
@@ -506,16 +527,16 @@ model EmailThread {
 }
 
 model EmailMessage {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   threadId    String
-  messageId   String   @unique
+  messageId   String            @unique
   inReplyTo   String?
   /// `inbound` | `outbound`.
   direction   String
   subject     String
   body        String
-  createdAt   DateTime @default(now())
-  thread      EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  thread      EmailThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
   attachments EmailAttachment[]
 
   @@index([inReplyTo])
@@ -523,7 +544,7 @@ model EmailMessage {
 }
 
 model EmailAttachment {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
   emailMessageId  String
   filename        String
   contentType     String
@@ -531,7 +552,7 @@ model EmailAttachment {
   bytes           Bytes
   anthropicFileId String?
   mountPath       String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime     @default(now())
   emailMessage    EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
 
   @@index([emailMessageId])
@@ -547,36 +568,36 @@ model EmailAttachment {
 // ---------------------------------------------------------------------------
 
 model Issue {
-  id              String   @id @default(cuid())
-  agentId         String
+  id             String    @id @default(cuid())
+  agentId        String
   /// `chat` | `email`. Mirrors AgentRun.surface — drives which session
   /// FK is consulted and how the SPA renders the conversation history.
-  surface         String
+  surface        String
   /// Set when surface = `chat`.
-  conversationId  String?
+  conversationId String?
   /// Set when surface = `email`.
-  threadId        String?
+  threadId       String?
   /// Reporter's User row. Set for chat reports (cookie-authed) and for
   /// email reports when the email matches a known User.
-  reporterUserId  String?
+  reporterUserId String?
   /// Reporter's email. Always set: mirrors User.email for chat reports
   /// or EmailThread.userEmail for email-reported sessions. Used as the
   /// public identifier in the admin list.
-  reporterEmail   String
+  reporterEmail  String
   /// Free-form description of what went wrong.
-  description     String
+  description    String
   /// `open` | `resolved`.
-  status          String   @default("open")
-  resolvedAt      DateTime?
-  resolvedById    String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  status         String    @default("open")
+  resolvedAt     DateTime?
+  resolvedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  agent          Agent              @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  conversation   ChatConversation?  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  thread         EmailThread?       @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  reporter       User?              @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
-  resolvedBy     User?              @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  agent        Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  conversation ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  thread       EmailThread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  reporter     User?             @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  resolvedBy   User?             @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([agentId])
   @@index([conversationId])

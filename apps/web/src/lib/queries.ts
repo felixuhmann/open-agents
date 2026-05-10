@@ -208,7 +208,8 @@ export type FullAgentDto = {
     configJson: Record<string, unknown>;
   }>;
   skillIds: string[];
-  skills: Array<{ id: string; name: string }>;
+  skillBindings: Array<{ skillId: string; skillVersionId: string }>;
+  skills: Array<{ id: string; name: string; versionId: string; versionNumber: number }>;
   thirdPartyMcp: Array<{ id: string; label: string; serverUrl: string }>;
   accessUserIds: string[];
   createdAt: string;
@@ -245,9 +246,20 @@ export type SkillDto = {
   id: string;
   name: string;
   description: string | null;
+  latestVersionId: string | null;
+  latestVersionNumber: number | null;
   anthropicSkillId: string | null;
   anthropicSkillVersion: string | null;
+  versions: Array<{
+    id: string;
+    versionNumber: number;
+    filename: string;
+    anthropicSkillId: string | null;
+    anthropicSkillVersion: string | null;
+    createdAt: string;
+  }>;
   createdAt: string;
+  updatedAt: string;
 };
 
 export function useSkills() {
