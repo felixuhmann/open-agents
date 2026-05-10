@@ -29,14 +29,19 @@ const UPLOADABLE_SETTINGS = new Set<AppSettingKey>([
 ]);
 
 const UPLOAD_TARGETS: Record<
-  AppSettingKey,
+  | typeof APP_SETTING_KEYS.FAVICON_URL
+  | typeof APP_SETTING_KEYS.SIDEBAR_LOGO_URL
+  | typeof APP_SETTING_KEYS.EMAIL_FOOTER_LOGO_URL,
   { kind: "footer" | "branding"; prefix: string }
 > = {
-  [APP_SETTING_KEYS.PRODUCT_NAME]: { kind: "branding", prefix: "product" },
   [APP_SETTING_KEYS.FAVICON_URL]: { kind: "branding", prefix: "favicon" },
   [APP_SETTING_KEYS.SIDEBAR_LOGO_URL]: { kind: "branding", prefix: "sidebar" },
   [APP_SETTING_KEYS.EMAIL_FOOTER_LOGO_URL]: { kind: "footer", prefix: "footer" },
 };
+
+function isUploadableSetting(key: AppSettingKey): key is keyof typeof UPLOAD_TARGETS {
+  return UPLOADABLE_SETTINGS.has(key);
+}
 
 settingsRoutes.get("/public", async (c) => {
   return c.json(await getPublicBrandingSettings());
@@ -83,7 +88,7 @@ settingsRoutes.delete("/:key", async (c) => {
   if (!ALLOWED.includes(key)) {
     return c.json({ error: "unknown setting key" }, 400);
   }
-  if (UPLOADABLE_SETTINGS.has(key)) {
+  if (isUploadableSetting(key)) {
     const existing = await getAppSetting(key);
     if (existing) {
       await deleteBrandingAsset({
@@ -106,7 +111,7 @@ settingsRoutes.delete("/:key", async (c) => {
 settingsRoutes.post("/:key/image", async (c) => {
   requireAdmin(c);
   const key = c.req.param("key") as AppSettingKey;
-  if (!UPLOADABLE_SETTINGS.has(key)) {
+  if (!isUploadableSetting(key)) {
     return c.json({ error: "setting does not accept image uploads" }, 400);
   }
   let form: Awaited<ReturnType<typeof c.req.parseBody>>;

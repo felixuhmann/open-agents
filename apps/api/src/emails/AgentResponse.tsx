@@ -42,6 +42,8 @@ export type AgentResponseEmailProps = {
    * "reply to continue" hint.
    */
   footerLogoUrl?: string;
+  /** Plain-text safety disclaimer rendered in the outbound email footer. */
+  disclaimer: string;
   /**
    * Optional absolute URL of the "Report this conversation" link surfaced
    * in the email footer. When set, recipients can flag a misbehaving
@@ -92,6 +94,7 @@ export function AgentResponseEmail({
   markdown,
   preview,
   footerLogoUrl,
+  disclaimer,
   reportUrl,
 }: AgentResponseEmailProps): React.ReactElement {
   return (
@@ -153,6 +156,7 @@ export function AgentResponseEmail({
               <Text className="m-0 mt-3 text-xs text-muted">
                 Reply to this email to continue the conversation.
               </Text>
+              <Text className="m-0 mt-2 text-xs leading-5 text-muted">{disclaimer}</Text>
               {reportUrl ? (
                 <Text className="m-0 mt-2 text-xs text-muted">
                   Did the agent behave incorrectly?{" "}
@@ -177,6 +181,8 @@ AgentResponseEmail.PreviewProps = {
   agentDisplayName: "Acme Helper",
   avatarUrl: "/static/fallback.png",
   preview: "Hi! Here's the summary you asked for plus a CSV of the underlying rows.",
+  disclaimer:
+    "Agents can make mistakes. Do not send personal, confidential, or sensitive information in this email thread.",
   markdown: `Hi! Here is the summary you asked for, plus a CSV of the underlying rows.
 
 ## Highlights

@@ -1,6 +1,10 @@
 import { render } from "react-email";
 import { AgentResponseEmail } from "../emails/AgentResponse.js";
-import { APP_SETTING_KEYS, getAppSetting } from "./appSettings.js";
+import {
+  APP_SETTING_KEYS,
+  DEFAULT_EMAIL_DISCLAIMER,
+  getAppSetting,
+} from "./appSettings.js";
 import { buildIssueReportUrl } from "./issueReportSigning.js";
 
 /**
@@ -49,6 +53,12 @@ async function resolveFooterLogoUrl(): Promise<string | undefined> {
   const raw = await getAppSetting(APP_SETTING_KEYS.EMAIL_FOOTER_LOGO_URL);
   if (!raw) return undefined;
   return resolveAssetUrl(raw);
+}
+
+async function resolveEmailDisclaimer(): Promise<string> {
+  return (
+    (await getAppSetting(APP_SETTING_KEYS.EMAIL_DISCLAIMER)) ?? DEFAULT_EMAIL_DISCLAIMER
+  );
 }
 
 /**
@@ -100,6 +110,7 @@ export async function renderAgentResponseHtml(args: {
 }): Promise<string> {
   const avatarUrl = resolveAssetUrl(args.avatarFilename ?? FALLBACK_AVATAR_FILENAME);
   const footerLogoUrl = await resolveFooterLogoUrl();
+  const disclaimer = await resolveEmailDisclaimer();
   const reportUrl =
     args.threadId && args.recipientEmail
       ? buildIssueReportUrl({ threadId: args.threadId, email: args.recipientEmail })
@@ -111,6 +122,7 @@ export async function renderAgentResponseHtml(args: {
       markdown: args.markdown,
       preview: buildPreview(args.markdown),
       footerLogoUrl,
+      disclaimer,
       reportUrl,
     }),
   );

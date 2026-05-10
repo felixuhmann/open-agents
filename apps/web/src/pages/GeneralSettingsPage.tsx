@@ -22,6 +22,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 
 const LABELS: Record<string, { title: string; description: string }> = {
   product_name: {
@@ -43,6 +44,11 @@ const LABELS: Record<string, { title: string; description: string }> = {
     title: "Email footer logo",
     description:
       "Logo image rendered at the bottom of every outbound agent email. Upload a file to host it locally, or paste an absolute https:// URL to use one you already host. Leave empty to hide the footer image.",
+  },
+  email_disclaimer: {
+    title: "Email disclaimer",
+    description:
+      "Footer paragraph rendered in every outbound agent email. Leave empty to use the default safety warning.",
   },
 };
 
@@ -149,6 +155,7 @@ export default function GeneralSettingsPage() {
               const persisted = s.value ?? "";
               const dirty = draft.trim() !== persisted.trim();
               const isImage = IMAGE_SETTING_KEYS.has(s.key);
+              const isLongText = s.key === "email_disclaimer";
               const preview = isImage ? assetSrc(persisted) : undefined;
               return (
                 <li key={s.key}>
@@ -218,18 +225,30 @@ export default function GeneralSettingsPage() {
                           <FieldLabel htmlFor={`setting-${s.key}`}>
                             {isImage ? "URL" : "Value"}
                           </FieldLabel>
-                          <Input
-                            id={`setting-${s.key}`}
-                            value={draft}
-                            placeholder={
-                              isImage
-                                ? "https://example.com/logo.png or /static/uploads/<folder>/<file>"
-                                : ""
-                            }
-                            onChange={(e) =>
-                              setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
-                            }
-                          />
+                          {isLongText ? (
+                            <Textarea
+                              id={`setting-${s.key}`}
+                              value={draft}
+                              rows={4}
+                              placeholder="Agents can make mistakes. Do not send personal, confidential, or sensitive information in this email thread."
+                              onChange={(e) =>
+                                setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
+                              }
+                            />
+                          ) : (
+                            <Input
+                              id={`setting-${s.key}`}
+                              value={draft}
+                              placeholder={
+                                isImage
+                                  ? "https://example.com/logo.png or /static/uploads/<folder>/<file>"
+                                  : ""
+                              }
+                              onChange={(e) =>
+                                setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
+                              }
+                            />
+                          )}
                           {label?.description ? (
                             <FieldDescription>{label.description}</FieldDescription>
                           ) : null}

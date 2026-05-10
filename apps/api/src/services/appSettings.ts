@@ -19,6 +19,8 @@ export const APP_SETTING_KEYS = {
   /** Absolute or `/static/...` URL of the logo image rendered in the
    *  outbound email footer. When empty, the footer omits the image. */
   EMAIL_FOOTER_LOGO_URL: "email_footer_logo_url",
+  /** Plain-text disclaimer paragraph rendered in the outbound email footer. */
+  EMAIL_DISCLAIMER: "email_disclaimer",
 } as const;
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[keyof typeof APP_SETTING_KEYS];
@@ -26,6 +28,8 @@ export type AppSettingKey = (typeof APP_SETTING_KEYS)[keyof typeof APP_SETTING_K
 const cache = new Map<string, string | null>();
 
 export const DEFAULT_PRODUCT_NAME = "open-agents";
+export const DEFAULT_EMAIL_DISCLAIMER =
+  "Agents can make mistakes. Do not send personal, confidential, or sensitive information in this email thread.";
 
 export type PublicBrandingSettings = {
   productName: string;

@@ -76,16 +76,13 @@ const NAV_BASE: Array<NavItem> = [
   { to: "/agents", label: "Agents", icon: RobotIcon },
 ];
 
-const NAV_OBSERVABILITY: Array<NavItem> = [
-  { to: "/analytics", label: "Analytics", icon: ChartLineIcon },
-];
-
 const NAV_LIBRARY: Array<NavItem> = [
   { to: "/library/tools", label: "Tools", icon: WrenchIcon },
   { to: "/library/skills", label: "Skills", icon: PuzzlePieceIcon },
 ];
 
 const NAV_REVIEW: Array<NavItem> = [
+  { to: "/analytics", label: "Analytics", icon: ChartLineIcon },
   { to: "/issues", label: "Issues", icon: WarningCircleIcon },
 ];
 
@@ -168,7 +165,6 @@ export function Layout({ user, children }: Props) {
           <NavGroup label="Workspace" items={NAV_BASE} />
           {canManageAgents ? (
             <>
-              <NavGroup label="Observability" items={NAV_OBSERVABILITY} />
               <NavGroup label="Library" items={NAV_LIBRARY} />
               <NavGroup label="Review" items={NAV_REVIEW} />
               {isAdmin ? <NavGroup label="Settings" items={NAV_SETTINGS} /> : null}
