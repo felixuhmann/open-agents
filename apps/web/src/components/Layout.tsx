@@ -54,9 +54,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { authClient } from "@/lib/auth";
 import { canOperateAgents, type CurrentUser } from "@/lib/queries";
+import { Badge } from "./ui/badge";
 
 type NavItem = {
   to: string;
@@ -80,7 +80,6 @@ const NAV_REVIEW: Array<NavItem> = [
 ];
 
 const NAV_SETTINGS: Array<NavItem> = [
-  { to: "/settings/profile", label: "Profile", icon: UserCircleIcon },
   { to: "/settings/secrets", label: "Secrets", icon: KeyIcon },
   { to: "/settings/users", label: "Users", icon: UsersIcon },
   { to: "/settings/general", label: "General", icon: SlidersIcon },
@@ -149,14 +148,9 @@ export function Layout({ user, children }: Props) {
             <>
               <NavGroup label="Library" items={NAV_LIBRARY} />
               <NavGroup label="Review" items={NAV_REVIEW} />
-              <NavGroup
-                label="Settings"
-                items={isAdmin ? NAV_SETTINGS : NAV_SETTINGS.slice(0, 1)}
-              />
+              {isAdmin ? <NavGroup label="Settings" items={NAV_SETTINGS} /> : null}
             </>
-          ) : (
-            <NavGroup label="Settings" items={NAV_SETTINGS.slice(0, 1)} />
-          )}
+          ) : null}
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
@@ -198,10 +192,6 @@ export function Layout({ user, children }: Props) {
                       <UserCircleIcon data-icon="inline-start" />
                       Profile
                     </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled>
-                    <UserCircleIcon data-icon="inline-start" />
-                    {roleLabel(user.role)} account
                   </DropdownMenuItem>
                   {isAdmin ? (
                     <DropdownMenuItem asChild>
@@ -254,10 +244,6 @@ export function Layout({ user, children }: Props) {
       </SidebarInset>
     </SidebarProvider>
   );
-}
-
-function roleLabel(role: CurrentUser["role"]): string {
-  return role === "admin" ? "Admin" : role === "contributor" ? "Contributor" : "Member";
 }
 
 function NavGroup({ label, items }: { label: string; items: Array<NavItem> }) {
