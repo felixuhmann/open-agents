@@ -176,9 +176,6 @@ everything for you:
 
 What admins still own:
 
-- Pre-creating a vault and pasting its id into `/settings/secrets` if
-  you want to share one across multiple deployments. Otherwise leave it
-  blank and the publish flow takes care of it.
 - Re-publishing every platform-bound agent after rotating
   `MCP_AUTH_TOKEN` so each credential's bearer gets PATCHed to the new
   value.

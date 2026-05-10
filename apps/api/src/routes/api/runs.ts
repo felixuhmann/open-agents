@@ -48,10 +48,12 @@ async function resolveRunForCaller(c: Parameters<typeof requireUser>[0], runId: 
  * terminal event.
  */
 runsRoutes.get("/:runId/events", async (c) => {
-  requireUser(c);
   const runId = c.req.param("runId");
-  const run = await prisma.agentRun.findUnique({ where: { id: runId } });
-  if (!run) throw new HttpError(404, "run not found");
+  // Per-conversation ownership (or operator role for email runs) — keeps
+  // members from streaming another user's chat run on a shared agent.
+  const { run } = await resolveRunForCaller(c, runId);
+  // Defense in depth: also verify the caller still has access to the
+  // owning agent (e.g. ACL changed mid-run).
   await requireAgentAccess(c, run.agentId);
 
   const lastEventIdHeader = c.req.header("last-event-id") ?? c.req.query("lastEventId");

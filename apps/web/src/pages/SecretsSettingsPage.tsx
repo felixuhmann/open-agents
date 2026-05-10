@@ -37,7 +37,6 @@ import { Spinner } from "@/components/ui/spinner";
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API key",
-  anthropic_vault_id: "Anthropic vault id (auto-provisioned)",
   mailgun_api_key: "Mailgun API key",
   mailgun_domain: "Mailgun domain (e.g. mg.example.com)",
   mailgun_signing_key: "Mailgun signing key (HTTP webhook signing)",

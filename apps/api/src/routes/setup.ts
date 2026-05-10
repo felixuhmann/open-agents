@@ -19,7 +19,6 @@ export const setupRoutes = new Hono<{ Variables: AppVariables }>();
 
 const SetupBody = z.object({
   anthropicApiKey: z.string().min(1),
-  anthropicVaultId: z.string().optional(),
   mailgunApiKey: z.string().optional(),
   mailgunDomain: z.string().optional(),
   mailgunSigningKey: z.string().optional(),
@@ -66,9 +65,6 @@ setupRoutes.post("/", async (c) => {
   });
 
   await setServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY, body.anthropicApiKey);
-  if (body.anthropicVaultId) {
-    await setServiceSecret(SERVICE_KEYS.ANTHROPIC_VAULT_ID, body.anthropicVaultId);
-  }
   if (body.mailgunApiKey) {
     await setServiceSecret(SERVICE_KEYS.MAILGUN_API_KEY, body.mailgunApiKey);
   }

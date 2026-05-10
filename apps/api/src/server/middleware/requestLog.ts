@@ -6,6 +6,36 @@ import type { AppVariables } from "../types.js";
 /** @deprecated use AppVariables from server/types.js */
 export type RequestLogVariables = { reqId: string };
 
+// Query-string keys whose values are credentials/capability tokens. The
+// request logger replaces matching values with `[redacted]` before
+// emitting to logs so signed-upload URLs (`?sig=`) and HMAC-protected
+// links (`?token=`) don't end up in log files alongside the path that
+// makes them useful. Match is case-insensitive.
+const REDACTED_QUERY_KEYS = new Set([
+  "sig",
+  "signature",
+  "token",
+  "code",
+  "key",
+  "apikey",
+  "api_key",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "password",
+  "secret",
+  "auth",
+  "bearer",
+]);
+
+function redactQuery(q: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(q)) {
+    out[k] = REDACTED_QUERY_KEYS.has(k.toLowerCase()) ? "[redacted]" : v;
+  }
+  return out;
+}
+
 /**
  * Apply the standard request-id + structured request log middleware to a
  * Hono app, plus the matching `notFound` / `onError` hooks. Everything
@@ -30,7 +60,7 @@ export function applyRequestLogMiddleware(
         reqId,
         method: c.req.method,
         path: c.req.path,
-        query: c.req.query(),
+        query: redactQuery(c.req.query()),
         ua: c.req.header("user-agent"),
         contentType: c.req.header("content-type"),
         contentLength: c.req.header("content-length"),

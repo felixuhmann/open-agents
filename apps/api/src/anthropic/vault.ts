@@ -16,8 +16,7 @@ import { buildMcpServerUrl } from "./provisioning.js";
  *
  * The vault is the per-deployment container Anthropic looks credentials up
  * in when starting a session. We keep exactly one and store its id under
- * the same `anthropic_vault_id` Secret key the (now optional) setup wizard
- * field used to populate manually.
+ * the internal `anthropic_vault_id` Secret key.
  *
  * On creation we also reset the Anthropic backend singleton so the next
  * `createSession` call sees the new `vault_ids` value.

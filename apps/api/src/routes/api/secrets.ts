@@ -16,7 +16,6 @@ export const secretsRoutes = new Hono<{ Variables: AppVariables }>();
 
 const ALLOWED: ServiceKey[] = [
   SERVICE_KEYS.ANTHROPIC_API_KEY,
-  SERVICE_KEYS.ANTHROPIC_VAULT_ID,
   SERVICE_KEYS.MAILGUN_API_KEY,
   SERVICE_KEYS.MAILGUN_DOMAIN,
   SERVICE_KEYS.MAILGUN_SIGNING_KEY,
@@ -51,7 +50,7 @@ secretsRoutes.put("/:key", async (c) => {
   const body = PutBody.parse(await c.req.json());
   await setServiceSecret(key, body.value);
   invalidateServiceSecret(key);
-  if (key === SERVICE_KEYS.ANTHROPIC_API_KEY || key === SERVICE_KEYS.ANTHROPIC_VAULT_ID) {
+  if (key === SERVICE_KEYS.ANTHROPIC_API_KEY) {
     resetAgentBackend();
   }
   return c.json({ ok: true });
@@ -64,7 +63,7 @@ secretsRoutes.delete("/:key", async (c) => {
     return c.json({ error: "unknown secret key" }, 400);
   }
   await deleteServiceSecret(key);
-  if (key === SERVICE_KEYS.ANTHROPIC_API_KEY || key === SERVICE_KEYS.ANTHROPIC_VAULT_ID) {
+  if (key === SERVICE_KEYS.ANTHROPIC_API_KEY) {
     resetAgentBackend();
   }
   return c.json({ ok: true });
