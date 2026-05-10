@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,7 +11,13 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { WarningOctagonIcon } from "@phosphor-icons/react";
-import { useCurrentUser, useSetupStatus } from "./lib/queries";
+import {
+  canOperateAgents,
+  type CurrentUser,
+  type UserRole,
+  useCurrentUser,
+  useSetupStatus,
+} from "./lib/queries";
 
 const SetupPage = lazy(() => import("./pages/SetupPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
@@ -30,6 +36,26 @@ const UsersSettingsPage = lazy(() => import("./pages/UsersSettingsPage"));
 const GeneralSettingsPage = lazy(() => import("./pages/GeneralSettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 
+function canAccessRoute(user: CurrentUser, roles: Array<UserRole> | "operator") {
+  if (roles === "operator") return canOperateAgents(user.role);
+  return roles.includes(user.role);
+}
+
+function RequirePermission({
+  user,
+  roles,
+  children,
+}: {
+  user: CurrentUser;
+  roles: Array<UserRole> | "operator";
+  children: ReactElement;
+}) {
+  if (!canAccessRoute(user, roles)) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 function ProtectedRoutes() {
   const user = useCurrentUser();
   const location = useLocation();
@@ -46,21 +72,81 @@ function ProtectedRoutes() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/agents" element={<AgentsListPage />} />
           <Route path="/agents/:slug" element={<AgentDetailPage />} />
-          <Route path="/agents/:slug/edit" element={<AgentEditPage />} />
+          <Route
+            path="/agents/:slug/edit"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <AgentEditPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/agents/:slug/chat" element={<AgentChatPage />} />
           <Route path="/agents/:slug/chat/:conversationId" element={<AgentChatPage />} />
           <Route
             path="/agents/:slug/conversations"
-            element={<AgentConversationsPage />}
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <AgentConversationsPage />
+              </RequirePermission>
+            }
           />
-          <Route path="/library/tools" element={<ToolsLibraryPage />} />
-          <Route path="/library/skills" element={<SkillsLibraryPage />} />
-          <Route path="/issues" element={<IssuesListPage />} />
-          <Route path="/issues/:id" element={<IssueDetailPage />} />
-          <Route path="/settings/secrets" element={<SecretsSettingsPage />} />
+          <Route
+            path="/library/tools"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <ToolsLibraryPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/library/skills"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <SkillsLibraryPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/issues"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <IssuesListPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/issues/:id"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <IssueDetailPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/settings/secrets"
+            element={
+              <RequirePermission user={user.data} roles={["admin"]}>
+                <SecretsSettingsPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/settings/profile" element={<ProfilePage />} />
-          <Route path="/settings/users" element={<UsersSettingsPage />} />
-          <Route path="/settings/general" element={<GeneralSettingsPage />} />
+          <Route
+            path="/settings/users"
+            element={
+              <RequirePermission user={user.data} roles={["admin"]}>
+                <UsersSettingsPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/settings/general"
+            element={
+              <RequirePermission user={user.data} roles={["admin"]}>
+                <GeneralSettingsPage />
+              </RequirePermission>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
@@ -75,6 +161,9 @@ export function App() {
   if (!setup.data) return <FullScreenError message="Backend unreachable" />;
   if (!setup.data.complete && location.pathname !== "/setup") {
     return <Navigate to="/setup" replace />;
+  }
+  if (setup.data.complete && location.pathname === "/setup") {
+    return <Navigate to="/" replace />;
   }
   return (
     <Suspense fallback={<FullScreenSpinner />}>
