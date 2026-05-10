@@ -209,5 +209,39 @@ function normalizeEvent(event: BetaManagedAgentsStreamSessionEvents): AgentStrea
   if (event.type === "agent.custom_tool_use") {
     return { kind: "tool_use", toolName: event.name, rawType: event.type };
   }
+  if (event.type === "span.model_request_end") {
+    const usage = event.model_usage;
+    return {
+      kind: "model_request",
+      rawType: event.type,
+      model: readStringField(event, "model"),
+      isError: readBooleanField(event, "is_error"),
+      usage: {
+        inputTokens: usage?.input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+        cacheCreationInputTokens: usage?.cache_creation_input_tokens ?? 0,
+        cacheReadInputTokens: usage?.cache_read_input_tokens ?? 0,
+      },
+    };
+  }
+  if (event.type === "session.error") {
+    return {
+      kind: "session_error",
+      rawType: event.type,
+      message: readStringField(event, "error") ?? "Session error",
+    };
+  }
   return { kind: "other", rawType: event.type };
+}
+
+function readStringField(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object") return null;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" ? field : null;
+}
+
+function readBooleanField(value: unknown, key: string): boolean | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "boolean" ? field : undefined;
 }

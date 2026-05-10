@@ -49,6 +49,19 @@ export type UploadFileInput = {
 export type AgentStreamEvent =
   | { kind: "message"; text: string; rawType: string }
   | { kind: "tool_use"; toolName: string; rawType: string }
+  | {
+      kind: "model_request";
+      rawType: string;
+      model?: string | null;
+      isError?: boolean;
+      usage: {
+        inputTokens: number;
+        outputTokens: number;
+        cacheCreationInputTokens: number;
+        cacheReadInputTokens: number;
+      };
+    }
+  | { kind: "session_error"; rawType: string; message: string }
   | { kind: "other"; rawType: string };
 
 export type AgentEventHandler = (event: AgentStreamEvent) => void;

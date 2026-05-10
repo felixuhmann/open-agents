@@ -11,6 +11,7 @@ export const RunEventTypes = z.enum([
   "agent.message",
   "tool.use",
   "tool.result",
+  "model.request",
   "session.error",
   "run.succeeded",
   "run.failed",
@@ -43,6 +44,17 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     callId: z.string().optional(),
     result: z.unknown().optional(),
     isError: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("model.request"),
+    model: z.string().nullable().optional(),
+    isError: z.boolean().optional(),
+    usage: z.object({
+      inputTokens: z.number().int().nonnegative().default(0),
+      outputTokens: z.number().int().nonnegative().default(0),
+      cacheCreationInputTokens: z.number().int().nonnegative().default(0),
+      cacheReadInputTokens: z.number().int().nonnegative().default(0),
+    }),
   }),
   z.object({
     type: z.literal("session.error"),

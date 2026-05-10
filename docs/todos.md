@@ -56,8 +56,5 @@ and should not bleed into this codebase.
 Out of scope and likely to stay that way. Different surfaces, different
 permission models, ambiguous threading semantics.
 
-## analytics page
-we need a analytics page where we can see usage statistics per agent, monthly token usage and spend, per model breakdown, per agent breakdown, error rate, avg time spent, etc etc etc. this should give the operators full observability into the usage, definitely a missing piece for real world usage. we can use shadcn charts here for some cool graphs.
-
 ## support for new models
 instead of anthropic only, we ideally also want to support gpt models and others. this will probably entail a large refactor of the product, as we need to use a different sandbox backend, currently we are heavily coupled to the anthropic solution.

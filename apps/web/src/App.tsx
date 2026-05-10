@@ -25,6 +25,7 @@ import {
 const SetupPage = lazy(() => import("./pages/SetupPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const AgentsListPage = lazy(() => import("./pages/AgentsListPage"));
 const AgentDetailPage = lazy(() => import("./pages/AgentDetailPage"));
 const AgentEditPage = lazy(() => import("./pages/AgentEditPage"));
@@ -73,6 +74,14 @@ function ProtectedRoutes() {
       <Suspense fallback={<FullScreenSpinner />}>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route
+            path="/analytics"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <AnalyticsPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/agents" element={<AgentsListPage />} />
           <Route path="/agents/:slug" element={<AgentDetailPage />} />
           <Route

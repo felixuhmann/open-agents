@@ -139,6 +139,37 @@ export function useAgents() {
   });
 }
 
+export type AnalyticsMetricRow = {
+  runs: number;
+  failedRuns: number;
+  errorRate: number;
+  avgDurationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  totalTokens: number;
+  spendUsd: number;
+};
+
+export type AnalyticsSummary = {
+  generatedAt: string;
+  window: { from: string; to: string; months: number };
+  totals: AnalyticsMetricRow;
+  monthly: Array<AnalyticsMetricRow & { month: string }>;
+  agents: Array<AnalyticsMetricRow & { id: string; slug: string; displayName: string }>;
+  models: Array<AnalyticsMetricRow & { model: string }>;
+  surfaces: Array<AnalyticsMetricRow & { surface: string }>;
+  notes: string[];
+};
+
+export function useAnalytics() {
+  return useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => api<AnalyticsSummary>("/api/analytics"),
+  });
+}
+
 /**
  * Convert a stored avatar reference (bare filename, `/static/...` URL
  * path, or absolute URL) into something a browser `<img src>` can load.

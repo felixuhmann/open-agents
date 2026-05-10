@@ -248,6 +248,23 @@ async function streamRunWithEvents(
         type: "tool.use",
         payload: { type: "tool.use", toolName: event.toolName },
       }).catch(() => undefined);
+    } else if (event.kind === "model_request") {
+      void appendEvent({
+        runId,
+        type: "model.request",
+        payload: {
+          type: "model.request",
+          model: event.model,
+          isError: event.isError,
+          usage: event.usage,
+        },
+      }).catch(() => undefined);
+    } else if (event.kind === "session_error") {
+      void appendEvent({
+        runId,
+        type: "session.error",
+        payload: { type: "session.error", message: event.message },
+      }).catch(() => undefined);
     }
   });
 }
