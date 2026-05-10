@@ -1,0 +1,59 @@
+{
+  "name": "@open-agents/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/prisma/client.d.ts",
+      "import": "./dist/prisma/client.js"
+    },
+    "./client": {
+      "types": "./dist/prisma/client.d.ts",
+      "import": "./dist/prisma/client.js"
+    },
+    "./models": {
+      "types": "./dist/prisma/models.d.ts",
+      "import": "./dist/prisma/models.js"
+    },
+    "./enums": {
+      "types": "./dist/prisma/enums.d.ts",
+      "import": "./dist/prisma/enums.js"
+    },
+    "./browser": {
+      "types": "./dist/prisma/browser.d.ts",
+      "import": "./dist/prisma/browser.js"
+    }
+  },
+  "files": [
+    "dist",
+    "prisma",
+    "prisma.config.ts"
+  ],
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lint.json --noEmit",
+    "lint": "eslint .",
+    "check": "pnpm typecheck && pnpm lint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@open-agents/tsconfig": "workspace:*",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.6.0",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "prisma": "^7.8.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
+  }
+}

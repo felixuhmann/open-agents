@@ -1,0 +1,13 @@
+{
+  "extends": "@open-agents/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "generated",
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "skipLibCheck": true
+  },
+  "include": ["generated/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

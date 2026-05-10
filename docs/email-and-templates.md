@@ -1,0 +1,226 @@
+# Email & templates
+
+Everything between Mailgun and the user lives here: how inbound mail
+gets parsed, how threading is preserved across replies, how the agent's
+Markdown becomes a branded HTML email, and where the static assets live.
+
+> Email is **one of two surfaces** for an agent in v1; the other is web
+> chat. They share the run-agent worker and the `RunEvent` log but never
+> share state. Email is opt-in per-agent (`Agent.emailEnabled`).
+
+## Inbound
+
+### Webhook contract
+
+Mailgun POSTs `multipart/form-data` to `POST /mailgun/inbound` (note the
+**no path parameter** — there is exactly one route). Fields we care about:
+
+| Mailgun field    | Used as                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `sender`/`from`  | `EmailThread.userEmail`                                                             |
+| `recipient`/`To` | parsed → `Agent.inboundLocalPart` (resolves agent) and `EmailThread.inboundAddress` |
+| `subject`        | `EmailThread.subject`                                                               |
+| `Message-Id`     | dedupe + threading key                                                              |
+| `In-Reply-To`    | thread lookup                                                                       |
+| `References`     | thread lookup                                                                       |
+| `stripped-text`  | preferred body (Mailgun strips quoted history)                                      |
+| `body-plain`     | body fallback                                                                       |
+| `attachment-N`   | one file per `attachment-1`, `attachment-2`, …                                      |
+| `timestamp`      | HMAC verification                                                                   |
+| `token`          | HMAC verification                                                                   |
+| `signature`      | HMAC verification                                                                   |
+
+[`apps/api/src/mailgun/parse.ts`](../apps/api/src/mailgun/parse.ts)
+normalizes this into the `InboundEmail` shape;
+[`apps/api/src/mailgun/verify.ts`](../apps/api/src/mailgun/verify.ts)
+does the `HMAC-SHA256(timestamp+token, signing_key)` check using
+`mailgun_signing_key` from the encrypted `Secret` table.
+
+### Agent resolution
+
+[`apps/api/src/routes/mailgun.ts`](../apps/api/src/routes/mailgun.ts):
+
+1. Verify HMAC.
+2. Parse the recipient address. The local part (everything before `@`)
+   becomes the lookup key.
+3. `getAgentByInboundLocalPart(localPart)` — DB lookup with the same
+   in-process LRU cache used by `getAgentBySlug`.
+4. If no match, log `mailgun inbound: agent not found` and return 200
+   so Mailgun won't retry.
+5. If found and `agent.emailEnabled = false`, log
+   `mailgun inbound: email disabled` and return 200 + drop.
+6. Otherwise hand off to `services/inbound.ts`.
+
+### Threading model
+
+We rely on standard email threading headers (`In-Reply-To`,
+`References`) plus an agent-id scope so two agents can never share a
+thread:
+
+1. On every inbound, [`apps/api/src/services/threads.ts`](../apps/api/src/services/threads.ts):
+   - Collects all candidate Message-Ids from `In-Reply-To` + `References`.
+   - Looks up an `EmailThread` whose `rootMessageId` matches any of them
+     (and whose `agentId` matches the resolved agent).
+   - If not, looks up an `EmailMessage` whose `messageId` matches any of
+     them (also scoped by `agentId`).
+   - Otherwise creates a new thread rooted at this message.
+2. The Anthropic `sessionId` is pinned on the `EmailThread`. As long as
+   the thread is reused, the session is reused. New attachments force a
+   fresh session (resources only mount at session-creation), and the
+   new id replaces the old one.
+
+### Attachments
+
+Mailgun forwards attachment bytes inline in the webhook body. We
+persist them immediately as `EmailAttachment` rows (Postgres `Bytes`)
+inside the `services/inbound.ts` transaction so the worker can be
+idempotent. The run-agent worker then:
+
+- Calls
+  [`uploadPendingAttachments`](../apps/api/src/services/attachments.ts),
+  which uploads any rows missing `anthropicFileId` to the Anthropic
+  Files API and writes `anthropicFileId` + `mountPath` back.
+- Mounts them on a new session via
+  `resources: [{ type: "file", file_id, mount_path }]`.
+
+Inside the sandbox, Anthropic prefixes our `mount_path` with
+`/mnt/session/uploads`. If your agent's prompt expects to read the file,
+mention the absolute path explicitly.
+
+## Outbound
+
+### Building the reply
+
+The send-email worker
+([`apps/api/src/jobs/sendEmail.ts`](../apps/api/src/jobs/sendEmail.ts))
+constructs a threaded reply:
+
+- **`Subject:`** — `Re: <thread.subject>` unless it already starts with
+  `Re:`.
+- **`From:`** — `<displayName> <inboundAddress>`. `inboundAddress` is
+  the address Mailgun received the first message on (captured in the
+  thread). `inbound_from` from the `Secret` table is the last-resort
+  fallback.
+- **`In-Reply-To:`** — last inbound message-id on the thread.
+- **`References:`** — every prior message-id on the thread, in order.
+  This is what Gmail/Outlook use to thread the reply with the original.
+- **Body** — agent's final aggregated assistant text (read from
+  `AgentRun.output`, populated by the run-agent worker) rendered through
+  [`AgentResponseEmail`](../apps/api/src/emails/AgentResponse.tsx).
+- **Attachments** — every `AgentAttachment` row associated with the
+  current `runId`.
+
+After Mailgun confirms the send, we persist a row in `EmailMessage`
+with `direction = "outbound"` so the next inbound webhook in the same
+thread can resolve the thread by `In-Reply-To`/`References`.
+
+### React Email templates
+
+Templates live in [`apps/api/src/emails/`](../apps/api/src/emails/).
+Today there's a single template:
+
+- [`AgentResponse.tsx`](../apps/api/src/emails/AgentResponse.tsx) —
+  branded layout with header (agent display name and optional avatar),
+  Markdown body, and footer with the deployment logo. The Markdown is
+  rendered through `react-email`'s `<Markdown>` component, which emits
+  email-safe inline styles.
+
+[`apps/api/src/services/renderEmail.ts`](../apps/api/src/services/renderEmail.ts)
+wraps `render(...)`, extracts a 120-char preheader, and resolves the
+agent avatar URL.
+
+### Per-agent avatar
+
+Avatars live on the `Agent.avatar` column (a static-asset filename). To
+ship a new one:
+
+1. Drop the image into
+   [`apps/api/src/emails/static/`](../apps/api/src/emails/static/) (PNG/JPG,
+   square, ~256×256 px).
+2. Set `avatar` from the agent edit page.
+3. Agents that omit `avatar` fall back to the shared `fallback.png`.
+
+### Static assets
+
+Drop email images into
+[`apps/api/src/emails/static/`](../apps/api/src/emails/static/).
+**PNG/JPG only** — SVG/WEBP are unreliable in many email clients.
+
+They are served two ways:
+
+- During `pnpm --filter @open-agents/api email`, react-email's preview
+  server serves `http://localhost:3001/static/<file>`.
+- In production,
+  [`routes/static.ts`](../apps/api/src/routes/static.ts) serves
+  `${PUBLIC_BASE_URL}/static/<file>`. The build copies
+  `apps/api/src/emails/static/` into `dist/emails/static/` so
+  `node apps/api/dist/index.js` finds them.
+
+In templates, switch the base URL on `NODE_ENV`:
+
+```tsx
+const baseURL =
+  process.env.NODE_ENV === "production" ? (process.env.PUBLIC_BASE_URL ?? "") : "";
+
+<Img src={`${baseURL}/static/your-logo.png`} alt="" width="120" height="40" />;
+```
+
+The `AgentResponse.tsx` template's footer logo is **not** hardcoded; it
+reads from the `email_footer_logo_url` value under
+**Settings → General** at send time. Absolute URLs pass through
+verbatim; `/static/<file>` references are joined with `PUBLIC_BASE_URL`
+in production. Leave it empty to omit the image entirely.
+
+## Sandbox-uploaded attachments
+
+The agent might _produce_ files (PDFs, spreadsheets, etc.) it wants
+attached to the reply. The flow:
+
+1. The run-agent worker signs an upload URL for the run id and injects
+   it into the user message:
+   ```
+   REPLY_ATTACHMENT_UPLOAD_URL: https://<deploy>/runs/<runId>/attachments?sig=<hmac>
+   ```
+   The "how/why/when to upload" instructions live in the agent's
+   system prompt; we only inject the dynamic URL.
+2. The sandbox `POST`s `multipart/form-data` with a `file` field to
+   that URL.
+3. [`routes/upload.ts`](../apps/api/src/routes/upload.ts) verifies the
+   HMAC, caps the size at 25 MB (Mailgun's per-message limit), and
+   inserts an `AgentAttachment` row.
+4. The send-email worker queries `AgentAttachment` rows for the run and
+   attaches each one to the outbound Mailgun message.
+
+The same module also accepts user-uploaded files for chat conversations
+at `POST /conversations/:id/attachments` — that endpoint uses the
+session cookie instead of an HMAC signature.
+
+Why HMAC instead of a session token: the sandbox has outbound HTTP but
+no convenient way to surface a session-bound credential, and the upload
+URL needs to be self-contained. The signature is HMAC-SHA256 of the run
+id keyed by `UPLOAD_SIGNING_SECRET`. A leaked URL only allows posting
+attachments to a known runId (itself a CUID), so the blast radius is
+bounded.
+
+## Things that have surprised people
+
+- **One Mailgun route, no `:agentSlug`.** Old per-agent routes are dead.
+  All inbound mail funnels through `POST /mailgun/inbound` and the agent
+  is resolved by parsing the recipient.
+- **Mailgun signing key vs API key.** The webhook signature is verified
+  with `mailgun_signing_key` from `Secret` (separate from
+  `mailgun_api_key`). Wrong key → every inbound webhook returns `401`.
+- **Catch-all returns 200 even when dropped.** When the recipient
+  doesn't match any agent or the agent has email disabled, we return
+  200 so Mailgun won't retry forever. Logs are the only signal.
+- **Outbound `From:` must match a real address Mailgun owns.** Otherwise
+  user replies bounce. The thread's captured `inboundAddress` is the
+  trusted source; the global fallback is a last resort for legacy data.
+- **`stripped-text` vs `body-plain`.** We prefer Mailgun's
+  `stripped-text` (no quoted history) and fall back to `body-plain`.
+- **No HTML sanitization.** Agent output is treated as trusted content
+  (same trust model as the prior plain-text pipeline). If you ever
+  expose this to untrusted authoring, sanitize before rendering.
+- **Email and chat are completely separate.** A user replying to an
+  agent email cannot continue the conversation in `/agents/<slug>/chat`
+  and vice versa.

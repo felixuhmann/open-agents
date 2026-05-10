@@ -1,0 +1,148 @@
+---
+description: open-agents project conventions
+alwaysApply: true
+---
+
+# open-agents project conventions
+
+This is a Hono + Prisma + pg-boss orchestrator for Anthropic Managed Agents.
+See [AGENTS.md](mdc:AGENTS.md) for the full project guide; this rule
+captures the rules every change must follow.
+
+## Module system
+
+- ESM with `module: NodeNext`. Every relative import MUST end in `.js`,
+  even though the source is `.ts`:
+  ```ts
+  import { config } from "./config.js";
+  ```
+- Use `import type { Foo } from "..."` for type-only imports. ESLint
+  enforces this.
+
+## Adding a new agent
+
+There is no longer a code path. Agents are created and configured
+through the SPA at `/agents`. The runtime resolves them from the
+`Agent` table in Postgres via
+[`apps/api/src/agents/service.ts`](mdc:apps/api/src/agents/service.ts)
+(`getAgentBySlug`, `getAgentByInboundLocalPart`, etc.). Do NOT add a
+`src/agents/<slug>/index.ts` module or an `AGENTS` array — those don't
+exist anymore. There is exactly one Mailgun catch-all route per
+deployment; the webhook resolves the agent by parsing the recipient.
+
+## Tools (unified catalog)
+
+Every agent capability — Anthropic-managed (`agent_toolset_20260401`
+members like `bash`, `read`, `web_search`, …) and our own MCP handlers —
+is a row in the `Tool` table, discriminated by `runtime`
+(`managed` | `platform`). One binding table (`AgentToolBinding`)
+references both. The Anthropic-specific request layout
+(`agent_toolset_20260401` + `mcp_toolset` + `mcp_servers`) is built only
+at publish time in
+[`apps/api/src/anthropic/provisioning.ts`](mdc:apps/api/src/anthropic/provisioning.ts).
+Don't reach into the binding payload from elsewhere — the `runtime`
+discriminator is the only thing application code should care about.
+
+External (user-supplied) MCP servers stay on `AgentThirdPartyMcp`. They
+are per-agent endpoints, not catalog rows.
+
+### Defining a platform tool
+
+Platform tools live under `apps/api/src/mcp/platform/<key>.ts` as
+handler bundles. Use `defineTool` from
+[`apps/api/src/mcp/types.ts`](mdc:apps/api/src/mcp/types.ts); the Zod
+schema is the single source of truth and the handler receives typed,
+parsed input plus a `ctx` with `agentId`, `bindingId`, and decrypted
+per-binding `secrets`.
+
+```ts
+defineTool({
+  name: "…",
+  description: "…",
+  input: z.object({ … }),
+  handler: async (input, ctx) => { … },
+});
+```
+
+Append the handler to `PLATFORM_HANDLERS` in
+[`apps/api/src/mcp/platform/index.ts`](mdc:apps/api/src/mcp/platform/index.ts).
+A boot-time `seedToolCatalog()` call upserts a `Tool` row with
+`runtime = "platform"` so the UI tool picker stays in sync, alongside
+the managed-runtime rows for the toolset. Don't insert `Tool` rows by
+hand.
+
+## Layering rules
+
+- `routes/`  → calls into `services/` and enqueues jobs. No Prisma writes
+  inline; extract to `services/*`.
+- `jobs/`    → orchestration shells. Heavy lifting goes in `services/`.
+- `services/` → reusable domain logic. May import `db.ts`, `anthropic/*`,
+  `mailgun/*`, `agents/*`, `mcp/*`, `secrets/*`. Must NOT import from
+  `routes/` or `jobs/<workerName>.ts`.
+- `agents/`, `mcp/`, `mailgun/`, `anthropic/`, `secrets/`, `auth/` →
+  leaf-ish modules. They may import `db.ts`, `log.ts`, `config.ts`, and
+  each other (where the dependency is acyclic).
+- Cross-cutting helpers shared by `routes/` AND `jobs/` go in `services/`
+  (e.g. `signRunUploadUrl` in `services/uploadSigning.ts`).
+
+## Database (Prisma 7)
+
+The schema lives at `packages/db/prisma/schema.prisma`. Prisma 7 conventions:
+
+- The `prisma-client` generator emits **TypeScript source** to
+  `packages/db/generated/prisma/`, which `tsc` then compiles to
+  `packages/db/dist/prisma/`. Consumers always import from `@open-agents/db`
+  (the workspace package), never from the generated path directly.
+- The `datasource` block in `schema.prisma` carries only the provider.
+  Connection URL + migration paths live in
+  [`packages/db/prisma.config.ts`](mdc:packages/db/prisma.config.ts).
+- `prisma.config.ts` loads the env file (root `.env` or
+  `apps/api/.env`) explicitly via `dotenv` — Prisma 7 no longer auto-loads.
+- The Prisma client is constructed with the
+  [`@prisma/adapter-pg`](https://www.prisma.io/docs/orm/core-concepts/supported-databases/database-drivers)
+  driver adapter (Prisma 7 has no Rust query engine for SQL; an adapter
+  is required). The singleton lives at `apps/api/src/db.ts`.
+
+After editing `schema.prisma`:
+
+```bash
+pnpm db:migrate -- --name <slug>   # interactive, requires DATABASE_URL
+pnpm db:generate                    # regenerate the client
+```
+
+`postinstall` runs both for you on a clean checkout, so any teammate that
+just pulls the repo and `pnpm install`s gets a working client.
+
+## Logging
+
+Use `log` from [`apps/api/src/log.ts`](mdc:apps/api/src/log.ts). Pass
+structured context as a meta object, never string-concatenate. Don't
+`console.log` — ESLint will flag it.
+
+## Required after every edit
+
+```bash
+pnpm check
+```
+
+Runs Turborepo's `typecheck` + `lint` across every workspace package and
+then `prettier --check` over the repo. All three must be green before
+committing.
+
+If your change requires updating the documentation, please do so after
+you changed the last file and all checks run green. This is needed so
+the documentation is not allowed to drift. Touch every relevant doc:
+`docs/*.md`, READMEs, in-code comments, and `AGENTS.md`.
+
+## Common gotchas
+
+- New attachments force a new Anthropic session (resources only mount at
+  session-creation). The run-agent worker handles this; don't bypass it.
+- Anthropic beta headers `managed-agents-*` and `agent-api-*` are
+  mutually exclusive. Use the existing `AnthropicAgentBackend`, don't
+  open raw `fetch` calls to Anthropic.
+- Service credentials (Anthropic, Mailgun) live AES-GCM encrypted in
+  the `Secret` table and are read via
+  [`apps/api/src/secrets/service.ts`](mdc:apps/api/src/secrets/service.ts).
+  Don't add new env vars for service credentials — they belong in the
+  DB so admins can rotate them through the UI.

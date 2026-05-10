@@ -1,0 +1,191 @@
+import { useQuery } from "@tanstack/react-query";
+import type { AgentSummaryDto } from "@open-agents/types";
+import { api } from "./api";
+
+export type SetupStatus = { complete: boolean; userCount: number };
+
+export function useSetupStatus() {
+  return useQuery({
+    queryKey: ["setup", "status"],
+    queryFn: () => api<SetupStatus>("/api/setup/status"),
+    staleTime: 0,
+    refetchInterval: false,
+  });
+}
+
+export type CurrentUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: "admin" | "member";
+};
+
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ["auth", "session"],
+    queryFn: async (): Promise<CurrentUser | null> => {
+      const r = await fetch("/api/auth/get-session", {
+        credentials: "include",
+      });
+      if (!r.ok) return null;
+      const body = (await r.json()) as { user?: CurrentUser } | null;
+      return body?.user ?? null;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useAgents() {
+  return useQuery({
+    queryKey: ["agents"],
+    queryFn: () =>
+      api<{ agents: AgentSummaryDto[] }>("/api/agents").then((r) => r.agents),
+  });
+}
+
+export type ToolRuntime = "managed" | "platform";
+
+export type FullAgentDto = {
+  id: string;
+  slug: string;
+  displayName: string;
+  description: string | null;
+  systemPrompt: string;
+  model: string;
+  emailEnabled: boolean;
+  webEnabled: boolean;
+  accessMode: "everyone" | "specific";
+  inboundLocalPart: string;
+  anthropicAgentId: string | null;
+  environmentId: string | null;
+  anthropicAgentVersion: string | null;
+  toolBindings: Array<{
+    id: string;
+    toolId: string;
+    tool: { id: string; key: string; name: string; runtime: ToolRuntime };
+    configJson: Record<string, unknown>;
+  }>;
+  skillIds: string[];
+  skills: Array<{ id: string; name: string }>;
+  thirdPartyMcp: Array<{ id: string; label: string; serverUrl: string }>;
+  accessUserIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function useAgent(slug: string | undefined) {
+  return useQuery({
+    enabled: Boolean(slug),
+    queryKey: ["agents", slug],
+    queryFn: () => api<FullAgentDto>(`/api/agents/${slug}`),
+  });
+}
+
+export type Tool = {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  runtime: ToolRuntime;
+  configSchema: Record<string, unknown>;
+  requiresSecrets: boolean;
+  deprecated: boolean;
+};
+
+export function useTools() {
+  return useQuery({
+    queryKey: ["tools"],
+    queryFn: () => api<{ tools: Tool[] }>("/api/tools").then((r) => r.tools),
+  });
+}
+
+export type SkillDto = {
+  id: string;
+  name: string;
+  description: string | null;
+  anthropicSkillId: string | null;
+  anthropicSkillVersion: string | null;
+  createdAt: string;
+};
+
+export function useSkills() {
+  return useQuery({
+    queryKey: ["skills"],
+    queryFn: () => api<{ skills: SkillDto[] }>("/api/skills").then((r) => r.skills),
+  });
+}
+
+export type SecretRow = { key: string; configured: boolean };
+
+export function useSecrets() {
+  return useQuery({
+    queryKey: ["secrets"],
+    queryFn: () => api<{ secrets: SecretRow[] }>("/api/secrets").then((r) => r.secrets),
+  });
+}
+
+export type AppSettingRow = { key: string; value: string | null };
+
+export function useAppSettings() {
+  return useQuery({
+    queryKey: ["settings"],
+    queryFn: () =>
+      api<{ settings: AppSettingRow[] }>("/api/settings").then((r) => r.settings),
+  });
+}
+
+export type UserRow = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: "admin" | "member";
+  banned: boolean;
+  createdAt: string;
+};
+
+export function useUsers() {
+  return useQuery({
+    queryKey: ["users"],
+    queryFn: () => api<{ users: UserRow[] }>("/api/users").then((r) => r.users),
+  });
+}
+
+export type ConversationListItem = {
+  id: string;
+  title: string;
+  agent: { id: string; slug: string; displayName: string };
+  updatedAt: string;
+};
+
+export function useConversations() {
+  return useQuery({
+    queryKey: ["conversations"],
+    queryFn: () =>
+      api<{ conversations: ConversationListItem[] }>("/api/conversations").then(
+        (r) => r.conversations,
+      ),
+  });
+}
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  runId: string | null;
+  createdAt: string;
+};
+
+export type ConversationDetail = {
+  id: string;
+  title: string;
+  agent: { id: string; slug: string; displayName: string };
+  messages: ChatMessage[];
+};
+
+export function useConversation(id: string | undefined) {
+  return useQuery({
+    enabled: Boolean(id),
+    queryKey: ["conversations", id],
+    queryFn: () => api<ConversationDetail>(`/api/conversations/${id}`),
+  });
+}

@@ -1,0 +1,516 @@
+// open-agents v1 schema.
+//
+// One deployment == one customer (single-tenant). All rows live in one
+// database; there is no Organization scoping.
+//
+// Owned by `@open-agents/db` workspace package; the generated Prisma client
+// is re-exported as `@open-agents/db` and consumed by `apps/api`.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+// Connection URL is configured in `prisma.config.ts` (Prisma 7+ no longer
+// reads `url` from the schema). The provider must still live here so the
+// schema language knows which dialect features to allow.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// better-auth managed tables (email/password only).
+// Schema mirrors better-auth's expected shape so the prisma adapter binds
+// without custom mapping. `User.role` carries our app-level role.
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String    @id
+  email           String    @unique
+  name            String?
+  emailVerified   Boolean   @default(false)
+  image           String?
+  /// Application role: `admin` or `member`.
+  role            String    @default("member")
+  /// `false` while the admin-created account hasn't yet set a password.
+  banned          Boolean   @default(false)
+  banReason       String?
+  banExpires      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sessions        Session[]
+  accounts        Account[]
+  agentAccess     AgentAccess[]
+  conversations   ChatConversation[]
+  createdAgents   Agent[]   @relation("AgentCreatedBy")
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Deployment-wide non-secret settings (e.g. email footer logo URL).
+// Plain key/value strings — anything sensitive belongs in `Secret`.
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Service / per-tool secrets store.
+// Encrypted with AES-256-GCM keyed by `SECRET_ENCRYPTION_KEY` from env.
+// ---------------------------------------------------------------------------
+
+model Secret {
+  id              String   @id @default(cuid())
+  /// `service` (e.g. anthropic_api_key, mailgun_api_key) or `tool` (per-binding).
+  scope           String
+  /// Stable lookup key inside its scope. For `service` this is e.g.
+  /// `anthropic_api_key`; for `tool` this is e.g. `bearer` or `notion_token`.
+  key             String
+  encryptedValue  Bytes
+  iv              Bytes
+  authTag         Bytes
+  /// Set when scope = `tool`; FK to AgentToolBinding.
+  toolBindingId   String?
+  toolBinding     AgentToolBinding? @relation(fields: [toolBindingId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([scope, key, toolBindingId])
+  @@index([toolBindingId])
+}
+
+// ---------------------------------------------------------------------------
+// Agent definition.
+// One row per agent in this deployment. `anthropicAgentId` /
+// `environmentId` are reflected from Anthropic on create/update.
+// ---------------------------------------------------------------------------
+
+model Agent {
+  id                 String   @id @default(cuid())
+  /// URL slug, also the local part of the agent's inbound email by default.
+  slug               String   @unique
+  displayName        String
+  description        String?
+  /// Avatar filename inside `apps/api/src/emails/static/` (rendered in email
+  /// header) — kept simple for v1; UI uploads can come later.
+  avatar             String?
+  /// Optional agent system prompt mirrored locally for the editor; the
+  /// canonical version lives on the Anthropic agent.
+  systemPrompt       String   @default("")
+  /// Anthropic model identifier the published agent should run on
+  /// (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`). Plain string so we can
+  /// add new models without a schema migration.
+  model              String   @default("claude-opus-4-7")
+
+  /// IDs returned by Anthropic. Nullable while the create call is in flight.
+  anthropicAgentId   String?
+  environmentId      String?
+  /// Pinned Anthropic agent version this deployment is currently using.
+  anthropicAgentVersion String?
+
+  emailEnabled       Boolean  @default(false)
+  webEnabled         Boolean  @default(true)
+  /// `everyone` (any deployment user can chat) or `specific` (only users in AgentAccess).
+  accessMode         String   @default("everyone")
+  /// Local part for inbound mail (`<inboundLocalPart>@<MAILGUN_DOMAIN>`).
+  /// Defaults to the slug; admin can override.
+  inboundLocalPart   String   @unique
+
+  createdById        String?
+  createdBy          User?    @relation("AgentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  versions           AgentVersion[]
+  access             AgentAccess[]
+  toolBindings       AgentToolBinding[]
+  skillBindings      AgentSkillBinding[]
+  thirdPartyMcp      AgentThirdPartyMcp[]
+  memoryDocs         MemoryDoc[]
+  conversations      ChatConversation[]
+  emailThreads       EmailThread[]
+  runs               AgentRun[]
+
+  @@index([createdById])
+}
+
+/// Snapshot of every payload we sent to Anthropic for this agent.
+/// Used to correlate runs with the version of the agent that ran them.
+model AgentVersion {
+  id                String   @id @default(cuid())
+  agentId           String
+  agent             Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  /// The version string Anthropic returned (their internal version).
+  anthropicVersion  String?
+  /// JSON snapshot of system + tools + skills + mcp_servers payload we sent.
+  payload           Json
+  createdAt         DateTime @default(now())
+
+  @@index([agentId])
+}
+
+/// Per-agent ACL row. Only consulted when Agent.accessMode = `specific`.
+model AgentAccess {
+  agentId String
+  userId  String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, userId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Tools and skills (org-wide library, attachable to any agent).
+// ---------------------------------------------------------------------------
+
+/// Unified tool catalog. Every agent capability — whether executed by the
+/// agent backend itself (Anthropic's container) or by our own MCP server —
+/// is a `Tool` row. The `runtime` discriminates who runs the code:
+///
+/// - `managed` — runs on the agent backend's compute. For Anthropic this
+///   means a member of `agent_toolset_20260401` (`bash`, `read`, `write`,
+///   `edit`, `glob`, `grep`, `web_fetch`, `web_search`). `key` matches the
+///   tool name in the toolset; there is no handler in this codebase.
+/// - `platform` — runs on our backend via the per-agent `/mcp/<slug>`
+///   server. `key` is the `handlerKey` registered in
+///   `apps/api/src/mcp/platform/index.ts`.
+///
+/// External (user-supplied) MCP servers stay in `AgentThirdPartyMcp` as
+/// per-agent endpoints; they are not catalog entries.
+model Tool {
+  id              String  @id @default(cuid())
+  /// Stable identifier. For `managed`: the toolset member name (`bash`,
+  /// `read`, …). For `platform`: the `PlatformHandler.key`.
+  key             String  @unique
+  /// Display name shown in the UI catalog (e.g. "Workspace memory").
+  name            String
+  /// One-paragraph description rendered in the tool picker / catalog page.
+  description     String
+  /// `managed` or `platform` — see model doc-comment.
+  runtime         String  @default("platform")
+  /// JSON shape describing per-binding configuration (rendered as a form
+  /// in the agent edit page). Empty object when there's nothing to configure.
+  configSchema    Json    @default("{}")
+  /// Whether this tool needs at least one Secret value per binding.
+  requiresSecrets Boolean @default(false)
+  /// Marks tools that no longer back a live capability (e.g. retired
+  /// Anthropic toolset member). Existing bindings keep working until an
+  /// admin migrates; the picker hides deprecated rows.
+  deprecated      Boolean @default(false)
+  bindings        AgentToolBinding[]
+  createdAt       DateTime @default(now())
+}
+
+/// Binding row joining an Agent to a `Tool` (any runtime). Per-agent
+/// overrides live in `configJson`; per-binding secret rows live in Secret
+/// with `toolBindingId` set.
+model AgentToolBinding {
+  id         String   @id @default(cuid())
+  agentId    String
+  toolId     String
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tool       Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  configJson Json     @default("{}")
+  secrets    Secret[]
+  createdAt  DateTime @default(now())
+
+  @@unique([agentId, toolId])
+  @@index([toolId])
+}
+
+/// User-provided third-party MCP server URL (e.g. an external Notion MCP).
+/// Sent to Anthropic on the agent's `mcp_servers` list; Anthropic's sandbox
+/// hits it directly — this backend does not proxy traffic.
+model AgentThirdPartyMcp {
+  id            String  @id @default(cuid())
+  agentId       String
+  /// Human-friendly label shown in the UI.
+  label         String
+  serverUrl     String
+  /// Optional bearer token stored in Secret (FK by toolBindingId is awkward
+  /// here — we just store it inline encrypted for v1).
+  bearerCipher  Bytes?
+  bearerIv      Bytes?
+  bearerTag     Bytes?
+  agent         Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@index([agentId])
+}
+
+/// Skill bundle uploaded by an admin. Reflected to Anthropic via the
+/// Skills API; the local `bundleStorageRef` points to the on-disk zip
+/// kept for re-uploading (e.g. when an agent is migrated).
+model Skill {
+  id                     String   @id @default(cuid())
+  name                   String   @unique
+  description            String?
+  /// Local relative path inside `apps/api/data/skills/` of the bundle zip.
+  bundleStorageRef       String
+  anthropicSkillId       String?
+  anthropicSkillVersion  String?
+  bindings               AgentSkillBinding[]
+  createdAt              DateTime @default(now())
+}
+
+/// Many-to-many between Agent and Skill.
+model AgentSkillBinding {
+  agentId   String
+  skillId   String
+  agent     Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill     Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([agentId, skillId])
+  @@index([skillId])
+}
+
+// ---------------------------------------------------------------------------
+// Generic memory tool storage. JSON-doc collections scoped to one agent.
+// ---------------------------------------------------------------------------
+
+model MemoryDoc {
+  id         String   @id @default(cuid())
+  agentId    String
+  /// Logical collection name (e.g. `customer_notes`).
+  collection String
+  /// Free-form JSON document.
+  doc        Json
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([agentId, collection])
+}
+
+// ---------------------------------------------------------------------------
+// Web chat persistence (separate from email).
+// ---------------------------------------------------------------------------
+
+model ChatConversation {
+  id                  String   @id @default(cuid())
+  agentId             String
+  userId              String
+  /// Anthropic session id; rotated when attachments force a new session.
+  anthropicSessionId  String?  @unique
+  title               String   @default("New chat")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  agent               Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages            ChatMessage[]
+  runs                AgentRun[]
+
+  @@index([agentId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  /// `user` | `assistant` | `system`.
+  role            String
+  /// Plain-text or markdown content. For tool events we persist a marker row
+  /// only; the canonical event log is RunEvent.
+  content         String
+  /// Optional FK back to the run that produced this message.
+  runId           String?
+  createdAt       DateTime @default(now())
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments     ChatAttachment[]
+
+  @@index([conversationId])
+}
+
+/// Files uploaded by the user inside a chat conversation. Persisted as
+/// bytes; uploaded to Anthropic Files API on the next session create.
+model ChatAttachment {
+  id              String   @id @default(cuid())
+  chatMessageId   String
+  filename        String
+  contentType     String
+  sizeBytes       Int
+  bytes           Bytes
+  anthropicFileId String?
+  mountPath       String?
+  createdAt       DateTime @default(now())
+  chatMessage     ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+
+  @@index([chatMessageId])
+}
+
+// ---------------------------------------------------------------------------
+// Run lifecycle (shared between email + chat surfaces).
+// ---------------------------------------------------------------------------
+
+model AgentRun {
+  id              String   @id @default(cuid())
+  agentId         String
+  /// `email` | `chat`.
+  surface         String
+  /// Set when surface = `email`.
+  threadId        String?
+  /// Set when surface = `chat`.
+  conversationId  String?
+  /// Anthropic session this run executed against.
+  sessionId       String
+  /// `pending` | `running` | `succeeded` | `failed`.
+  status          String   @default("pending")
+  error           String?
+  /// Final aggregated assistant text. Populated for both surfaces.
+  output          String?
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  agent           Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  thread          EmailThread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  conversation    ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events          RunEvent[]
+  attachments     AgentAttachment[]
+
+  @@index([agentId])
+  @@index([threadId])
+  @@index([conversationId])
+  @@index([status])
+}
+
+/// Append-only event log per AgentRun. Powers SSE Last-Event-ID replay
+/// and durable web-chat reconnection.
+model RunEvent {
+  id        BigInt   @id @default(autoincrement())
+  runId     String
+  /// Monotonic per-run sequence; the SSE handler pages by `seq > Last-Event-ID`.
+  seq       Int
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
+}
+
+/// Files the agent produced during a run and uploaded back via the signed
+/// `POST /runs/:runId/attachments` endpoint. Attached to outbound email or
+/// surfaced in chat.
+model AgentAttachment {
+  id          String   @id @default(cuid())
+  runId       String
+  filename    String
+  contentType String
+  sizeBytes   Int
+  bytes       Bytes
+  createdAt   DateTime @default(now())
+  run         AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+// ---------------------------------------------------------------------------
+// Inbound email pipeline (rebuilt with agentId FK).
+// ---------------------------------------------------------------------------
+
+model EmailThread {
+  id             String   @id @default(cuid())
+  agentId        String
+  userEmail      String
+  inboundAddress String?
+  subject        String
+  rootMessageId  String   @unique
+  /// Anthropic session id this thread is currently bound to.
+  sessionId      String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages       EmailMessage[]
+  runs           AgentRun[]
+
+  @@index([agentId])
+  @@index([userEmail])
+}
+
+model EmailMessage {
+  id          String   @id @default(cuid())
+  threadId    String
+  messageId   String   @unique
+  inReplyTo   String?
+  /// `inbound` | `outbound`.
+  direction   String
+  subject     String
+  body        String
+  createdAt   DateTime @default(now())
+  thread      EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments EmailAttachment[]
+
+  @@index([inReplyTo])
+  @@index([threadId])
+}
+
+model EmailAttachment {
+  id              String   @id @default(cuid())
+  emailMessageId  String
+  filename        String
+  contentType     String
+  sizeBytes       Int
+  bytes           Bytes
+  anthropicFileId String?
+  mountPath       String?
+  createdAt       DateTime @default(now())
+  emailMessage    EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+
+  @@index([emailMessageId])
+}

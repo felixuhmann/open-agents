@@ -1,0 +1,56 @@
+{
+  "name": "@open-agents/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hono backend for the open-agents platform.",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/emails && cp -r src/emails/static dist/emails/",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "check": "pnpm typecheck && pnpm lint",
+    "email": "email dev --dir src/emails --port 3001"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
+    "@open-agents/db": "workspace:*",
+    "@open-agents/types": "workspace:*",
+    "@hono/node-server": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.7",
+    "better-auth": "^1.4.6",
+    "form-data": "^4.0.5",
+    "hono": "^4.12.15",
+    "mailgun.js": "^13.0.0",
+    "pg": "^8.13.1",
+    "pg-boss": "^12.16.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "yauzl": "^3.2.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@open-agents/tsconfig": "workspace:*",
+    "@eslint/js": "^10.0.1",
+    "@react-email/ui": "^6.0.0",
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/yauzl": "^2.10.3",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "react-email": "^6.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.0"
+  }
+}

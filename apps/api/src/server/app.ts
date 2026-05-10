@@ -1,0 +1,82 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { attachUser } from "../auth/middleware.js";
+import { config } from "../config.js";
+import { agentsRoutes } from "../routes/api/agents.js";
+import { conversationsRoutes } from "../routes/api/conversations.js";
+import { runsRoutes } from "../routes/api/runs.js";
+import { secretsRoutes } from "../routes/api/secrets.js";
+import { settingsRoutes } from "../routes/api/settings.js";
+import { skillsRoutes } from "../routes/api/skills.js";
+import { toolsRoutes } from "../routes/api/tools.js";
+import { usersRoutes } from "../routes/api/users.js";
+import { authRoutes } from "../routes/auth.js";
+import { healthRoutes } from "../routes/health.js";
+import { mailgunRoutes } from "../routes/mailgun.js";
+import { mcpRoutes } from "../routes/mcp.js";
+import {
+  APP_ROUTE_PREFIXES,
+  AUTH_PREFIX,
+  HEALTH_PREFIX,
+  MAILGUN_PREFIX,
+  MCP_PREFIX,
+  SETUP_PREFIX,
+  STATIC_PREFIX,
+} from "../routes/prefixes.js";
+import { setupRoutes } from "../routes/setup.js";
+import { staticRoutes } from "../routes/static.js";
+import { uploadRoutes } from "../routes/upload.js";
+import { applyRequestLogMiddleware } from "./middleware/requestLog.js";
+import type { AppVariables } from "./types.js";
+
+/**
+ * Construct the Hono app. Order matters:
+ *
+ * 1. Request-log middleware (sets reqId before any handler logs).
+ * 2. CORS so the SPA on `WEB_BASE_URL` can call the API with credentials.
+ * 3. attachUser middleware globally so handlers can `requireUser(c)`.
+ * 4. Mount each sub-router at its prefix.
+ *
+ * The Mailgun + MCP webhooks live alongside the API but are
+ * machine-authenticated (HMAC + bearer respectively) and don't need
+ * cookie-based auth — `attachUser` is harmless on those paths.
+ */
+export function buildApp(): Hono<{ Variables: AppVariables }> {
+  const app = new Hono<{ Variables: AppVariables }>();
+
+  applyRequestLogMiddleware(app, APP_ROUTE_PREFIXES);
+
+  app.use(
+    "*",
+    cors({
+      origin: [config.WEB_BASE_URL, config.PUBLIC_BASE_URL],
+      credentials: true,
+      allowHeaders: ["Content-Type", "Authorization", "Last-Event-ID"],
+      exposeHeaders: ["Last-Event-ID"],
+      allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+      maxAge: 600,
+    }),
+  );
+
+  app.use("*", attachUser());
+
+  app.route(AUTH_PREFIX, authRoutes);
+
+  app.route("/api/agents", agentsRoutes);
+  app.route("/api/conversations", conversationsRoutes);
+  app.route("/api/runs", runsRoutes);
+  app.route("/api/secrets", secretsRoutes);
+  app.route("/api/settings", settingsRoutes);
+  app.route("/api/skills", skillsRoutes);
+  app.route("/api/tools", toolsRoutes);
+  app.route("/api/users", usersRoutes);
+
+  app.route(SETUP_PREFIX, setupRoutes);
+  app.route(HEALTH_PREFIX, healthRoutes);
+  app.route(MAILGUN_PREFIX, mailgunRoutes);
+  app.route(MCP_PREFIX, mcpRoutes);
+  app.route(STATIC_PREFIX, staticRoutes);
+  app.route("/", uploadRoutes);
+
+  return app;
+}

@@ -1,0 +1,13 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.DS_Store
+
+# Turborepo local cache (per-workspace, regenerated on every run).
+.turbo
+
+# Generated Prisma client (re-emitted by `pnpm db:generate` / `postinstall`).
+packages/db/generated
+packages/db/dist

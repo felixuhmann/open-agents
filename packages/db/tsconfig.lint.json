@@ -1,0 +1,9 @@
+{
+  "extends": "@open-agents/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["prisma.config.ts"],
+  "exclude": ["dist", "node_modules", "generated"]
+}
