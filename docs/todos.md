@@ -53,3 +53,6 @@ we want to support different languages, at least english and german for now. con
 ## s3 storage compatibility
 right now we write everything to disk. this is not acceptable, as a admin i want to be able
 to have a s3 compatible integration for all the stuff that needs persistent storage in the app (images, skills, other uploads, ...)
+
+## unify ui
+email ui and email link ui design is different from the main web app. unify the styling across everything, make it consistent.
