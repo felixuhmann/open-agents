@@ -1,6 +1,6 @@
 import { File } from "node:buffer";
 import { Hono } from "hono";
-import { requireUser } from "../auth/middleware.js";
+import { canOperateAgents, requireUser } from "../auth/middleware.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import type { AppVariables } from "../server/types.js";
@@ -120,7 +120,7 @@ uploadRoutes.post("/conversations/:conversationId/attachments", async (c) => {
     where: { id: conversationId },
   });
   if (!conv) return c.text("unknown conversation", 404);
-  if (conv.userId !== user.id && user.role !== "admin") {
+  if (conv.userId !== user.id && !canOperateAgents(user)) {
     return c.text("forbidden", 403);
   }
 

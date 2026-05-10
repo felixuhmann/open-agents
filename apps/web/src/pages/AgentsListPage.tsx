@@ -12,7 +12,7 @@ import {
   RobotIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { avatarSrc, useAgents, useCurrentUser } from "@/lib/queries";
+import { avatarSrc, canOperateAgents, useAgents, useCurrentUser } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,7 @@ import { Textarea } from "@/components/ui/textarea";
 export default function AgentsListPage() {
   const agents = useAgents();
   const user = useCurrentUser();
-  const isAdmin = user.data?.role === "admin";
+  const canManageAgents = canOperateAgents(user.data?.role);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -86,7 +86,7 @@ export default function AgentsListPage() {
         title="Agents"
         description="One row per agent. Editing happens here; publish pushes the definition to Anthropic."
         actions={
-          isAdmin ? (
+          canManageAgents ? (
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -113,12 +113,12 @@ export default function AgentsListPage() {
             </EmptyMedia>
             <EmptyTitle>No agents yet</EmptyTitle>
             <EmptyDescription>
-              {isAdmin
+              {canManageAgents
                 ? "Click 'New agent' to bootstrap your first one."
                 : "Ask an admin to grant you access to an agent."}
             </EmptyDescription>
           </EmptyHeader>
-          {isAdmin ? (
+          {canManageAgents ? (
             <EmptyContent>
               <Button onClick={() => setOpen(true)}>
                 <PlusIcon data-icon="inline-start" />
@@ -209,7 +209,7 @@ export default function AgentsListPage() {
                             Open chat
                           </Link>
                         </DropdownMenuItem>
-                        {isAdmin ? (
+                        {canManageAgents ? (
                           <DropdownMenuItem asChild>
                             <Link to={`/agents/${a.slug}/edit`}>
                               <PencilSimpleIcon data-icon="inline-start" />

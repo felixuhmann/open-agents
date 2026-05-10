@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { UserRole } from "@open-agents/types";
 import { createUserWithPassword } from "../../auth/index.js";
 import { HttpError, requireAdmin } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
@@ -12,12 +13,12 @@ const CreateUserBody = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(120).optional(),
   password: z.string().min(8).max(200),
-  role: z.enum(["admin", "member"]).default("member"),
+  role: UserRole.default("member"),
 });
 
 const UpdateUserBody = z.object({
   name: z.string().min(1).max(120).optional(),
-  role: z.enum(["admin", "member"]).optional(),
+  role: UserRole.optional(),
 });
 
 usersRoutes.get("/", async (c) => {

@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PlusIcon, ShieldCheckIcon, TrashIcon, UsersIcon } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { useCurrentUser, useUsers } from "@/lib/queries";
+import { useCurrentUser, useUsers, type UserRole } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +62,7 @@ export default function UsersSettingsPage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
+  const [role, setRole] = useState<UserRole>("member");
 
   const create = useMutation({
     mutationFn: () =>
@@ -85,7 +85,7 @@ export default function UsersSettingsPage() {
   });
 
   const updateRole = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: "admin" | "member" }) =>
+    mutationFn: ({ id, role }: { id: string; role: UserRole }) =>
       api(`/api/users/${id}`, { method: "PATCH", json: { role } }),
     onSuccess: async () => {
       toast.success("Role updated");
@@ -175,22 +175,21 @@ export default function UsersSettingsPage() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="user-role">Role</FieldLabel>
-                  <Select
-                    value={role}
-                    onValueChange={(v) => setRole(v as "admin" | "member")}
-                  >
+                  <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
                     <SelectTrigger id="user-role" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
                         <SelectItem value="member">Member</SelectItem>
+                        <SelectItem value="contributor">Contributor</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
                   <FieldDescription>
-                    Admins manage the deployment, secrets, and other users.
+                    Contributors can build agents and triage issues; admins also manage
+                    deployment settings, secrets, and users.
                   </FieldDescription>
                 </Field>
               </div>
@@ -222,7 +221,7 @@ export default function UsersSettingsPage() {
             </EmptyMedia>
             <EmptyTitle>No users yet</EmptyTitle>
             <EmptyDescription>
-              Create the first member or admin above to get started.
+              Create the first member, contributor, or admin above to get started.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -273,7 +272,7 @@ export default function UsersSettingsPage() {
                         onValueChange={(v) =>
                           updateRole.mutate({
                             id: u.id,
-                            role: v as "admin" | "member",
+                            role: v as UserRole,
                           })
                         }
                       >
@@ -283,6 +282,7 @@ export default function UsersSettingsPage() {
                         <SelectContent>
                           <SelectGroup>
                             <SelectItem value="member">member</SelectItem>
+                            <SelectItem value="contributor">contributor</SelectItem>
                             <SelectItem value="admin">
                               <ShieldCheckIcon data-icon="inline-start" />
                               admin

@@ -3,6 +3,11 @@ import type { AgentSummaryDto } from "@open-agents/types";
 import { api } from "./api";
 
 export type SetupStatus = { complete: boolean; userCount: number };
+export type UserRole = "admin" | "contributor" | "member";
+
+export function canOperateAgents(role: UserRole | null | undefined): boolean {
+  return role === "admin" || role === "contributor";
+}
 
 export function useSetupStatus() {
   return useQuery({
@@ -17,7 +22,7 @@ export type CurrentUser = {
   id: string;
   email: string;
   name: string | null;
-  role: "admin" | "member";
+  role: UserRole;
 };
 
 export function useCurrentUser() {
@@ -103,7 +108,7 @@ export type ProfileSummary = {
     id: string;
     email: string;
     name: string | null;
-    role: "admin" | "member";
+    role: UserRole;
     createdAt: string | null;
     updatedAt: string | null;
   };
@@ -244,7 +249,7 @@ export type UserRow = {
   id: string;
   email: string;
   name: string | null;
-  role: "admin" | "member";
+  role: UserRole;
   banned: boolean;
   createdAt: string;
 };

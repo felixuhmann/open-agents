@@ -6,7 +6,12 @@ import {
   EnvelopeSimpleIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
-import { useCurrentUser, useIssues, type IssueStatus } from "@/lib/queries";
+import {
+  canOperateAgents,
+  useCurrentUser,
+  useIssues,
+  type IssueStatus,
+} from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { avatarSrc } from "@/lib/queries";
@@ -36,7 +41,7 @@ export default function IssuesListPage() {
   const [filter, setFilter] = useState<StatusFilter>("open");
   const issues = useIssues(filter === "all" ? undefined : filter);
 
-  if (me.data && me.data.role !== "admin") {
+  if (me.data && !canOperateAgents(me.data.role)) {
     return <Navigate to="/" replace />;
   }
 

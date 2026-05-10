@@ -56,9 +56,6 @@ and should not bleed into this codebase.
 Out of scope and likely to stay that way. Different surfaces, different
 permission models, ambiguous threading semantics.
 
-## profile page
-where users can reset their password, see how many sessions they made, etc
-
 ## new contributor role
 currently we only have users and admins. we need a third role, someone wo is not responsible for managing the deployment, but still can create and edit agents and see usage statistics and handle error reports.
 

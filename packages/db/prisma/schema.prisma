@@ -30,7 +30,7 @@ model User {
   name            String?
   emailVerified   Boolean   @default(false)
   image           String?
-  /// Application role: `admin` or `member`.
+  /// Application role: `admin`, `contributor`, or `member`.
   role            String    @default("member")
   /// `false` while the admin-created account hasn't yet set a password.
   banned          Boolean   @default(false)

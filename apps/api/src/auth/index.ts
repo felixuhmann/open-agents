@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { hashPassword } from "better-auth/crypto";
+import type { UserRole } from "@open-agents/types";
 import { config } from "../config.js";
 import { prisma } from "../db.js";
 
@@ -65,7 +66,7 @@ export async function createUserWithPassword(input: {
   email: string;
   name: string;
   password: string;
-  role?: "admin" | "member";
+  role?: UserRole;
 }): Promise<{ id: string; email: string; name: string | null; role: string }> {
   const normalizedEmail = input.email.trim().toLowerCase();
   const passwordHash = await hashPassword(input.password);

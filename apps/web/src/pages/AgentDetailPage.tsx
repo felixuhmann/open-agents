@@ -7,7 +7,7 @@ import {
   PencilSimpleIcon,
   WarningOctagonIcon,
 } from "@phosphor-icons/react";
-import { avatarSrc, useAgent, useCurrentUser } from "@/lib/queries";
+import { avatarSrc, canOperateAgents, useAgent, useCurrentUser } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,7 @@ export default function AgentDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const agent = useAgent(slug);
   const user = useCurrentUser();
-  const isAdmin = user.data?.role === "admin";
+  const canManageAgents = canOperateAgents(user.data?.role);
 
   if (agent.isLoading) {
     return (
@@ -98,7 +98,7 @@ export default function AgentDetailPage() {
                 History
               </Link>
             </Button>
-            {isAdmin ? (
+            {canManageAgents ? (
               <Button asChild variant="outline">
                 <Link to={`/agents/${a.slug}/edit`}>
                   <PencilSimpleIcon data-icon="inline-start" />

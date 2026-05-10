@@ -56,7 +56,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { authClient } from "@/lib/auth";
-import type { CurrentUser } from "@/lib/queries";
+import { canOperateAgents, type CurrentUser } from "@/lib/queries";
 
 type NavItem = {
   to: string;
@@ -107,6 +107,7 @@ export function Layout({ user, children }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = user.role === "admin";
+  const canManageAgents = canOperateAgents(user.role);
   const initials = (user.name ?? user.email).slice(0, 2).toUpperCase();
   const crumbs = buildCrumbs(location.pathname);
 
@@ -144,13 +145,18 @@ export function Layout({ user, children }: Props) {
         </SidebarHeader>
         <SidebarContent>
           <NavGroup label="Workspace" items={NAV_BASE} />
-          {isAdmin ? (
+          {canManageAgents ? (
             <>
               <NavGroup label="Library" items={NAV_LIBRARY} />
               <NavGroup label="Review" items={NAV_REVIEW} />
-              <NavGroup label="Settings" items={NAV_SETTINGS} />
+              <NavGroup
+                label="Settings"
+                items={isAdmin ? NAV_SETTINGS : NAV_SETTINGS.slice(0, 1)}
+              />
             </>
-          ) : null}
+          ) : (
+            <NavGroup label="Settings" items={NAV_SETTINGS.slice(0, 1)} />
+          )}
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
@@ -195,7 +201,7 @@ export function Layout({ user, children }: Props) {
                   </DropdownMenuItem>
                   <DropdownMenuItem disabled>
                     <UserCircleIcon data-icon="inline-start" />
-                    {user.role === "admin" ? "Admin account" : "Member account"}
+                    {roleLabel(user.role)} account
                   </DropdownMenuItem>
                   {isAdmin ? (
                     <DropdownMenuItem asChild>
@@ -248,6 +254,10 @@ export function Layout({ user, children }: Props) {
       </SidebarInset>
     </SidebarProvider>
   );
+}
+
+function roleLabel(role: CurrentUser["role"]): string {
+  return role === "admin" ? "Admin" : role === "contributor" ? "Contributor" : "Member";
 }
 
 function NavGroup({ label, items }: { label: string; items: Array<NavItem> }) {

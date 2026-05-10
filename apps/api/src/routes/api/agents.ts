@@ -12,8 +12,9 @@ import {
 } from "../../agents/service.js";
 import {
   HttpError,
-  requireAdmin,
+  canOperateAgents,
   requireAgentAccess,
+  requireAgentOperator,
   requireUser,
 } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
@@ -94,18 +95,17 @@ function toDto(agent: Awaited<ReturnType<typeof listAgents>>[number]) {
 agentsRoutes.get("/", async (c) => {
   const user = requireUser(c);
   const all = await listAgents();
-  const visible =
-    user.role === "admin"
-      ? all
-      : all.filter(
-          (a) =>
-            a.accessMode === "everyone" || a.access.some((acc) => acc.userId === user.id),
-        );
+  const visible = canOperateAgents(user)
+    ? all
+    : all.filter(
+        (a) =>
+          a.accessMode === "everyone" || a.access.some((acc) => acc.userId === user.id),
+      );
   return c.json({ agents: visible.map(toSummary) });
 });
 
 agentsRoutes.post("/", async (c) => {
-  const user = requireAdmin(c);
+  const user = requireAgentOperator(c);
   const body = CreateAgentInput.parse(await c.req.json());
   const existing = await getAgentBySlug(body.slug);
   if (existing) throw new HttpError(409, "slug already exists");
@@ -128,7 +128,7 @@ agentsRoutes.get("/:slug", async (c) => {
 });
 
 agentsRoutes.patch("/:slug", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
@@ -141,7 +141,7 @@ agentsRoutes.patch("/:slug", async (c) => {
 });
 
 agentsRoutes.post("/:slug/publish", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
@@ -150,7 +150,7 @@ agentsRoutes.post("/:slug/publish", async (c) => {
 });
 
 agentsRoutes.delete("/:slug", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
@@ -168,7 +168,7 @@ agentsRoutes.delete("/:slug", async (c) => {
  * accumulate orphans.
  */
 agentsRoutes.post("/:slug/avatar", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
@@ -208,7 +208,7 @@ agentsRoutes.post("/:slug/avatar", async (c) => {
 });
 
 agentsRoutes.delete("/:slug/avatar", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
@@ -224,7 +224,7 @@ agentsRoutes.delete("/:slug/avatar", async (c) => {
  * agent edit page to show who has access.
  */
 agentsRoutes.get("/:slug/access", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const slug = c.req.param("slug");
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");

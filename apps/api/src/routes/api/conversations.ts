@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { getAgentBySlug } from "../../agents/service.js";
-import { HttpError, requireAgentAccess, requireUser } from "../../auth/middleware.js";
+import {
+  HttpError,
+  canOperateAgents,
+  requireAgentAccess,
+  requireUser,
+} from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 import { enqueueChatTurn } from "../../services/chat.js";
@@ -97,7 +102,7 @@ conversationsRoutes.get("/:id", async (c) => {
     },
   });
   if (!conv) throw new HttpError(404, "conversation not found");
-  if (conv.userId !== user.id && user.role !== "admin") {
+  if (conv.userId !== user.id && !canOperateAgents(user)) {
     throw new HttpError(403, "not your conversation");
   }
   return c.json({
@@ -129,7 +134,7 @@ conversationsRoutes.post("/:id/messages", async (c) => {
     include: { agent: true },
   });
   if (!conv) throw new HttpError(404, "conversation not found");
-  if (conv.userId !== user.id && user.role !== "admin") {
+  if (conv.userId !== user.id && !canOperateAgents(user)) {
     throw new HttpError(403, "not your conversation");
   }
   if (!conv.agent.webEnabled) throw new HttpError(400, "web chat disabled");

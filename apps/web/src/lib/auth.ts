@@ -1,4 +1,5 @@
 import { createAuthClient } from "better-auth/react";
+import type { UserRole } from "./queries";
 
 /**
  * better-auth client. Uses same-origin cookies. The base URL falls back to
@@ -13,5 +14,5 @@ export type SessionUser = {
   id: string;
   email: string;
   name: string | null;
-  role: "admin" | "member";
+  role: UserRole;
 };

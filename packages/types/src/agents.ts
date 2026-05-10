@@ -9,7 +9,7 @@ export type RunSurface = z.infer<typeof RunSurface>;
 export const RunStatus = z.enum(["pending", "running", "succeeded", "failed"]);
 export type RunStatus = z.infer<typeof RunStatus>;
 
-export const UserRole = z.enum(["admin", "member"]);
+export const UserRole = z.enum(["admin", "contributor", "member"]);
 export type UserRole = z.infer<typeof UserRole>;
 
 /**

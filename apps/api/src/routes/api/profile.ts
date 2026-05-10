@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { requireUser } from "../../auth/middleware.js";
+import { canOperateAgents, requireUser } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 
@@ -19,7 +19,7 @@ profileRoutes.get("/", async (c) => {
       prisma.agentRun.count({
         where: { conversation: { userId: user.id } },
       }),
-      user.role === "admin"
+      canOperateAgents(user)
         ? prisma.agent.count()
         : prisma.agent.count({
             where: {

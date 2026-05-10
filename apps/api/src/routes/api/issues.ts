@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { HttpError, requireAdmin, requireUser } from "../../auth/middleware.js";
+import {
+  HttpError,
+  canOperateAgents,
+  requireAgentOperator,
+  requireUser,
+} from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 import {
@@ -34,7 +39,7 @@ issuesRoutes.post("/", async (c) => {
     select: { userId: true },
   });
   if (!conv) throw new HttpError(404, "conversation not found");
-  if (conv.userId !== user.id && user.role !== "admin") {
+  if (conv.userId !== user.id && !canOperateAgents(user)) {
     throw new HttpError(403, "not your conversation");
   }
   const created = await createChatIssue({
@@ -47,7 +52,7 @@ issuesRoutes.post("/", async (c) => {
 });
 
 issuesRoutes.get("/", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const statusParam = c.req.query("status");
   const status =
     statusParam === "open" || statusParam === "resolved" ? statusParam : undefined;
@@ -56,14 +61,14 @@ issuesRoutes.get("/", async (c) => {
 });
 
 issuesRoutes.get("/:id", async (c) => {
-  requireAdmin(c);
+  requireAgentOperator(c);
   const id = c.req.param("id");
   const detail = await getIssueDetail(id);
   return c.json(detail);
 });
 
 issuesRoutes.patch("/:id", async (c) => {
-  const user = requireAdmin(c);
+  const user = requireAgentOperator(c);
   const id = c.req.param("id");
   const body = PatchIssueBody.parse(await c.req.json());
   await setIssueStatus({ id, status: body.status, resolverUserId: user.id });

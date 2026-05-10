@@ -1,7 +1,12 @@
 import type { RunEventEnvelope } from "@open-agents/types";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { HttpError, requireAgentAccess, requireUser } from "../../auth/middleware.js";
+import {
+  HttpError,
+  canOperateAgents,
+  requireAgentAccess,
+  requireUser,
+} from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import { log } from "../../log.js";
 import { isTerminalEvent, readBacklog, subscribe } from "../../runs/events.js";
@@ -26,11 +31,11 @@ async function resolveRunForCaller(c: Parameters<typeof requireUser>[0], runId: 
       select: { userId: true },
     });
     if (!conv) throw new HttpError(404, "run not found");
-    if (conv.userId !== user.id && user.role !== "admin") {
+    if (conv.userId !== user.id && !canOperateAgents(user)) {
       throw new HttpError(403, "not your run");
     }
   } else {
-    if (user.role !== "admin") throw new HttpError(403, "admin role required");
+    if (!canOperateAgents(user)) throw new HttpError(403, "agent operator role required");
   }
   return { run, user };
 }

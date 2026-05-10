@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import type { UserRole } from "@open-agents/types";
 import { prisma } from "../db.js";
 import type { AppVariables } from "../server/types.js";
 import { auth } from "./index.js";
@@ -7,7 +8,7 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string | null;
-  role: "admin" | "member";
+  role: UserRole;
 };
 
 /** @deprecated use AppVariables from server/types.js */
@@ -31,7 +32,7 @@ export function attachUser(): MiddlewareHandler<{ Variables: AppVariables }> {
             id: u.id,
             email: u.email,
             name: u.name,
-            role: u.role === "admin" ? "admin" : "member",
+            role: normalizeRole(u.role),
           });
         } else {
           c.set("user", null);
@@ -62,14 +63,26 @@ export function requireAdmin(c: AppCtx): AuthUser {
   return u;
 }
 
+export function requireAgentOperator(c: AppCtx): AuthUser {
+  const u = requireUser(c);
+  if (!canOperateAgents(u)) {
+    throw new HttpError(403, "agent operator role required");
+  }
+  return u;
+}
+
+export function canOperateAgents(u: AuthUser): boolean {
+  return u.role === "admin" || u.role === "contributor";
+}
+
 /**
- * Authorize that the current user can use a given agent. `admin` always
- * passes; `member` passes when the agent is org-wide OR the user has an
- * AgentAccess row.
+ * Authorize that the current user can use a given agent. Admins and
+ * contributors always pass; members pass when the agent is org-wide OR
+ * the user has an AgentAccess row.
  */
 export async function requireAgentAccess(c: AppCtx, agentId: string): Promise<AuthUser> {
   const u = requireUser(c);
-  if (u.role === "admin") return u;
+  if (canOperateAgents(u)) return u;
   const agent = await prisma.agent.findUnique({
     where: { id: agentId },
     select: { accessMode: true, access: { where: { userId: u.id } } },
@@ -78,6 +91,10 @@ export async function requireAgentAccess(c: AppCtx, agentId: string): Promise<Au
   if (agent.accessMode === "everyone") return u;
   if (agent.access.length > 0) return u;
   throw new HttpError(403, "no access to this agent");
+}
+
+function normalizeRole(role: string): UserRole {
+  return role === "admin" || role === "contributor" ? role : "member";
 }
 
 export class HttpError extends Error {

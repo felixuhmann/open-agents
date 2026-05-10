@@ -19,6 +19,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import {
   avatarSrc,
+  canOperateAgents,
   useCurrentUser,
   useIssue,
   type IssueDetail,
@@ -78,7 +79,7 @@ export default function IssueDetailPage() {
       }),
   });
 
-  if (me.data && me.data.role !== "admin") {
+  if (me.data && !canOperateAgents(me.data.role)) {
     return <Navigate to="/" replace />;
   }
 
