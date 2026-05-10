@@ -80,6 +80,7 @@ const NAV_REVIEW: Array<NavItem> = [
 ];
 
 const NAV_SETTINGS: Array<NavItem> = [
+  { to: "/settings/profile", label: "Profile", icon: UserCircleIcon },
   { to: "/settings/secrets", label: "Secrets", icon: KeyIcon },
   { to: "/settings/users", label: "Users", icon: UsersIcon },
   { to: "/settings/general", label: "General", icon: SlidersIcon },
@@ -91,6 +92,7 @@ const PATH_LABELS: Record<string, string> = {
   "/library/tools": "Tools",
   "/library/skills": "Skills",
   "/issues": "Issues",
+  "/settings/profile": "Profile",
   "/settings/secrets": "Secrets",
   "/settings/users": "Users",
   "/settings/general": "General",
@@ -185,9 +187,15 @@ export function Layout({ user, children }: Props) {
                     <span className="text-xs text-muted-foreground">{user.email}</span>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings/profile">
+                      <UserCircleIcon data-icon="inline-start" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem disabled>
                     <UserCircleIcon data-icon="inline-start" />
-                    Profile (coming soon)
+                    {user.role === "admin" ? "Admin account" : "Member account"}
                   </DropdownMenuItem>
                   {isAdmin ? (
                     <DropdownMenuItem asChild>

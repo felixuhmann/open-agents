@@ -28,6 +28,7 @@ const IssueDetailPage = lazy(() => import("./pages/IssueDetailPage"));
 const SecretsSettingsPage = lazy(() => import("./pages/SecretsSettingsPage"));
 const UsersSettingsPage = lazy(() => import("./pages/UsersSettingsPage"));
 const GeneralSettingsPage = lazy(() => import("./pages/GeneralSettingsPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 
 function ProtectedRoutes() {
   const user = useCurrentUser();
@@ -57,6 +58,7 @@ function ProtectedRoutes() {
           <Route path="/issues" element={<IssuesListPage />} />
           <Route path="/issues/:id" element={<IssueDetailPage />} />
           <Route path="/settings/secrets" element={<SecretsSettingsPage />} />
+          <Route path="/settings/profile" element={<ProfilePage />} />
           <Route path="/settings/users" element={<UsersSettingsPage />} />
           <Route path="/settings/general" element={<GeneralSettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

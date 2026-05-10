@@ -35,6 +35,97 @@ export function useCurrentUser() {
   });
 }
 
+export type AuthSessionInfo = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+};
+
+export function useAuthSessions() {
+  return useQuery({
+    queryKey: ["auth", "sessions"],
+    queryFn: async (): Promise<AuthSessionInfo[]> => {
+      const r = await fetch("/api/auth/list-sessions", {
+        credentials: "include",
+      });
+      if (!r.ok) {
+        throw new Error("Failed to load sessions");
+      }
+      const body = (await r.json()) as Array<{
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        expiresAt: string;
+        ipAddress?: string | null;
+        userAgent?: string | null;
+      }>;
+      return body.map((session) => ({
+        id: session.id,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        expiresAt: session.expiresAt,
+        ipAddress: session.ipAddress ?? null,
+        userAgent: session.userAgent ?? null,
+      }));
+    },
+  });
+}
+
+export type CurrentSessionInfo = {
+  session: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    expiresAt: string;
+  };
+};
+
+export function useCurrentSession() {
+  return useQuery({
+    queryKey: ["auth", "session-detail"],
+    queryFn: async (): Promise<CurrentSessionInfo | null> => {
+      const r = await fetch("/api/auth/get-session", {
+        credentials: "include",
+      });
+      if (!r.ok) return null;
+      const body = (await r.json()) as CurrentSessionInfo | null;
+      return body;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export type ProfileSummary = {
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: "admin" | "member";
+    createdAt: string | null;
+    updatedAt: string | null;
+  };
+  stats: {
+    authSessionCount: number;
+    conversationCount: number;
+    runCount: number;
+    accessibleAgentCount: number;
+  };
+  activity: {
+    lastConversationAt: string | null;
+    lastRunAt: string | null;
+  };
+};
+
+export function useProfileSummary() {
+  return useQuery({
+    queryKey: ["profile", "summary"],
+    queryFn: () => api<ProfileSummary>("/api/profile"),
+  });
+}
+
 export function useAgents() {
   return useQuery({
     queryKey: ["agents"],
