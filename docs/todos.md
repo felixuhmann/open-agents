@@ -18,14 +18,6 @@ an arbitrary HTTPS endpoint with declarative request/response shapes.
 Sits in the catalog like `memory` does. Useful for "give the agent a
 read-only view of my CRM" without writing a custom MCP server.
 
-## Error reporting from email (v1.x)
-
-Add a "report a problem" link to outbound email footers. Clicking it
-opens a pre-filled report page (run id, agent id, conversation id) the
-user can annotate and submit. Reports land in a `Report` table that
-admins can triage from `/settings/reports`. Optionally fan out to a
-webhook (Slack, PagerDuty, Linear).
-
 ## Email disclaimers (v1.x)
 
 Footer paragraph in outbound mail warning users that agents can make
@@ -37,13 +29,6 @@ mistakes and not to send PII. Editable per-deployment from
 `/library/skills` currently models bundles as immutable: editing a
 skill is "delete + re-upload". Live rebind would store new versions
 alongside the old and let admins flip the active version per agent.
-
-## User code sandbox tool (v2)
-
-Let admins author small JS/TS snippets in the UI that get exposed as
-MCP tools. Run in an isolated VM2-style sandbox with a curated subset of
-APIs. Replaces the "I need a custom thing, write me a third-party MCP
-server" workflow for the simple case.
 
 ## SSO / SAML / OAuth login providers (v2)
 
@@ -66,13 +51,22 @@ migrations". A control plane would automate that and let the operator
 manage every deployment from a single dashboard. It's a separate product
 and should not bleed into this codebase.
 
-## Per-agent Mailgun route auto-provisioning
-
-Today the operator wires up one catch-all route per deployment. Mailgun
-has an API we could use to manage routes, but the catch-all handles
-every agent so this isn't on the path. Skip it.
-
 ## Cross-thread continuation between email and web chat
 
 Out of scope and likely to stay that way. Different surfaces, different
 permission models, ambiguous threading semantics.
+
+## profile page
+where users can reset their password, see how many sessions they made, etc
+
+## new contributor role
+currently we only have users and admins. we need a third role, someone wo is not responsible for managing the deployment, but still can create and edit agents and see usage statistics and handle error reports.
+
+## analytics page
+we need a analytics page where we can see usage statistics per agent, monthly token usage and spend, per model breakdown, per agent breakdown, error rate, avg time spent, etc etc etc. this should give the operators full observability into the usage, definitely a missing piece for real world usage. we can use shadcn charts here for some cool graphs.
+
+## whitelabeling
+we want to make the product name and favicon and the image in the sidebar configurable. the open-agents product should be white-lable able so people can make it custom to their org.
+
+## support for new models
+instead of anthropic only, we ideally also want to support gpt models and others. this will probably entail a large refactor of the product, as we need to use a different sandbox backend, currently we are heavily coupled to the anthropic solution.

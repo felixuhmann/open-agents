@@ -113,7 +113,7 @@ export default function AgentChatPage() {
   const createConversation = useMutation({
     mutationFn: async (input: { agentSlug: string; firstMessage: string }) => {
       const conv = await api<{ id: string }>("/api/conversations", {
-        json: { agentSlug: input.agentSlug },
+        json: { agentSlug: input.agentSlug, firstMessage: input.firstMessage },
       });
       const sent = await api<{ messageId: string; runId: string }>(
         `/api/conversations/${conv.id}/messages`,

@@ -8,9 +8,18 @@ import { enqueueChatTurn } from "../../services/chat.js";
 
 export const conversationsRoutes = new Hono<{ Variables: AppVariables }>();
 
+const DEFAULT_CONVERSATION_TITLE = "New chat";
+
+function titleFromPrompt(text: string): string {
+  const singleLine = text.replace(/\s+/g, " ").trim();
+  if (!singleLine) return DEFAULT_CONVERSATION_TITLE;
+  return singleLine.slice(0, 120);
+}
+
 const CreateConversationBody = z.object({
   agentSlug: z.string(),
   title: z.string().min(1).max(120).optional(),
+  firstMessage: z.string().min(1).max(20000).optional(),
 });
 
 const SendMessageBody = z.object({
@@ -57,7 +66,7 @@ conversationsRoutes.post("/", async (c) => {
     data: {
       agentId: agent.id,
       userId: user.id,
-      title: body.title ?? "New chat",
+      title: body.title ?? titleFromPrompt(body.firstMessage ?? ""),
     },
   });
   return c.json({
@@ -130,6 +139,8 @@ conversationsRoutes.post("/:id/messages", async (c) => {
   // sending and atomically reparent their ChatAttachments onto the real
   // user message so the run-agent worker actually picks them up.
   const userMessage = await prisma.$transaction(async (tx) => {
+    const nextTitle =
+      conv.title === DEFAULT_CONVERSATION_TITLE ? titleFromPrompt(body.text) : null;
     const pending = await tx.chatMessage.findMany({
       where: { conversationId: conv.id, role: "pending_user_upload" },
       include: { attachments: { select: { id: true } } },
@@ -153,6 +164,13 @@ conversationsRoutes.post("/:id/messages", async (c) => {
       }
       await tx.chatMessage.deleteMany({
         where: { id: { in: pending.map((m) => m.id) } },
+      });
+    }
+
+    if (nextTitle) {
+      await tx.chatConversation.update({
+        where: { id: conv.id },
+        data: { title: nextTitle },
       });
     }
 
