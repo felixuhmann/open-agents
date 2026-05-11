@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { useState } from "react";
 import {
   ActivityIcon,
   ClockIcon,
@@ -36,7 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAnalytics, type AnalyticsMetricRow } from "@/lib/queries";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useAnalyticsWindow, type AnalyticsMetricRow } from "@/lib/queries";
 
 const spendChartConfig = {
   spendUsd: { label: "Spend", color: "var(--chart-2)" },
@@ -57,7 +59,8 @@ const modelChartConfig = {
 } satisfies ChartConfig;
 
 export default function AnalyticsPage() {
-  const analytics = useAnalytics();
+  const [window, setWindow] = useState<"30d" | "12m">("12m");
+  const analytics = useAnalyticsWindow(window);
   const data = analytics.data;
 
   return (
@@ -68,7 +71,22 @@ export default function AnalyticsPage() {
         meta={
           data
             ? `${formatDate(data.window.from)} - ${formatDate(data.window.to)}`
-            : "Last 12 months"
+            : window === "30d"
+              ? "Last 30 days"
+              : "Last 12 months"
+        }
+        actions={
+          <ToggleGroup
+            type="single"
+            value={window}
+            onValueChange={(value) => {
+              if (value === "30d" || value === "12m") setWindow(value);
+            }}
+            aria-label="Analytics time frame"
+          >
+            <ToggleGroupItem value="30d">30 days</ToggleGroupItem>
+            <ToggleGroupItem value="12m">12 months</ToggleGroupItem>
+          </ToggleGroup>
         }
       />
 
@@ -225,22 +243,6 @@ export default function AnalyticsPage() {
               description="Runs, spend, reliability, and latency per agent."
             />
             <AnalyticsTable rows={data.agents} />
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <SectionHeading
-              title="Methodology"
-              description="What the dashboard can infer from Managed Agents events."
-            />
-            <Card>
-              <CardContent className="pt-6">
-                <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
-                  {data.notes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
           </section>
         </>
       ) : (

@@ -9,6 +9,7 @@ import {
   FloppyDiskIcon,
   IdentificationCardIcon,
   ImageIcon,
+  MagnifyingGlassIcon,
   PlusIcon,
   PuzzlePieceIcon,
   TrashIcon,
@@ -20,12 +21,12 @@ import {
   avatarSrc,
   type FullAgentDto,
   useAgent,
+  useAgentAccess,
   useSkills,
   useTools,
 } from "@/lib/queries";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -102,6 +103,7 @@ type EditState = {
   emailEnabled: boolean;
   webEnabled: boolean;
   accessMode: "everyone" | "specific";
+  accessUserIds: string[];
   inboundLocalPart: string;
   toolIds: string[];
   skillBindings: Array<{ skillId: string; skillVersionId: string }>;
@@ -117,6 +119,7 @@ function fromDto(a: FullAgentDto): EditState {
     emailEnabled: a.emailEnabled,
     webEnabled: a.webEnabled,
     accessMode: a.accessMode,
+    accessUserIds: a.accessUserIds,
     inboundLocalPart: a.inboundLocalPart,
     toolIds: a.toolBindings.map((b) => b.toolId),
     skillBindings:
@@ -135,8 +138,10 @@ export default function AgentEditPage() {
   const agent = useAgent(slug);
   const tools = useTools();
   const skills = useSkills();
+  const access = useAgentAccess(slug);
   const qc = useQueryClient();
   const [state, setState] = useState<EditState | null>(null);
+  const [accessQuery, setAccessQuery] = useState("");
 
   useEffect(() => {
     if (agent.data) setState(fromDto(agent.data));
@@ -154,6 +159,7 @@ export default function AgentEditPage() {
           emailEnabled: s.emailEnabled,
           webEnabled: s.webEnabled,
           accessMode: s.accessMode,
+          accessUserIds: s.accessUserIds,
           inboundLocalPart: s.inboundLocalPart,
           toolBindings: s.toolIds.map((id) => ({ toolId: id })),
           skillBindings: s.skillBindings,
@@ -163,6 +169,7 @@ export default function AgentEditPage() {
     onSuccess: async () => {
       toast.success("Agent saved");
       await qc.invalidateQueries({ queryKey: ["agents", slug] });
+      await qc.invalidateQueries({ queryKey: ["agents", slug, "access"] });
     },
     onError: (e) =>
       toast.error("Save failed", {
@@ -251,6 +258,16 @@ export default function AgentEditPage() {
   }
 
   const setS = (patch: Partial<EditState>) => setState({ ...state, ...patch });
+  const emailAddress = `${state.inboundLocalPart || slug || "slug"}@${
+    agent.data.mailgunDomain ?? "your email domain"
+  }`;
+  const accessUsers = access.data?.users ?? [];
+  const visibleAccessUsers = accessUsers.filter((person) => {
+    const query = accessQuery.trim().toLowerCase();
+    if (!query) return true;
+    return `${person.name ?? ""} ${person.email}`.toLowerCase().includes(query);
+  });
+  const selectedAccessIds = new Set(state.accessUserIds);
 
   return (
     <div className="flex flex-col gap-6">
@@ -307,15 +324,14 @@ export default function AgentEditPage() {
             <Field>
               <FieldLabel>Profile picture</FieldLabel>
               <div className="flex items-center gap-4">
-                <Avatar size="lg" className="rounded-none">
+                <Avatar size="lg">
                   {agent.data.avatar ? (
                     <AvatarImage
-                      className="rounded-none"
                       src={avatarSrc(agent.data.avatar)}
                       alt={agent.data.displayName}
                     />
                   ) : null}
-                  <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                  <AvatarFallback className="bg-primary text-primary-foreground">
                     {agent.data.displayName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
@@ -380,16 +396,14 @@ export default function AgentEditPage() {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="local-part">Inbound email local part</FieldLabel>
+                <FieldLabel htmlFor="local-part">Email slug</FieldLabel>
                 <Input
                   id="local-part"
                   className="font-mono"
                   value={state.inboundLocalPart}
                   onChange={(e) => setS({ inboundLocalPart: e.target.value })}
                 />
-                <FieldDescription>
-                  The bit before <code>@</code> in your Mailgun catch-all domain.
-                </FieldDescription>
+                <FieldDescription>{emailAddress}</FieldDescription>
               </Field>
             </div>
             <Field>
@@ -435,9 +449,7 @@ export default function AgentEditPage() {
                 />
                 <FieldContent>
                   <FieldLabel htmlFor="email-enabled">Email enabled</FieldLabel>
-                  <FieldDescription>
-                    Receives mail at the inbound local part above.
-                  </FieldDescription>
+                  <FieldDescription>Receives mail at {emailAddress}.</FieldDescription>
                 </FieldContent>
               </Field>
               <Field>
@@ -459,6 +471,66 @@ export default function AgentEditPage() {
                   </SelectContent>
                 </Select>
               </Field>
+              {state.accessMode === "specific" ? (
+                <Field>
+                  <FieldLabel htmlFor="access-search">People</FieldLabel>
+                  <div className="flex h-8 items-center gap-2 border border-input px-2.5">
+                    <MagnifyingGlassIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <Input
+                      id="access-search"
+                      data-access-search
+                      placeholder="Search people"
+                      className="h-7 border-0 px-0 focus-visible:ring-0"
+                      value={accessQuery}
+                      onChange={(e) => setAccessQuery(e.target.value)}
+                    />
+                  </div>
+                  <div
+                    data-access-list
+                    className="flex max-h-64 flex-col overflow-auto border border-border"
+                  >
+                    {access.isLoading ? (
+                      <div className="p-3 text-sm text-muted-foreground">
+                        Loading people…
+                      </div>
+                    ) : visibleAccessUsers.length > 0 ? (
+                      visibleAccessUsers.map((person) => {
+                        const checked = selectedAccessIds.has(person.id);
+                        const label = person.name ?? person.email;
+                        return (
+                          <Field
+                            key={person.id}
+                            orientation="horizontal"
+                            className="border-b border-border px-3 py-2 last:border-b-0"
+                            data-checked={checked}
+                          >
+                            <Checkbox
+                              id={`access-${person.id}`}
+                              checked={checked}
+                              onCheckedChange={(v) => {
+                                const next = new Set(state.accessUserIds);
+                                if (v === true) next.add(person.id);
+                                else next.delete(person.id);
+                                setS({ accessUserIds: [...next] });
+                              }}
+                            />
+                            <FieldContent>
+                              <FieldLabel htmlFor={`access-${person.id}`}>
+                                <FieldTitle>{label}</FieldTitle>
+                              </FieldLabel>
+                              <FieldDescription>{person.email}</FieldDescription>
+                            </FieldContent>
+                          </Field>
+                        );
+                      })
+                    ) : (
+                      <div className="p-3 text-sm text-muted-foreground">
+                        No people found.
+                      </div>
+                    )}
+                  </div>
+                </Field>
+              ) : null}
             </FieldSet>
           </FieldGroup>
         </CardContent>
@@ -503,47 +575,28 @@ export default function AgentEditPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <WrenchIcon className="size-4" weight="duotone" />
-            Tools
+            Role tools
           </CardTitle>
-          <CardDescription>
-            Capabilities the agent can call. Managed-runtime tools execute in
-            Anthropic&apos;s container; platform tools run on this backend via{" "}
-            <code>/mcp/{state.inboundLocalPart || slug}</code>.
-          </CardDescription>
+          <CardDescription>Capabilities the agent can call.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           {tools.data?.length ? (
-            (["managed", "platform"] as const).map((runtime) => {
-              const groupItems = (tools.data ?? []).filter(
-                (t) =>
-                  t.runtime === runtime &&
-                  (!t.deprecated || state.toolIds.includes(t.id)),
-              );
-              if (groupItems.length === 0) return null;
-              return (
-                <FieldSet key={runtime}>
-                  <FieldLegend variant="label">
-                    {runtime === "managed"
-                      ? "Managed by Anthropic"
-                      : "Platform (this backend)"}
-                  </FieldLegend>
-                  <CheckboxGrid
-                    items={groupItems.map((t) => ({
-                      id: t.id,
-                      title: t.name,
-                      description: t.description,
-                    }))}
-                    selected={state.toolIds}
-                    onToggle={(id, on) => {
-                      const next = new Set(state.toolIds);
-                      if (on) next.add(id);
-                      else next.delete(id);
-                      setS({ toolIds: [...next] });
-                    }}
-                  />
-                </FieldSet>
-              );
-            })
+            <CheckboxGrid
+              items={(tools.data ?? [])
+                .filter((t) => !t.deprecated || state.toolIds.includes(t.id))
+                .map((t) => ({
+                  id: t.id,
+                  title: t.name,
+                  description: t.description,
+                }))}
+              selected={state.toolIds}
+              onToggle={(id, on) => {
+                const next = new Set(state.toolIds);
+                if (on) next.add(id);
+                else next.delete(id);
+                setS({ toolIds: [...next] });
+              }}
+            />
           ) : (
             <Empty className="py-6">
               <EmptyHeader>
@@ -577,7 +630,12 @@ export default function AgentEditPage() {
                 const checked = Boolean(binding);
                 const versionId = binding?.skillVersionId ?? skill.latestVersionId ?? "";
                 return (
-                  <Field key={skill.id} orientation="horizontal" data-checked={checked}>
+                  <Field
+                    key={skill.id}
+                    orientation="horizontal"
+                    data-checked={checked}
+                    className="items-start"
+                  >
                     <Checkbox
                       id={`skill-${skill.id}`}
                       checked={checked}
@@ -607,39 +665,38 @@ export default function AgentEditPage() {
                     <FieldContent>
                       <FieldLabel htmlFor={`skill-${skill.id}`}>
                         <FieldTitle>{skill.name}</FieldTitle>
-                        {checked ? <Badge variant="secondary">on</Badge> : null}
                       </FieldLabel>
                       {skill.description ? (
                         <FieldDescription>{skill.description}</FieldDescription>
                       ) : null}
-                      {checked ? (
-                        <Select
-                          value={versionId}
-                          onValueChange={(nextVersionId) =>
-                            setS({
-                              skillBindings: state.skillBindings.map((b) =>
-                                b.skillId === skill.id
-                                  ? { ...b, skillVersionId: nextVersionId }
-                                  : b,
-                              ),
-                            })
-                          }
-                        >
-                          <SelectTrigger size="sm" className="mt-2">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              {skill.versions.map((version) => (
-                                <SelectItem key={version.id} value={version.id}>
-                                  v{version.versionNumber}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      ) : null}
                     </FieldContent>
+                    {checked ? (
+                      <Select
+                        value={versionId}
+                        onValueChange={(nextVersionId) =>
+                          setS({
+                            skillBindings: state.skillBindings.map((b) =>
+                              b.skillId === skill.id
+                                ? { ...b, skillVersionId: nextVersionId }
+                                : b,
+                            ),
+                          })
+                        }
+                      >
+                        <SelectTrigger size="sm" className="ml-auto w-24">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {skill.versions.map((version) => (
+                              <SelectItem key={version.id} value={version.id}>
+                                v{version.versionNumber}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    ) : null}
                   </Field>
                 );
               })}
@@ -769,7 +826,6 @@ function CheckboxGrid({
             <FieldContent>
               <FieldLabel htmlFor={`opt-${item.id}`}>
                 <FieldTitle>{item.title}</FieldTitle>
-                {checked ? <Badge variant="secondary">on</Badge> : null}
               </FieldLabel>
               {item.description ? (
                 <FieldDescription>{item.description}</FieldDescription>

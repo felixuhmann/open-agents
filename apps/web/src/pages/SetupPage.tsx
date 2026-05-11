@@ -98,9 +98,7 @@ export default function SetupPage({ productName }: { productName: string }) {
           </div>
           <CardTitle>Welcome to {productName}</CardTitle>
           <CardDescription>
-            Configure your deployment in one step. You can update credentials under{" "}
-            <strong>Settings → Secrets</strong> and plain configuration under{" "}
-            <strong>Settings → General</strong>.
+            Configure your deployment in one step. You can update these settings later.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -179,7 +177,7 @@ export default function SetupPage({ productName }: { productName: string }) {
                   />
                   <FieldDescription>
                     The deployment vault is auto-provisioned the first time you publish an
-                    agent that uses platform tools.
+                    agent with attached capabilities.
                   </FieldDescription>
                 </Field>
               </FieldSet>

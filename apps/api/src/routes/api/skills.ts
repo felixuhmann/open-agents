@@ -46,7 +46,7 @@ skillsRoutes.post("/", async (c) => {
   const name = typeof form.name === "string" ? form.name : null;
   const description = typeof form.description === "string" ? form.description : undefined;
   if (!name) throw new HttpError(400, "name is required");
-  if (!(file instanceof File)) throw new HttpError(400, "missing 'file' field (zip)");
+  if (!(file instanceof File)) throw new HttpError(400, "missing 'file' field (bundle)");
   const bytes = Buffer.from(await file.arrayBuffer());
   const skill = await createSkill({
     name,
@@ -70,7 +70,7 @@ skillsRoutes.post("/:id/versions", async (c) => {
   const skillId = c.req.param("id");
   const form = await c.req.parseBody({ all: false });
   const file = form.file;
-  if (!(file instanceof File)) throw new HttpError(400, "missing 'file' field (zip)");
+  if (!(file instanceof File)) throw new HttpError(400, "missing 'file' field (bundle)");
   const bytes = Buffer.from(await file.arrayBuffer());
   const version = await createSkillVersion({
     skillId,

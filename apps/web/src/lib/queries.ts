@@ -170,6 +170,13 @@ export function useAnalytics() {
   });
 }
 
+export function useAnalyticsWindow(window: "30d" | "12m") {
+  return useQuery({
+    queryKey: ["analytics", window],
+    queryFn: () => api<AnalyticsSummary>(`/api/analytics?window=${window}`),
+  });
+}
+
 /**
  * Convert a stored avatar reference (bare filename, `/static/...` URL
  * path, or absolute URL) into something a browser `<img src>` can load.
@@ -198,6 +205,7 @@ export type FullAgentDto = {
   webEnabled: boolean;
   accessMode: "everyone" | "specific";
   inboundLocalPart: string;
+  mailgunDomain: string | null;
   anthropicAgentId: string | null;
   environmentId: string | null;
   anthropicAgentVersion: string | null;
@@ -215,6 +223,27 @@ export type FullAgentDto = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type AgentAccessUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  granted: boolean;
+};
+
+export type AgentAccessDto = {
+  accessMode: "everyone" | "specific";
+  users: AgentAccessUser[];
+};
+
+export function useAgentAccess(slug: string | undefined, enabled = true) {
+  return useQuery({
+    enabled: Boolean(slug) && enabled,
+    queryKey: ["agents", slug, "access"],
+    queryFn: () => api<AgentAccessDto>(`/api/agents/${slug}/access`),
+  });
+}
 
 export function useAgent(slug: string | undefined) {
   return useQuery({

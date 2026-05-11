@@ -18,6 +18,7 @@ import {
   requireUser,
 } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
+import { getServiceSecret, SERVICE_KEYS } from "../../secrets/service.js";
 import type { AppVariables } from "../../server/types.js";
 import {
   deleteBrandingAsset,
@@ -49,7 +50,10 @@ function toSummary(agent: {
   };
 }
 
-function toDto(agent: Awaited<ReturnType<typeof listAgents>>[number]) {
+function toDto(
+  agent: Awaited<ReturnType<typeof listAgents>>[number],
+  mailgunDomain?: string | null,
+) {
   return {
     id: agent.id,
     slug: agent.slug,
@@ -62,6 +66,7 @@ function toDto(agent: Awaited<ReturnType<typeof listAgents>>[number]) {
     webEnabled: agent.webEnabled,
     accessMode: agent.accessMode,
     inboundLocalPart: agent.inboundLocalPart,
+    mailgunDomain: mailgunDomain ?? null,
     anthropicAgentId: agent.anthropicAgentId,
     environmentId: agent.environmentId,
     anthropicAgentVersion: agent.anthropicAgentVersion,
@@ -130,7 +135,8 @@ agentsRoutes.get("/:slug", async (c) => {
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
   await requireAgentAccess(c, agent.id);
-  return c.json(toDto(agent));
+  const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
+  return c.json(toDto(agent, mailgunDomain));
 });
 
 agentsRoutes.patch("/:slug", async (c) => {
@@ -143,7 +149,8 @@ agentsRoutes.patch("/:slug", async (c) => {
     ...body,
     description: body.description ?? undefined,
   });
-  return c.json(toDto(updated));
+  const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
+  return c.json(toDto(updated, mailgunDomain));
 });
 
 agentsRoutes.post("/:slug/publish", async (c) => {

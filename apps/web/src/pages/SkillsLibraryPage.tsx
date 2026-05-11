@@ -111,8 +111,9 @@ export default function SkillsLibraryPage() {
         title="Skills"
         description={
           <>
-            Upload skill bundles (zip with <code>SKILL.md</code> at the root). Available
-            to all agents in this deployment.
+            Upload skill bundles (<code>.zip</code> or <code>.skill</code> with{" "}
+            <code>SKILL.md</code> at the root). Available to all agents in this
+            deployment.
           </>
         }
       />
@@ -124,7 +125,7 @@ export default function SkillsLibraryPage() {
             Upload bundle
           </CardTitle>
           <CardDescription>
-            Provide a name, optional description, and the .zip archive.
+            Provide a name, optional description, and the skill bundle.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -148,11 +149,11 @@ export default function SkillsLibraryPage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="skill-file">Bundle (.zip)</FieldLabel>
+                  <FieldLabel htmlFor="skill-file">Bundle (.zip or .skill)</FieldLabel>
                   <Input
                     id="skill-file"
                     type="file"
-                    accept=".zip,application/zip"
+                    accept=".zip,.skill,application/zip"
                     required
                     onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                   />
@@ -261,7 +262,7 @@ export default function SkillsLibraryPage() {
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Input
                         type="file"
-                        accept=".zip,application/zip"
+                        accept=".zip,.skill,application/zip"
                         onChange={(e) =>
                           setVersionFiles((prev) => ({
                             ...prev,

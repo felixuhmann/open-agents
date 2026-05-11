@@ -33,7 +33,7 @@ const LABELS: Record<string, { title: string; description: string }> = {
   favicon_url: {
     title: "Favicon",
     description:
-      "Browser tab icon for this deployment. Upload a file to host it locally, or paste an absolute https:// URL.",
+      "Browser tab icon for this deployment. Upload a file or paste an image URL.",
   },
   sidebar_logo_url: {
     title: "Sidebar logo",
@@ -43,7 +43,7 @@ const LABELS: Record<string, { title: string; description: string }> = {
   email_footer_logo_url: {
     title: "Email footer logo",
     description:
-      "Logo image rendered at the bottom of every outbound agent email. Upload a file to host it locally, or paste an absolute https:// URL to use one you already host. Leave empty to hide the footer image.",
+      "Logo image rendered at the bottom of every outbound agent email. Upload a file or paste an image URL. Leave empty to hide the footer image.",
   },
   email_disclaimer: {
     title: "Email disclaimer",
@@ -144,7 +144,7 @@ export default function GeneralSettingsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="General settings"
-        description="Deployment-wide configuration values stored in the database. Anything sensitive (API keys, signing secrets) belongs under Settings → Secrets."
+        description="Deployment-wide configuration values stored in the database."
       />
 
       <ul className="flex flex-col gap-3">
@@ -244,11 +244,7 @@ export default function GeneralSettingsPage() {
                             <Input
                               id={`setting-${s.key}`}
                               value={draft}
-                              placeholder={
-                                isImage
-                                  ? "https://example.com/logo.png or /static/uploads/<folder>/<file>"
-                                  : ""
-                              }
+                              placeholder={isImage ? "https://example.com/logo.png" : ""}
                               onChange={(e) =>
                                 setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
                               }

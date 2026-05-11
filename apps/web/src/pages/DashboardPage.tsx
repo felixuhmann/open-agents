@@ -6,6 +6,7 @@ import {
   PlusIcon,
   RobotIcon,
 } from "@phosphor-icons/react";
+import type { AgentSummaryDto } from "@open-agents/types";
 import { avatarSrc, useAgents, useConversations } from "@/lib/queries";
 import { PageHeader, SectionHeading } from "@/components/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -33,6 +34,18 @@ import { Separator } from "@/components/ui/separator";
 export default function DashboardPage() {
   const agents = useAgents();
   const conversations = useConversations();
+  const recentAgents =
+    conversations.data && agents.data
+      ? conversations.data
+          .reduce<AgentSummaryDto[]>((acc, conversation) => {
+            if (acc.some((agent) => agent.id === conversation.agent.id)) return acc;
+            const full = agents.data.find((agent) => agent.id === conversation.agent.id);
+            if (full) acc.push(full);
+            return acc;
+          }, [])
+          .slice(0, 6)
+      : [];
+  const recentConversations = conversations.data?.slice(0, 5) ?? [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -50,29 +63,25 @@ export default function DashboardPage() {
       />
 
       <section className="flex flex-col gap-3">
-        <SectionHeading title="Your agents" />
+        <SectionHeading title="Recently used agents" />
         {agents.isLoading ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, idx) => (
               <Skeleton key={idx} className="h-36" />
             ))}
           </div>
-        ) : agents.data && agents.data.length > 0 ? (
+        ) : recentAgents.length > 0 ? (
           <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {agents.data.map((a) => (
+            {recentAgents.map((a) => (
               <li key={a.id}>
                 <Card className="h-full transition-colors hover:bg-accent/30">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-3">
-                      <Avatar className="rounded-none">
+                      <Avatar>
                         {a.avatar ? (
-                          <AvatarImage
-                            className="rounded-none"
-                            src={avatarSrc(a.avatar)}
-                            alt={a.displayName}
-                          />
+                          <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
                         ) : null}
-                        <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                        <AvatarFallback className="bg-primary text-primary-foreground">
                           {a.displayName.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
@@ -126,9 +135,9 @@ export default function DashboardPage() {
               <EmptyMedia variant="icon">
                 <RobotIcon />
               </EmptyMedia>
-              <EmptyTitle>No agents yet</EmptyTitle>
+              <EmptyTitle>No recent agents yet</EmptyTitle>
               <EmptyDescription>
-                Create your first agent to start chatting and receiving email.
+                Start a chat and your most recently used agents will appear here.
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
@@ -151,9 +160,9 @@ export default function DashboardPage() {
               <Skeleton key={idx} className="h-16" />
             ))}
           </div>
-        ) : conversations.data && conversations.data.length > 0 ? (
+        ) : recentConversations.length > 0 ? (
           <Card className="divide-y divide-border">
-            {conversations.data.map((c, idx) => (
+            {recentConversations.map((c, idx) => (
               <ConversationRow key={c.id} conversation={c} showSeparator={idx > 0} />
             ))}
           </Card>
@@ -195,15 +204,14 @@ function ConversationRow({
         className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-accent/30"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar size="sm" className="rounded-none">
+          <Avatar size="sm">
             {conversation.agent.avatar ? (
               <AvatarImage
-                className="rounded-none"
                 src={avatarSrc(conversation.agent.avatar)}
                 alt={conversation.agent.displayName}
               />
             ) : null}
-            <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+            <AvatarFallback className="bg-primary text-primary-foreground">
               {conversation.agent.displayName.slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>

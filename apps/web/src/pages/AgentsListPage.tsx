@@ -147,15 +147,11 @@ export default function AgentsListPage() {
                       to={`/agents/${a.slug}`}
                       className="flex items-center gap-2 underline-offset-4 hover:underline"
                     >
-                      <Avatar size="sm" className="rounded-none">
+                      <Avatar size="sm">
                         {a.avatar ? (
-                          <AvatarImage
-                            className="rounded-none"
-                            src={avatarSrc(a.avatar)}
-                            alt={a.displayName}
-                          />
+                          <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
                         ) : null}
-                        <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+                        <AvatarFallback className="bg-primary text-primary-foreground">
                           {a.displayName.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>

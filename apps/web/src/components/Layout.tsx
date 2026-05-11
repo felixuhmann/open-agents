@@ -8,7 +8,6 @@ import {
 } from "react-router-dom";
 import {
   ChartLineIcon,
-  GearIcon,
   HouseIcon,
   KeyIcon,
   PuzzlePieceIcon,
@@ -177,8 +176,8 @@ export function Layout({ user, children }: Props) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton size="lg" tooltip={user.email}>
-                    <Avatar className="size-7 rounded-none">
-                      <AvatarFallback className="rounded-none bg-sidebar-primary text-sidebar-primary-foreground">
+                    <Avatar className="size-7">
+                      <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
                         {initials}
                       </AvatarFallback>
                     </Avatar>
@@ -212,14 +211,6 @@ export function Layout({ user, children }: Props) {
                       Profile
                     </Link>
                   </DropdownMenuItem>
-                  {isAdmin ? (
-                    <DropdownMenuItem asChild>
-                      <Link to="/settings/general">
-                        <GearIcon data-icon="inline-start" />
-                        Settings
-                      </Link>
-                    </DropdownMenuItem>
-                  ) : null}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={onSignOut} variant="destructive">
                     <SignOutIcon data-icon="inline-start" />

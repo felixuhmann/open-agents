@@ -107,15 +107,14 @@ export default function IssuesListPage() {
                         to={`/issues/${i.id}`}
                         className="flex items-center gap-2 hover:underline"
                       >
-                        <Avatar className="size-7 rounded-none">
+                        <Avatar className="size-7">
                           {i.agent.avatar ? (
                             <AvatarImage
-                              className="rounded-none"
                               src={avatarSrc(i.agent.avatar)}
                               alt={i.agent.displayName}
                             />
                           ) : null}
-                          <AvatarFallback className="rounded-none bg-muted text-foreground text-[10px]">
+                          <AvatarFallback className="bg-muted text-foreground text-[10px]">
                             {initials}
                           </AvatarFallback>
                         </Avatar>

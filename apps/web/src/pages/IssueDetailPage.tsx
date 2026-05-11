@@ -227,21 +227,15 @@ function AgentContextCard({
   runs: IssueDetailRun[];
 }) {
   const initials = agent.displayName.slice(0, 2).toUpperCase();
-  const hasRuntime = (rt: "managed" | "platform") =>
-    agent.tools.some((t) => t.runtime === rt);
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Avatar className="size-7 rounded-none">
+          <Avatar className="size-7">
             {agent.avatar ? (
-              <AvatarImage
-                className="rounded-none"
-                src={avatarSrc(agent.avatar)}
-                alt={agent.displayName}
-              />
+              <AvatarImage src={avatarSrc(agent.avatar)} alt={agent.displayName} />
             ) : null}
-            <AvatarFallback className="rounded-none bg-muted text-foreground text-[10px]">
+            <AvatarFallback className="bg-muted text-foreground text-[10px]">
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -307,20 +301,7 @@ function AgentContextCard({
           {agent.tools.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">No tools bound.</p>
           ) : (
-            <>
-              {hasRuntime("managed") ? (
-                <ToolGroup
-                  label="Managed (Anthropic-executed)"
-                  tools={agent.tools.filter((t) => t.runtime === "managed")}
-                />
-              ) : null}
-              {hasRuntime("platform") ? (
-                <ToolGroup
-                  label="Platform (this backend)"
-                  tools={agent.tools.filter((t) => t.runtime === "platform")}
-                />
-              ) : null}
-            </>
+            <ToolGroup label="Capabilities" tools={agent.tools} />
           )}
         </div>
 
@@ -607,17 +588,13 @@ function MessageBubble({
           mine ? "flex-row-reverse" : "flex-row",
         )}
       >
-        <Avatar className="size-7 shrink-0 rounded-none">
+        <Avatar className="size-7 shrink-0">
           {!mine && !isSystem && agentAvatar ? (
-            <AvatarImage
-              className="rounded-none"
-              src={avatarSrc(agentAvatar)}
-              alt={agentDisplayName}
-            />
+            <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
           ) : null}
           <AvatarFallback
             className={cn(
-              "rounded-none text-[10px]",
+              "text-[10px]",
               mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
             )}
           >
@@ -662,15 +639,11 @@ function MessageBubble({
         inbound ? "flex-row" : "flex-row-reverse",
       )}
     >
-      <Avatar className="size-7 shrink-0 rounded-none">
+      <Avatar className="size-7 shrink-0">
         {!inbound && agentAvatar ? (
-          <AvatarImage
-            className="rounded-none"
-            src={avatarSrc(agentAvatar)}
-            alt={agentDisplayName}
-          />
+          <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
         ) : null}
-        <AvatarFallback className="rounded-none bg-muted text-foreground text-[10px]">
+        <AvatarFallback className="bg-muted text-foreground text-[10px]">
           {inbound ? (
             <UserIcon className="size-3.5" />
           ) : (

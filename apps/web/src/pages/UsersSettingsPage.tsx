@@ -243,8 +243,8 @@ export default function UsersSettingsPage() {
                   <TableRow key={u.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <Avatar className="size-7 rounded-none">
-                          <AvatarFallback className="rounded-none bg-muted text-foreground text-[10px]">
+                        <Avatar className="size-7">
+                          <AvatarFallback className="bg-muted text-foreground text-[10px]">
                             {initials}
                           </AvatarFallback>
                         </Avatar>

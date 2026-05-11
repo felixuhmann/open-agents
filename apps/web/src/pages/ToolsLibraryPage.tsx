@@ -24,13 +24,7 @@ export default function ToolsLibraryPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Tool catalog"
-        description={
-          <>
-            Every capability admins can attach to an agent. <code>managed</code> tools
-            execute on Anthropic&apos;s container; <code>platform</code> tools are
-            code-shipped MCP handlers in <code>apps/api/src/mcp/platform/</code>.
-          </>
-        }
+        description="Every capability that can be attached to an agent."
       />
       {tools.isLoading ? (
         <div className="grid gap-3 md:grid-cols-2">
@@ -46,8 +40,7 @@ export default function ToolsLibraryPage() {
             </EmptyMedia>
             <EmptyTitle>No tools registered</EmptyTitle>
             <EmptyDescription>
-              Restart the API so <code>seedToolCatalog()</code> can populate the catalog
-              from <code>PLATFORM_HANDLERS</code> + the managed toolset.
+              Restart the API so the catalog can populate.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -66,7 +59,6 @@ export default function ToolsLibraryPage() {
                 <CardContent className="flex flex-col gap-3">
                   <p className="text-xs/relaxed text-foreground">{t.description}</p>
                   <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="outline">{t.runtime}</Badge>
                     {t.requiresSecrets ? (
                       <Badge variant="secondary">requires secrets</Badge>
                     ) : null}

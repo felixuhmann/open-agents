@@ -42,8 +42,13 @@ analyticsRoutes.get("/", async (c) => {
   requireAgentOperator(c);
 
   const now = new Date();
-  const monthKeys = buildMonthKeys(now, 12);
-  const startDate = new Date(`${monthKeys[0]}-01T00:00:00.000Z`);
+  const window = c.req.query("window") === "30d" ? "30d" : "12m";
+  const startDate =
+    window === "30d"
+      ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      : new Date(`${buildMonthKeys(now, 12)[0]}-01T00:00:00.000Z`);
+  const monthKeys =
+    window === "30d" ? buildMonthKeysBetween(startDate, now) : buildMonthKeys(now, 12);
 
   const runs = await prisma.agentRun.findMany({
     where: { startedAt: { gte: startDate } },
@@ -243,6 +248,17 @@ function buildMonthKeys(now: Date, count: number): string[] {
   const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   cursor.setUTCMonth(cursor.getUTCMonth() - count + 1);
   for (let i = 0; i < count; i += 1) {
+    keys.push(toMonthKey(cursor));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return keys;
+}
+
+function buildMonthKeysBetween(from: Date, to: Date): string[] {
+  const keys: string[] = [];
+  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
+  while (cursor.getTime() <= end.getTime()) {
     keys.push(toMonthKey(cursor));
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }

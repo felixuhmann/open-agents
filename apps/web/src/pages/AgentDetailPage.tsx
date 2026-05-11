@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   ChatCircleDotsIcon,
   ClockCounterClockwiseIcon,
+  CopyIcon,
   EnvelopeIcon,
   GlobeIcon,
   PencilSimpleIcon,
@@ -61,21 +62,21 @@ export default function AgentDetailPage() {
   }
 
   const a = agent.data;
+  const reachableEmail =
+    a.emailEnabled && a.mailgunDomain
+      ? `${a.inboundLocalPart || a.slug}@${a.mailgunDomain}`
+      : null;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            <Avatar size="lg" className="rounded-none">
+            <Avatar size="lg">
               {a.avatar ? (
-                <AvatarImage
-                  className="rounded-none"
-                  src={avatarSrc(a.avatar)}
-                  alt={a.displayName}
-                />
+                <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
               ) : null}
-              <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+              <AvatarFallback className="bg-primary text-primary-foreground">
                 {a.displayName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -151,33 +152,38 @@ export default function AgentDetailPage() {
                 )}
               </span>
             </Row>
+            <Row label="Model">
+              <code className="font-mono text-xs">{a.model}</code>
+            </Row>
+            {reachableEmail ? (
+              <Row label="Email address">
+                <span className="inline-flex items-center justify-end gap-1">
+                  <code className="font-mono text-xs">{reachableEmail}</code>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="Copy email address"
+                    onClick={() => void navigator.clipboard.writeText(reachableEmail)}
+                  >
+                    <CopyIcon />
+                  </Button>
+                </span>
+              </Row>
+            ) : null}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Tools</CardTitle>
+            <CardTitle>Capabilities</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Row label="Managed">
-              <ChipList
-                values={a.toolBindings
-                  .filter((b) => b.tool.runtime === "managed")
-                  .map((b) => b.tool.name)}
-              />
-            </Row>
-            <Row label="Platform">
-              <ChipList
-                values={a.toolBindings
-                  .filter((b) => b.tool.runtime === "platform")
-                  .map((b) => b.tool.name)}
-              />
+            <Row label="Role tools">
+              <ChipList values={a.toolBindings.map((b) => b.tool.name)} />
             </Row>
             <Row label="Third-party MCP">
               <ChipList values={a.thirdPartyMcp.map((m) => m.label)} />
-            </Row>
-            <Row label="Model">
-              <code className="font-mono text-xs">{a.model}</code>
             </Row>
           </CardContent>
         </Card>
@@ -198,17 +204,6 @@ export default function AgentDetailPage() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Inbound email</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Row label="Local part">
-              <code className="font-mono text-xs">{a.inboundLocalPart}</code>
-            </Row>
           </CardContent>
         </Card>
       </div>

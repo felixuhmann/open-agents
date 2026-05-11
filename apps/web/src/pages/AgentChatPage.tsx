@@ -311,15 +311,14 @@ export default function AgentChatPage() {
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
       <header className="flex items-center gap-3">
-        <Avatar className="size-9 rounded-none">
+        <Avatar className="size-9">
           {agent.data.avatar ? (
             <AvatarImage
-              className="rounded-none"
               src={avatarSrc(agent.data.avatar)}
               alt={agent.data.displayName}
             />
           ) : null}
-          <AvatarFallback className="rounded-none bg-primary text-primary-foreground">
+          <AvatarFallback className="bg-primary text-primary-foreground">
             {initials}
           </AvatarFallback>
         </Avatar>
@@ -525,17 +524,13 @@ function Bubble({
         mine ? "flex-row-reverse" : "flex-row",
       )}
     >
-      <Avatar className="size-7 shrink-0 rounded-none">
+      <Avatar className="size-7 shrink-0">
         {showAgentImage ? (
-          <AvatarImage
-            className="rounded-none"
-            src={avatarSrc(agentAvatar)}
-            alt={agentDisplayName}
-          />
+          <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
         ) : null}
         <AvatarFallback
           className={cn(
-            "rounded-none text-[10px]",
+            "text-[10px]",
             mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
           )}
         >
