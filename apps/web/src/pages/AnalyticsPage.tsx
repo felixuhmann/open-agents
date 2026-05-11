@@ -37,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAnalyticsWindow, type AnalyticsMetricRow } from "@/lib/queries";
 
 const spendChartConfig = {
@@ -76,17 +76,17 @@ export default function AnalyticsPage() {
               : "Last 12 months"
         }
         actions={
-          <ToggleGroup
-            type="single"
+          <Tabs
             value={window}
             onValueChange={(value) => {
               if (value === "30d" || value === "12m") setWindow(value);
             }}
-            aria-label="Analytics time frame"
           >
-            <ToggleGroupItem value="30d">30 days</ToggleGroupItem>
-            <ToggleGroupItem value="12m">12 months</ToggleGroupItem>
-          </ToggleGroup>
+            <TabsList aria-label="Analytics time frame">
+              <TabsTrigger value="30d">30 days</TabsTrigger>
+              <TabsTrigger value="12m">12 months</TabsTrigger>
+            </TabsList>
+          </Tabs>
         }
       />
 
@@ -124,8 +124,12 @@ export default function AnalyticsPage() {
           <section className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Monthly spend</CardTitle>
-                <CardDescription>Estimated USD by run start month.</CardDescription>
+                <CardTitle>
+                  {window === "30d" ? "Daily spend" : "Monthly spend"}
+                </CardTitle>
+                <CardDescription>
+                  Estimated USD by run start {window === "30d" ? "day" : "month"}.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ChartContainer config={spendChartConfig} className="h-[260px] w-full">
@@ -136,7 +140,7 @@ export default function AnalyticsPage() {
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
-                      tickFormatter={formatMonth}
+                      tickFormatter={(value) => formatPeriod(String(value), window)}
                     />
                     <YAxis
                       tickLine={false}
@@ -166,7 +170,9 @@ export default function AnalyticsPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Monthly token usage</CardTitle>
+                <CardTitle>
+                  {window === "30d" ? "Daily token usage" : "Monthly token usage"}
+                </CardTitle>
                 <CardDescription>Input, output, and cache-read tokens.</CardDescription>
               </CardHeader>
               <CardContent>
@@ -178,7 +184,7 @@ export default function AnalyticsPage() {
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
-                      tickFormatter={formatMonth}
+                      tickFormatter={(value) => formatPeriod(String(value), window)}
                     />
                     <YAxis
                       tickLine={false}
@@ -437,10 +443,12 @@ function formatDate(value: string): string {
   });
 }
 
-function formatMonth(month: string): string {
-  const [year, rawMonth] = month.split("-");
-  return new Date(Number(year), Number(rawMonth) - 1, 1).toLocaleDateString(undefined, {
+function formatPeriod(period: string, window: "30d" | "12m"): string {
+  const [year, rawMonth, rawDay] = period.split("-");
+  const date = new Date(Number(year), Number(rawMonth) - 1, Number(rawDay ?? "1"));
+  return date.toLocaleDateString(undefined, {
     month: "short",
+    day: window === "30d" ? "numeric" : undefined,
   });
 }
 

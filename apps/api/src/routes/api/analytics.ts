@@ -45,10 +45,10 @@ analyticsRoutes.get("/", async (c) => {
   const window = c.req.query("window") === "30d" ? "30d" : "12m";
   const startDate =
     window === "30d"
-      ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      ? startOfUtcDay(addUtcDays(now, -29))
       : new Date(`${buildMonthKeys(now, 12)[0]}-01T00:00:00.000Z`);
-  const monthKeys =
-    window === "30d" ? buildMonthKeysBetween(startDate, now) : buildMonthKeys(now, 12);
+  const periodKeys =
+    window === "30d" ? buildDayKeys(startDate, now) : buildMonthKeys(now, 12);
 
   const runs = await prisma.agentRun.findMany({
     where: { startedAt: { gte: startDate } },
@@ -75,7 +75,7 @@ analyticsRoutes.get("/", async (c) => {
   });
 
   const totals = emptyAccumulator();
-  const byMonth = new Map(monthKeys.map((key) => [key, emptyAccumulator()]));
+  const byPeriod = new Map(periodKeys.map((key) => [key, emptyAccumulator()]));
   const byAgent = new Map<
     string,
     Accumulator & { id: string; slug: string; displayName: string }
@@ -89,8 +89,9 @@ analyticsRoutes.get("/", async (c) => {
         ? run.completedAt.getTime() - run.startedAt.getTime()
         : null;
     const failed = run.status === "failed";
-    const monthKey = toMonthKey(run.startedAt);
-    const month = byMonth.get(monthKey);
+    const periodKey =
+      window === "30d" ? toDayKey(run.startedAt) : toMonthKey(run.startedAt);
+    const period = byPeriod.get(periodKey);
     const agent = getOrCreate(byAgent, run.agent.id, () => ({
       ...emptyAccumulator(),
       id: run.agent.id,
@@ -103,7 +104,7 @@ analyticsRoutes.get("/", async (c) => {
     }));
 
     addRun(totals, durationMs, failed);
-    if (month) addRun(month, durationMs, failed);
+    if (period) addRun(period, durationMs, failed);
     addRun(agent, durationMs, failed);
     addRun(surface, durationMs, failed);
 
@@ -119,7 +120,7 @@ analyticsRoutes.get("/", async (c) => {
       const spendUsd = estimateSpendUsd(model, payload.usage);
 
       addUsage(totals, payload.usage, spendUsd);
-      if (month) addUsage(month, payload.usage, spendUsd);
+      if (period) addUsage(period, payload.usage, spendUsd);
       addUsage(agent, payload.usage, spendUsd);
       addUsage(surface, payload.usage, spendUsd);
       addUsage(modelRow, payload.usage, spendUsd);
@@ -131,12 +132,12 @@ analyticsRoutes.get("/", async (c) => {
     window: {
       from: startDate.toISOString(),
       to: now.toISOString(),
-      months: monthKeys.length,
+      months: periodKeys.length,
     },
     totals: serializeAccumulator(totals),
-    monthly: monthKeys.map((month) => ({
+    monthly: periodKeys.map((month) => ({
       month,
-      ...serializeAccumulator(byMonth.get(month) ?? emptyAccumulator()),
+      ...serializeAccumulator(byPeriod.get(month) ?? emptyAccumulator()),
     })),
     agents: [...byAgent.values()]
       .map((row) => ({ ...pickIdentity(row), ...serializeAccumulator(row) }))
@@ -254,15 +255,32 @@ function buildMonthKeys(now: Date, count: number): string[] {
   return keys;
 }
 
-function buildMonthKeysBetween(from: Date, to: Date): string[] {
+function buildDayKeys(from: Date, to: Date): string[] {
   const keys: string[] = [];
-  const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
+  const cursor = startOfUtcDay(from);
+  const end = startOfUtcDay(to);
   while (cursor.getTime() <= end.getTime()) {
-    keys.push(toMonthKey(cursor));
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    keys.push(toDayKey(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return keys;
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function toDayKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 function toMonthKey(date: Date): string {
