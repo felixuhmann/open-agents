@@ -6,11 +6,13 @@ import {
   XCircleIcon,
   SpinnerIcon,
 } from "@phosphor-icons/react";
+import { useTheme } from "next-themes";
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { resolvedTheme } = useTheme();
   return (
     <Sonner
-      theme="dark"
+      theme={resolvedTheme as "light" | "dark" | undefined}
       className="toaster group"
       icons={{
         success: <CheckCircleIcon className="size-4" />,
