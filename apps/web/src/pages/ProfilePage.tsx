@@ -6,8 +6,10 @@ import {
   DesktopIcon,
   LockKeyIcon,
   SignOutIcon,
+  SunIcon,
   UserCircleIcon,
 } from "@phosphor-icons/react";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,13 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -48,6 +57,7 @@ export default function ProfilePage() {
   const summary = useProfileSummary();
   const sessions = useAuthSessions();
   const currentSession = useCurrentSession();
+  const { theme, setTheme } = useTheme();
 
   const [name, setName] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -373,6 +383,38 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <SunIcon weight="duotone" />
+            Appearance
+          </CardTitle>
+          <CardDescription>
+            Choose how the interface looks on this device. Your preference is saved locally.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="theme-select">Color theme</FieldLabel>
+              <Select value={theme} onValueChange={setTheme}>
+                <SelectTrigger id="theme-select" className="w-48">
+                  <SelectValue placeholder="Select theme" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="system">System default</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="dark">Dark</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                System default follows your operating system's color scheme preference.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
