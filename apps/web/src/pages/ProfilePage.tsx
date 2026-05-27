@@ -391,7 +391,8 @@ export default function ProfilePage() {
             Appearance
           </CardTitle>
           <CardDescription>
-            Choose how the interface looks on this device. Your preference is saved locally.
+            Choose how the interface looks on this device. Your preference is saved
+            locally.
           </CardDescription>
         </CardHeader>
         <CardContent>
