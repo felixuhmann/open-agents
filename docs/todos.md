@@ -45,14 +45,18 @@ Out of scope and likely to stay that way. Different surfaces, different
 permission models, ambiguous threading semantics.
 
 ## support for new models
+
 instead of anthropic only, we ideally also want to support gpt models and others. this will probably entail a large refactor of the product, as we need to use a different sandbox backend, currently we are heavily coupled to the anthropic solution.
 
 ## intl
+
 we want to support different languages, at least english and german for now. configured by an admin through the settings for the whole instance globally. (also add a local overwrite in the profile settings)
 
 ## s3 storage compatibility
+
 right now we write everything to disk. this is not acceptable, as a admin i want to be able
 to have a s3 compatible integration for all the stuff that needs persistent storage in the app (images, skills, other uploads, ...)
 
 ## unify ui
+
 email ui and email link ui design is different from the main web app. unify the styling across everything, make it consistent.
