@@ -5,6 +5,7 @@ import type {
 } from "@open-agents/types";
 import yauzl from "yauzl";
 import type { HydratedAgent } from "../agents/service.js";
+import { type DaytonaSandboxProcess, ensureSandboxDir } from "./daytonaShell.js";
 import { log } from "../log.js";
 import { readSkillBundle } from "./skills.js";
 
@@ -12,8 +13,8 @@ import { readSkillBundle } from "./skills.js";
 export const SKILL_SANDBOX_ROOT = "/workspace/.agents/skills";
 
 export type SkillSandbox = {
+  process: DaytonaSandboxProcess;
   fs: {
-    createFolder(path: string, mode: string): Promise<unknown>;
     uploadFile(content: Buffer, remotePath: string): Promise<unknown>;
   };
 };
@@ -95,26 +96,12 @@ async function unzipSkillBundle(
   });
 }
 
-async function ensureRemoteDir(sandbox: SkillSandbox, remoteDir: string): Promise<void> {
-  if (!remoteDir || remoteDir === "." || remoteDir === "/") return;
-  const segments = remoteDir.split("/").filter(Boolean);
-  let current = remoteDir.startsWith("/") ? "" : "";
-  for (const segment of segments) {
-    current = current ? `${current}/${segment}` : `/${segment}`;
-    try {
-      await sandbox.fs.createFolder(current, "755");
-    } catch {
-      // parent may already exist
-    }
-  }
-}
-
 async function uploadSkillFile(
   sandbox: SkillSandbox,
   remotePath: string,
   content: Buffer,
 ): Promise<void> {
-  await ensureRemoteDir(sandbox, path.dirname(remotePath));
+  await ensureSandboxDir(sandbox.process, path.dirname(remotePath));
   await sandbox.fs.uploadFile(content, remotePath);
 }
 
