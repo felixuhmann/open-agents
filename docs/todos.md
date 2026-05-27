@@ -7,34 +7,305 @@ for that.
 ## Top priority: reach feature parity with the old Anthropic backend
 
 The Daytona/Pi MVP proves we can run a basic repo-owned chat agent, but
-the following gaps remain before it is a replacement for the old
-Anthropic Managed Agents backend:
+it is not yet a full replacement for the old Anthropic Managed Agents
+backend. The old backend gave us four things at once:
 
-- Materialize bound skills into Daytona sandboxes, including predictable
-  `.agents/skills/...` layout and skill discovery instructions.
-- Wire both platform MCP handlers and third-party MCP servers into the
-  Pi/Daytona runtime, with secrets kept host-side where possible.
-- Close managed-tool parity gaps: `web_search`, richer `read` support
-  for images/PDFs/notebooks, long-lived shell sessions/background
-  processes, streaming command logs, and better timeout/resource
-  controls.
-- Replace Anthropic publish semantics with local runtime version
-  snapshots so runs can be correlated with the exact system prompt,
-  model, tools, skills, and MCP config used.
-- Add model-provider secrets, registry, and UI selection beyond
-  Anthropic, using the Pi provider seam.
-- Add Daytona sandbox lifecycle management: explicit stop/archive/delete,
-  cleanup jobs, stale sandbox recovery, status visibility, and policy
-  for whether new attachments force new sandboxes or mount into existing
-  ones.
-- Extend observability/debuggability with sandbox lifecycle events, tool
-  args/results, stdout/stderr, Daytona sandbox IDs, and issue/debug
-  bundle fields.
-- Add sandbox security policy for network access, command approvals or
-  deny rules, credential injection, resource limits, and cleanup
-  guarantees.
-- Add live or mock smoke tests for Daytona chat runs and parity-critical
-  runtime behavior.
+1. An agent loop.
+2. A sandbox/workspace with managed tools.
+3. Skills + MCP tool hosting.
+4. Managed session/files/lifecycle semantics.
+
+The MVP now owns the first slice of that stack: it can select a
+Daytona-backed `AgentBackend`, create/resume a Daytona sandbox, run a Pi
+agent loop, call Anthropic models through Pi, and execute a small set of
+sandbox-backed tools. The remaining work below is what blocks feature
+parity.
+
+### Skills in Daytona sandboxes
+
+Current state:
+
+- Skill upload/storage already exists in the app.
+- `SkillVersion.bundleStorageRef` points at the local zip bundle.
+- Anthropic skill mirroring exists, but the Daytona runtime ignores bound
+  skills.
+
+What is needed:
+
+- On session creation or run start, unpack every bound skill version into
+  a deterministic sandbox path, probably `.agents/skills/<skill-slug>/`.
+- Preserve the existing skill version pinning behavior: a run should use
+  the exact `AgentSkillBinding.skillVersionId` attached to the agent.
+- Add runtime instructions that tell the Pi/Daytona agent where skills
+  live and when to inspect them.
+- Decide whether skills are copied into each sandbox, mounted from
+  durable storage, or cached in a Daytona snapshot/base image.
+- Emit observability when skills are materialized, skipped, missing, or
+  invalid.
+
+Acceptance criteria:
+
+- Binding a skill in the existing UI changes the Daytona agent's runtime
+  behavior without any Anthropic API calls.
+- A Daytona run can list/read the skill files from inside the sandbox.
+- Issue/debug bundles show which skill versions were available for a run.
+
+### MCP tools: platform and third-party
+
+Current state:
+
+- Platform MCP handlers already exist under `apps/api/src/mcp/platform`.
+- Anthropic used to call our `/mcp/<slug>` route from its hosted
+  sandbox.
+- The Pi/Daytona runtime currently only exposes local managed tools
+  (`bash`, `read`, `write`, etc.).
+
+What is needed:
+
+- Add an MCP client/adaptor on the orchestrator side so the Pi loop can
+  expose platform tools as native Pi tools.
+- Prefer host-side execution for platform MCP tools so service/tool
+  secrets never need to enter the sandbox unless explicitly required.
+- Add third-party MCP support by connecting to each
+  `AgentThirdPartyMcp.serverUrl`, discovering tools, and adapting them
+  into Pi tool definitions.
+- Preserve existing per-binding config and encrypted tool secrets.
+- Decide whether the existing `/mcp/<slug>` route remains only for
+  backwards compatibility or becomes an internal implementation detail.
+
+Acceptance criteria:
+
+- Existing platform tools, starting with memory, work from Daytona runs.
+- Third-party MCP tools attached in the agent editor can be called by the
+  Pi loop.
+- Tool calls/results show up in `RunEvent` with enough data to debug
+  failures.
+
+### Managed tool parity
+
+Current MVP tools:
+
+- `bash`
+- `read`
+- `write`
+- `edit`
+- `glob`
+- `grep`
+- `web_fetch`
+
+Gaps versus Anthropic managed tools:
+
+- `web_search` is not implemented.
+- `read` is text-only and does not yet handle images, PDFs, notebooks, or
+  rich previews.
+- `bash` is one-shot command execution, not a long-lived shell session
+  with background process management.
+- Command output is returned at the end; stdout/stderr are not streamed
+  live into `RunEvent`.
+- `edit` is intentionally minimal exact-string replacement; it lacks the
+  robustness and ergonomics of a mature patch/edit tool.
+- There is no browser/computer-use equivalent.
+- There is no policy layer for dangerous commands, network access,
+  package installation, or long-running processes.
+
+What is needed:
+
+- Implement `web_search`, probably as a host-side platform tool or
+  provider-backed search service rather than arbitrary scraping from the
+  sandbox.
+- Upgrade `read` to detect file type and return appropriate model-facing
+  content or extracted text.
+- Add shell-session semantics on top of Daytona process sessions/PTYs:
+  create/reuse session, send commands, poll/stream logs, terminate
+  background work.
+- Stream command output into run events, while still returning compact
+  tool results to the model.
+- Add better limits: max command runtime, max output chars, max file read
+  size, and clear truncation messages.
+
+Acceptance criteria:
+
+- Agents using the same managed tool checkboxes in the UI get comparable
+  behavior on Daytona.
+- Long commands visibly stream progress in the chat/event timeline.
+- The model can inspect common uploaded file types without manual
+  conversion by the user.
+
+### Publish/version semantics
+
+Current state:
+
+- The old `publishAgent()` pushed config to Anthropic and stored an
+  `AgentVersion` snapshot.
+- Daytona MVP can run without an Anthropic publish, but that means the
+  old "published version" mental model is partially bypassed.
+
+What is needed:
+
+- Replace "publish to Anthropic" with "publish/freeze local runtime
+  config".
+- Store a provider-neutral `AgentVersion.payload` containing:
+  - system prompt
+  - model/provider
+  - managed tools
+  - platform tools
+  - third-party MCP servers
+  - skill version pins
+  - sandbox/runtime settings
+- Link each `AgentRun` to the version/config it used, or otherwise make
+  this derivable in issue/debug bundles.
+- Update UI copy so admins understand that publish freezes local runtime
+  config instead of provisioning Anthropic resources.
+
+Acceptance criteria:
+
+- A run can be audited later against the exact agent config it used.
+- Daytona does not require `anthropicAgentId`, `environmentId`, or
+  Anthropic agent versions.
+- The old Anthropic backend can remain available during migration without
+  confusing the version model.
+
+### Model-provider abstraction
+
+Current state:
+
+- Pi provides a model-provider seam.
+- MVP still uses the stored Anthropic API key and currently resolves
+  Anthropic model IDs.
+
+What is needed:
+
+- Add service secrets for additional providers: OpenAI, Google/Vertex,
+  OpenRouter, Bedrock, etc.
+- Add a provider/model registry in the backend and expose it to the web
+  app.
+- Update the agent editor so `Agent.model` is no longer effectively an
+  Anthropic-only string.
+- Decide how to represent provider + model in the DB. Options:
+  - keep one string like `anthropic:claude-opus-4-7`
+  - add explicit `modelProvider` + `modelId` fields
+  - store provider config in a JSON runtime config field
+- Normalize usage/cost events across providers so analytics keep
+  working.
+
+Acceptance criteria:
+
+- An admin can configure at least one non-Anthropic provider and select a
+  model for an agent.
+- The same Daytona sandbox/tool runtime works regardless of model
+  provider.
+- `model.request` events include provider/model/usage consistently.
+
+### Daytona sandbox lifecycle management
+
+Current state:
+
+- MVP creates Daytona sandboxes and stores session references in existing
+  chat/email session fields.
+- Daytona auto-stop/archive settings are set during creation, but the app
+  has no first-class lifecycle UI or cleanup jobs yet.
+
+What is needed:
+
+- Add explicit sandbox metadata/state in the DB rather than encoding
+  everything inside existing Anthropic-named session fields.
+- Track sandbox ID, provider, state, last activity, owning agent,
+  conversation/thread, and current lifecycle policy.
+- Add admin/operator controls for stop, start, archive, delete, and
+  recover.
+- Add cleanup/reconciliation jobs for stale or orphaned sandboxes.
+- Decide attachment semantics:
+  - Anthropic required new sessions for new mounts.
+  - Daytona can upload files into an existing sandbox.
+  - We should probably stop forcing new sessions for attachments on the
+    Daytona path.
+- Handle Daytona error states and recoverable failures cleanly.
+
+Acceptance criteria:
+
+- Admins can see which sandbox backs a conversation/thread.
+- Stale sandboxes do not accumulate indefinitely.
+- New attachments are available to the agent without unnecessary sandbox
+  churn.
+
+### Observability and debug parity
+
+Current state:
+
+- Existing `RunEvent`/SSE infrastructure works and is a strong reusable
+  foundation.
+- MVP emits agent deltas, full messages, tool use/results, and model
+  request usage.
+
+What is needed:
+
+- Add sandbox lifecycle events: create, start, stop, archive, recover,
+  delete, upload attachment, materialize skills.
+- Capture tool args and structured result summaries where safe.
+- Stream stdout/stderr separately for command tools.
+- Add Daytona sandbox IDs and runtime metadata to issue/debug bundles.
+- Preserve enough provider payload/response metadata to diagnose model
+  failures without leaking secrets.
+- Make analytics provider-neutral.
+
+Acceptance criteria:
+
+- Debugging a failed Daytona run is at least as easy as debugging the old
+  Anthropic run.
+- Issue bundles include the full chain: user message -> runtime config ->
+  sandbox -> tools -> model requests -> final output/error.
+
+### Sandbox security and policy
+
+Current state:
+
+- Daytona gives isolation, but the app does not yet own a detailed
+  runtime policy.
+- MVP tools are intentionally permissive.
+
+What is needed:
+
+- Define default sandbox network policy: internet on/off, allowlists,
+  internal network protection.
+- Add command policy controls: deny rules, approval gates, max runtime,
+  max output, max background process lifetime.
+- Keep credentials host-side by default. Only inject credentials into the
+  sandbox when a tool explicitly requires sandbox-local access.
+- Add resource limits and per-agent/per-run quotas.
+- Ensure cleanup guarantees for generated files, temporary credentials,
+  archived sandboxes, and failed runs.
+
+Acceptance criteria:
+
+- Admins can reason about what a sandbox can access.
+- A compromised or confused agent has bounded blast radius.
+- Sensitive service credentials are not written into prompts, logs, or
+  sandbox files by default.
+
+### Tests and smoke coverage
+
+Current state:
+
+- `pnpm check` passes.
+- No live Daytona run was exercised in CI because it requires real
+  credentials.
+
+What is needed:
+
+- Add unit tests for runtime config translation and tool adapters.
+- Add mocked Daytona tests for create/resume/upload/tool execution paths.
+- Add mocked Pi event tests to verify `RunEvent` mapping.
+- Add an optional live smoke test gated by `DAYTONA_API_KEY` and model
+  provider credentials.
+- Add regression coverage for attachments, skill materialization, MCP
+  tool calls, and sandbox lifecycle reconciliation.
+
+Acceptance criteria:
+
+- The self-hosted runtime can be changed without manually testing every
+  tool path.
+- CI covers the provider-neutral behavior; live credentials only enable
+  optional smoke coverage.
 
 ## Per-collection memory schemas (v1.5)
 
