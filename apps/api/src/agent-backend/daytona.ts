@@ -27,6 +27,12 @@ import {
   materializeAgentSkills,
   skillSlugFromName,
 } from "../services/materializeSkills.js";
+import {
+  DAYTONA_WORKSPACE_DIR,
+  bashCommand,
+  ensureSandboxDir,
+  shellQuote,
+} from "../services/daytonaShell.js";
 import { SERVICE_KEYS, getServiceSecret } from "../secrets/service.js";
 import {
   AgentBackendError,
@@ -41,7 +47,7 @@ import {
 } from "./types.js";
 
 const DAYTONA_SESSION_PREFIX = "daytona";
-const DEFAULT_WORKSPACE_DIR = "/workspace";
+const DEFAULT_WORKSPACE_DIR = DAYTONA_WORKSPACE_DIR;
 const DEFAULT_SHELL_TIMEOUT_SECONDS = 60;
 const MAX_TOOL_OUTPUT_CHARS = 20_000;
 const MAX_READ_CHARS = 80_000;
@@ -66,15 +72,6 @@ function parseDaytonaSessionId(sessionId: string): DaytonaSessionRef {
 function truncate(text: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n\n[truncated ${text.length - maxChars} chars]`;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-/** Daytona TypeScript sandboxes may not ship zsh; always invoke bash explicitly. */
-function bashCommand(command: string): string {
-  return `/bin/bash -lc ${shellQuote(command)}`;
 }
 
 function readTextBlocks(message: AssistantMessage): string {
@@ -148,7 +145,6 @@ export class DaytonaAgentBackend implements AgentBackend {
         { timeout: 90 },
       );
 
-      await sandbox.fs.createFolder(DEFAULT_WORKSPACE_DIR, "755");
       await this.materializeResources(sandbox, input.resources ?? []);
 
       let skillsManifest;
@@ -299,9 +295,7 @@ export class DaytonaAgentBackend implements AgentBackend {
     for (const resource of resources) {
       if (!resource.bytes) continue;
       const remoteDir = path.dirname(resource.mountPath);
-      if (remoteDir && remoteDir !== ".") {
-        await sandbox.fs.createFolder(remoteDir, "755");
-      }
+      await ensureSandboxDir(sandbox.process, remoteDir);
       await sandbox.fs.uploadFile(toBuffer(resource.bytes), resource.mountPath);
     }
   }
@@ -548,10 +542,7 @@ function writeTool(sandbox: Sandbox): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; content: string };
-      const writeDir = path.dirname(p.path);
-      if (writeDir && writeDir !== ".") {
-        await sandbox.fs.createFolder(writeDir, "755");
-      }
+      await ensureSandboxDir(sandbox.process, path.dirname(p.path));
       await sandbox.fs.uploadFile(Buffer.from(p.content, "utf8"), p.path);
       return {
         content: [{ type: "text", text: `Wrote ${p.content.length} chars to ${p.path}` }],
