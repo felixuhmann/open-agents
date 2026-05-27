@@ -16,7 +16,8 @@ import {
   type Static,
   type TSchema,
 } from "@earendil-works/pi-ai";
-import { Daytona } from "@daytona/sdk";
+import { Daytona, type Sandbox } from "@daytona/sdk";
+import { wrapDaytonaError } from "./daytonaErrors.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
@@ -125,42 +126,66 @@ export class DaytonaAgentBackend implements AgentBackend {
   constructor(private readonly apiKey: string) {}
 
   async createSession(input: CreateSessionInput): Promise<AgentSession> {
-    const daytona = new Daytona({ apiKey: this.apiKey });
-    const sandbox = await daytona.create(
-      {
-        name: `oa-${(input.agentSlug ?? input.agentId).replace(/[^a-z0-9-]/gi, "-").slice(0, 32)}-${randomUUID().slice(0, 8)}`,
-        language: "typescript",
-        autoStopInterval: 15,
-        autoArchiveInterval: 60 * 24 * 7,
-        autoDeleteInterval: -1,
-        labels: {
-          "open-agents-agent-id": input.agentId,
-          "open-agents-agent-slug": input.agentSlug ?? "",
+    try {
+      const daytona = new Daytona({ apiKey: this.apiKey });
+      const sandbox = await daytona.create(
+        {
+          name: `oa-${(input.agentSlug ?? input.agentId).replace(/[^a-z0-9-]/gi, "-").slice(0, 32)}-${randomUUID().slice(0, 8)}`,
+          language: "typescript",
+          autoStopInterval: 15,
+          autoArchiveInterval: 60 * 24 * 7,
+          autoDeleteInterval: -1,
+          labels: {
+            "open-agents-agent-id": input.agentId,
+            "open-agents-agent-slug": input.agentSlug ?? "",
+          },
         },
-      },
-      { timeout: 90 },
-    );
+        { timeout: 90 },
+      );
 
-    await sandbox.process.executeCommand(`mkdir -p ${shellQuote(DEFAULT_WORKSPACE_DIR)}`);
-    await this.materializeResources(sandbox, input.resources ?? []);
+      await sandbox.process.executeCommand(
+        `mkdir -p ${shellQuote(DEFAULT_WORKSPACE_DIR)}`,
+      );
+      await this.materializeResources(sandbox, input.resources ?? []);
 
-    let skillsManifest;
-    const agent = await getAgentById(input.agentId);
-    if (agent?.skillBindings.length) {
-      skillsManifest = await materializeAgentSkills(sandbox, agent.skillBindings);
+      let skillsManifest;
+      const agent = await getAgentById(input.agentId);
+      if (agent?.skillBindings.length) {
+        skillsManifest = await materializeAgentSkills(sandbox, agent.skillBindings);
+      }
+
+      log.info("daytona: session created", {
+        agentId: input.agentId,
+        sandboxId: sandbox.id,
+        resources: input.resources?.length ?? 0,
+        skillsMaterialized: skillsManifest?.materialized ?? 0,
+        skillsFailed: skillsManifest?.failed ?? 0,
+      });
+      return {
+        id: buildDaytonaSessionId(input.agentId, sandbox.id),
+        skillsManifest,
+      };
+    } catch (err) {
+      throw wrapDaytonaError(err, "Failed to create Daytona sandbox session");
     }
+  }
 
-    log.info("daytona: session created", {
-      agentId: input.agentId,
-      sandboxId: sandbox.id,
-      resources: input.resources?.length ?? 0,
-      skillsMaterialized: skillsManifest?.materialized ?? 0,
-      skillsFailed: skillsManifest?.failed ?? 0,
-    });
-    return {
-      id: buildDaytonaSessionId(input.agentId, sandbox.id),
-      skillsManifest,
-    };
+  async mountSessionResources(
+    sessionId: string,
+    resources: SessionResource[],
+  ): Promise<void> {
+    if (!resources.length) return;
+    try {
+      await this.withSandbox(sessionId, async (sandbox) => {
+        await this.materializeResources(sandbox, resources);
+      });
+      log.info("daytona: mounted session resources", {
+        sessionId,
+        resourceCount: resources.length,
+      });
+    } catch (err) {
+      throw wrapDaytonaError(err, "Failed to mount files in Daytona sandbox");
+    }
   }
 
   async streamUntilIdle(
@@ -169,74 +194,79 @@ export class DaytonaAgentBackend implements AgentBackend {
     onEvent?: AgentEventHandler,
     context?: AgentRunContext,
   ): Promise<string> {
-    const session = parseDaytonaSessionId(sessionId);
-    const agentId = context?.agentId ?? session.agentId;
-    const agent = await getAgentById(agentId);
-    if (!agent) throw new AgentBackendError(`Agent not found: ${agentId}`);
+    try {
+      const session = parseDaytonaSessionId(sessionId);
+      const agentId = context?.agentId ?? session.agentId;
+      const agent = await getAgentById(agentId);
+      if (!agent) throw new AgentBackendError(`Agent not found: ${agentId}`);
 
-    const daytona = new Daytona({ apiKey: this.apiKey });
-    const sandbox = await daytona.get(session.sandboxId);
-    if (sandbox.state !== "started") {
-      await sandbox.start(90);
-    }
-    await sandbox.refreshActivity();
+      return await this.withSandbox(sessionId, async (sandbox) => {
+        const priorMessages = context
+          ? await loadPriorMessages(context)
+          : ([] satisfies Message[]);
+        const tools = buildTools(agent, sandbox);
+        const model = normalizeModelId(agent.model);
+        const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
+        let finalText = "";
+        let deltaText = "";
 
-    const priorMessages = context
-      ? await loadPriorMessages(context)
-      : ([] satisfies Message[]);
-    const tools = buildTools(agent, sandbox);
-    const model = normalizeModelId(agent.model);
-    const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
-    let finalText = "";
-    let deltaText = "";
-
-    const runtimePrompt = buildRuntimePrompt(
-      agent,
-      Boolean(tools.length),
-      session.sandboxId,
-    );
-    const piAgent = new Agent({
-      initialState: {
-        systemPrompt: runtimePrompt,
-        model,
-        thinkingLevel: "high",
-        messages: priorMessages,
-        tools,
-      },
-      sessionId,
-      toolExecution: "sequential",
-      getApiKey: (provider) => {
-        if (provider === "anthropic") return anthropicApiKey ?? undefined;
-        return undefined;
-      },
-    });
-
-    piAgent.subscribe((event) => {
-      this.handlePiEvent(event, onEvent, (text) => {
-        deltaText += text;
-      });
-      if (event.type === "message_end" && isAssistantMessage(event.message)) {
-        finalText = readTextBlocks(event.message);
-      }
-      if (event.type === "turn_end" && isAssistantMessage(event.message)) {
-        const usage = event.message.usage;
-        onEvent?.({
-          kind: "model_request",
-          rawType: "pi.turn_end",
-          model: event.message.model,
-          isError: event.message.stopReason === "error",
-          usage: {
-            inputTokens: usage.input,
-            outputTokens: usage.output,
-            cacheCreationInputTokens: usage.cacheWrite,
-            cacheReadInputTokens: usage.cacheRead,
+        const runtimePrompt = buildRuntimePrompt(
+          agent,
+          Boolean(tools.length),
+          session.sandboxId,
+        );
+        const piAgent = new Agent({
+          initialState: {
+            systemPrompt: runtimePrompt,
+            model,
+            thinkingLevel: "high",
+            messages: priorMessages,
+            tools,
+          },
+          sessionId,
+          toolExecution: "sequential",
+          getApiKey: (provider) => {
+            if (provider === "anthropic") return anthropicApiKey ?? undefined;
+            return undefined;
           },
         });
-      }
-    });
 
-    await piAgent.prompt(userMessage);
-    return finalText || deltaText;
+        piAgent.subscribe((event) => {
+          this.handlePiEvent(event, onEvent, (text) => {
+            deltaText += text;
+          });
+          if (event.type === "message_end" && isAssistantMessage(event.message)) {
+            finalText = readTextBlocks(event.message);
+          }
+          if (event.type === "turn_end" && isAssistantMessage(event.message)) {
+            const usage = event.message.usage;
+            onEvent?.({
+              kind: "model_request",
+              rawType: "pi.turn_end",
+              model: event.message.model,
+              isError: event.message.stopReason === "error",
+              usage: {
+                inputTokens: usage.input,
+                outputTokens: usage.output,
+                cacheCreationInputTokens: usage.cacheWrite,
+                cacheReadInputTokens: usage.cacheRead,
+              },
+            });
+          }
+        });
+
+        await piAgent.prompt(userMessage);
+        return finalText || deltaText;
+      });
+    } catch (err) {
+      const wrapped = wrapDaytonaError(err, "Daytona sandbox run failed");
+      onEvent?.({
+        kind: "session_error",
+        rawType: "daytona.error",
+        message: wrapped.message,
+      });
+      throw wrapped;
+    }
   }
 
   uploadFile(_input: UploadFileInput): Promise<AgentFile> {
@@ -245,8 +275,22 @@ export class DaytonaAgentBackend implements AgentBackend {
     return Promise.resolve({ id: `daytona-file-${randomUUID()}` });
   }
 
+  private async withSandbox<T>(
+    sessionId: string,
+    fn: (sandbox: Sandbox) => Promise<T>,
+  ): Promise<T> {
+    const session = parseDaytonaSessionId(sessionId);
+    const daytona = new Daytona({ apiKey: this.apiKey });
+    const sandbox = await daytona.get(session.sandboxId);
+    if (sandbox.state !== "started") {
+      await sandbox.start(90);
+    }
+    await sandbox.refreshActivity();
+    return fn(sandbox);
+  }
+
   private async materializeResources(
-    sandbox: Awaited<ReturnType<Daytona["create"]>>,
+    sandbox: Sandbox,
     resources: SessionResource[],
   ): Promise<void> {
     for (const resource of resources) {
@@ -422,10 +466,7 @@ function boundManagedTools(agent: HydratedAgent): Set<string> {
   );
 }
 
-function buildTools(
-  agent: HydratedAgent,
-  sandbox: Awaited<ReturnType<Daytona["create"]>>,
-): AgentTool[] {
+function buildTools(agent: HydratedAgent, sandbox: Sandbox): AgentTool[] {
   const bound = boundManagedTools(agent);
   const tools: AgentTool[] = [];
 
@@ -440,7 +481,7 @@ function buildTools(
   return tools;
 }
 
-function bashTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function bashTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "bash",
     label: "Bash",
@@ -474,7 +515,7 @@ function bashTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
   });
 }
 
-function readTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function readTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "read",
     label: "Read file",
@@ -491,7 +532,7 @@ function readTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
   });
 }
 
-function writeTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function writeTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "write",
     label: "Write file",
@@ -514,7 +555,7 @@ function writeTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
   });
 }
 
-function editTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function editTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "edit",
     label: "Edit file",
@@ -549,7 +590,7 @@ function editTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
   });
 }
 
-function globTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function globTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "glob",
     label: "Glob",
@@ -579,7 +620,7 @@ function globTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
   });
 }
 
-function grepTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function grepTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "grep",
     label: "Grep",
@@ -606,7 +647,7 @@ function grepTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
   });
 }
 
-function webFetchTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
+function webFetchTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "web_fetch",
     label: "Web fetch",

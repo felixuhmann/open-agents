@@ -16,12 +16,21 @@ export type EmailThreadSessionInput = {
   subject: string;
 };
 
+function effectiveForceNewSession(
+  backendRuntime: "anthropic" | "daytona",
+  forceNewSession: boolean,
+): boolean {
+  // Daytona can upload attachments into an existing sandbox; only Anthropic
+  // Managed Agents require a new session when new files must be mounted.
+  if (backendRuntime === "daytona") return false;
+  return forceNewSession;
+}
+
 /**
- * Resume the email thread's existing Anthropic session, or create a new one
- * when there's no prior session OR `forceNewSession` is true. New sessions
- * get the supplied `resources` mounted; resumed sessions ignore them
- * (Managed Agents only mounts resources at session-creation, which is why
- * the worker forces a new session whenever there are unhandled attachments).
+ * Resume the email thread's existing session, or create a new one when there's
+ * no prior session OR `forceNewSession` is true (Anthropic only for the latter).
+ * New sessions get the supplied `resources` mounted; resumed Daytona sessions
+ * receive new resources via `mountSessionResources`.
  */
 export async function resolveEmailSessionId(
   agent: Pick<Agent, "id" | "slug" | "anthropicAgentId" | "environmentId">,
@@ -29,15 +38,21 @@ export async function resolveEmailSessionId(
   resources: SessionResource[],
   forceNewSession: boolean,
 ): Promise<ResolvedSession> {
-  if (thread.sessionId && !forceNewSession) {
+  const backend = await getAgentBackend();
+  const forceNew = effectiveForceNewSession(backend.runtime, forceNewSession);
+
+  if (thread.sessionId && !forceNew) {
     log.info("sessions: resuming email thread", {
       threadId: thread.id,
       sessionId: thread.sessionId,
+      mountResources: resources.length,
     });
+    if (resources.length > 0) {
+      await backend.mountSessionResources(thread.sessionId, resources);
+    }
     return { sessionId: thread.sessionId };
   }
 
-  const backend = await getAgentBackend();
   if (
     backend.runtime === "anthropic" &&
     (!agent.anthropicAgentId || !agent.environmentId)
@@ -69,7 +84,7 @@ export async function resolveEmailSessionId(
     threadId: thread.id,
     sessionId: session.id,
     resources: resources.length,
-    forceNewSession,
+    forceNewSession: forceNew,
     skillsMaterialized: session.skillsManifest?.materialized ?? 0,
   });
   return { sessionId: session.id, skillsManifest: session.skillsManifest };
@@ -83,7 +98,7 @@ export type ChatConversationSessionInput = {
 
 /**
  * Resume the chat conversation's existing session, or create a new one when
- * there's no prior session OR `forceNewSession` is true.
+ * there's no prior session OR `forceNewSession` is true (Anthropic only).
  */
 export async function resolveChatSessionId(
   agent: Pick<Agent, "id" | "slug" | "anthropicAgentId" | "environmentId">,
@@ -91,15 +106,21 @@ export async function resolveChatSessionId(
   resources: SessionResource[],
   forceNewSession: boolean,
 ): Promise<ResolvedSession> {
-  if (conversation.anthropicSessionId && !forceNewSession) {
+  const backend = await getAgentBackend();
+  const forceNew = effectiveForceNewSession(backend.runtime, forceNewSession);
+
+  if (conversation.anthropicSessionId && !forceNew) {
     log.info("sessions: resuming chat conversation", {
       conversationId: conversation.id,
       sessionId: conversation.anthropicSessionId,
+      mountResources: resources.length,
     });
+    if (resources.length > 0) {
+      await backend.mountSessionResources(conversation.anthropicSessionId, resources);
+    }
     return { sessionId: conversation.anthropicSessionId };
   }
 
-  const backend = await getAgentBackend();
   if (
     backend.runtime === "anthropic" &&
     (!agent.anthropicAgentId || !agent.environmentId)
@@ -131,7 +152,7 @@ export async function resolveChatSessionId(
     conversationId: conversation.id,
     sessionId: session.id,
     resources: resources.length,
-    forceNewSession,
+    forceNewSession: forceNew,
     skillsMaterialized: session.skillsManifest?.materialized ?? 0,
   });
   return { sessionId: session.id, skillsManifest: session.skillsManifest };
