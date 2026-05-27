@@ -9,6 +9,11 @@ import type { SkillMaterializationManifest } from "@open-agents/types";
 export interface AgentBackend {
   runtime: "anthropic" | "daytona";
   createSession(input: CreateSessionInput): Promise<AgentSession>;
+  /**
+   * Upload session resources into an existing backend session. Anthropic only
+   * mounts at creation time; Daytona can add files to a resumed sandbox.
+   */
+  mountSessionResources(sessionId: string, resources: SessionResource[]): Promise<void>;
   streamUntilIdle(
     sessionId: string,
     userMessage: string,

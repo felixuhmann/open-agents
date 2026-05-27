@@ -199,11 +199,10 @@ What is needed:
 - Add admin/operator controls for stop, start, archive, delete, and
   recover.
 - Add cleanup/reconciliation jobs for stale or orphaned sandboxes.
-- Decide attachment semantics:
-  - Anthropic required new sessions for new mounts.
-  - Daytona can upload files into an existing sandbox.
-  - We should probably stop forcing new sessions for attachments on the
-    Daytona path.
+- ~~Stop forcing new sessions for attachments on the Daytona path~~ (done:
+  resumed sandboxes call `mountSessionResources`).
+- Decide attachment semantics for edge cases (sandbox stopped/archived,
+  mount failures, very large files).
 - Handle Daytona error states and recoverable failures cleanly.
 
 Acceptance criteria:

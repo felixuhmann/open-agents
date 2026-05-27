@@ -10,6 +10,7 @@ import {
   type AgentSession,
   type AgentStreamEvent,
   type CreateSessionInput,
+  type SessionResource,
   type UploadFileInput,
 } from "./types.js";
 
@@ -72,6 +73,17 @@ export class AnthropicAgentBackend implements AgentBackend {
       });
       throw err;
     }
+  }
+
+  mountSessionResources(_sessionId: string, resources: SessionResource[]): Promise<void> {
+    if (resources.length > 0) {
+      return Promise.reject(
+        new AgentBackendError(
+          "Anthropic Managed Agents mount files only at session creation; start a new session instead.",
+        ),
+      );
+    }
+    return Promise.resolve();
   }
 
   /**

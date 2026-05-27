@@ -266,8 +266,10 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   `agent-api-*` are mutually exclusive. The client picks the right one
   per endpoint — don't merge them.
 - **New attachments force a new Anthropic session**: Managed Agents only
-  mount `resources` at session-creation time. The run-agent worker handles
-  this automatically (`forceNewSession = hasNewAttachments`).
+  mount `resources` at session-creation time. The run-agent worker passes
+  `forceNewSession = hasNewAttachments` for Anthropic; on the Daytona backend
+  the same flag is ignored and files are uploaded into the existing sandbox
+  via `mountSessionResources`.
 - **Service credentials are not env vars**: Anthropic / Mailgun keys live
   AES-GCM encrypted in the `Secret` table and are read via
   [`secrets/service.ts`](apps/api/src/secrets/service.ts). The only
