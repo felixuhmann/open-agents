@@ -226,7 +226,13 @@ export default function AgentChatPage() {
     const handle = (e: MessageEvent<string>) => {
       try {
         const data = JSON.parse(e.data) as StreamEvent;
-        if (data.type === "agent.message" && typeof data.payload.text === "string") {
+        if (data.type === "agent.delta" && typeof data.payload.text === "string") {
+          buffer += data.payload.text;
+          setStreamingText(buffer);
+        } else if (
+          data.type === "agent.message" &&
+          typeof data.payload.text === "string"
+        ) {
           buffer = data.payload.text;
           setStreamingText(buffer);
         } else if (

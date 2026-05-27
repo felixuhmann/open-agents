@@ -7,6 +7,8 @@ export type UploadedAttachment = {
   id: string;
   filename: string;
   mountPath: string;
+  mime?: string;
+  bytes?: Uint8Array;
 };
 
 function mimeFromContentType(ct: string): string {
@@ -47,7 +49,13 @@ export async function uploadPendingAttachments(
       where: { id: att.id },
       data: { anthropicFileId: file.id, mountPath },
     });
-    uploaded.push({ id: file.id, filename: att.filename, mountPath });
+    uploaded.push({
+      id: file.id,
+      filename: att.filename,
+      mountPath,
+      mime: mimeFromContentType(att.contentType),
+      bytes: new Uint8Array(att.bytes),
+    });
     log.info("attachments: uploaded", {
       attachmentId: att.id,
       fileId: file.id,

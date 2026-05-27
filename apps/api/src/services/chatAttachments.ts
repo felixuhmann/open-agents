@@ -38,7 +38,13 @@ export async function uploadPendingChatAttachments(
       where: { id: att.id },
       data: { anthropicFileId: file.id, mountPath },
     });
-    uploaded.push({ id: file.id, filename: att.filename, mountPath });
+    uploaded.push({
+      id: file.id,
+      filename: att.filename,
+      mountPath,
+      mime: mimeFromContentType(att.contentType),
+      bytes: new Uint8Array(att.bytes),
+    });
     log.info("chat-attachments: uploaded", {
       attachmentId: att.id,
       fileId: file.id,
