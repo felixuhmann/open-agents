@@ -283,6 +283,8 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` unpacks
   each pinned `AgentSkillBinding` into `/workspace/.agents/skills/<slug>/`
   via [`materializeSkills.ts`](apps/api/src/services/materializeSkills.ts).
+  Bundle bytes live on disk under `apps/api/data/skills/` (see
+  `SKILL_BUNDLE_DIR`); mount that directory persistently in production.
   Resumed sandboxes keep whatever was copied when they were first created;
   changing skill bindings mid-conversation does not re-sync until a new
   session is forced.
