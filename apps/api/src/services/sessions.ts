@@ -32,7 +32,10 @@ export async function resolveEmailSessionId(
   }
 
   const backend = await getAgentBackend();
-  if (backend.runtime === "anthropic" && (!agent.anthropicAgentId || !agent.environmentId)) {
+  if (
+    backend.runtime === "anthropic" &&
+    (!agent.anthropicAgentId || !agent.environmentId)
+  ) {
     throw new Error(
       `Agent is not provisioned with Anthropic yet (missing agentId or environmentId)`,
     );
@@ -90,7 +93,10 @@ export async function resolveChatSessionId(
   }
 
   const backend = await getAgentBackend();
-  if (backend.runtime === "anthropic" && (!agent.anthropicAgentId || !agent.environmentId)) {
+  if (
+    backend.runtime === "anthropic" &&
+    (!agent.anthropicAgentId || !agent.environmentId)
+  ) {
     throw new Error(
       `Agent is not provisioned with Anthropic yet (missing agentId or environmentId)`,
     );

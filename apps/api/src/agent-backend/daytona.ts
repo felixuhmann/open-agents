@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { posix as path } from "node:path";
-import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import {
+  Agent,
+  type AgentEvent,
+  type AgentMessage,
+  type AgentTool,
+} from "@earendil-works/pi-agent-core";
 import {
   Type,
   getModels,
+  type Api,
   type AssistantMessage,
   type Message,
   type Model,
-  type ToolResultMessage,
+  type Static,
+  type TSchema,
 } from "@earendil-works/pi-ai";
 import { Daytona } from "@daytona/sdk";
-import type { Static, TSchema } from "typebox";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
@@ -76,16 +82,7 @@ function isAssistantMessage(message: AgentMessage): message is AssistantMessage 
   );
 }
 
-function isToolResultMessage(message: AgentMessage): message is ToolResultMessage {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "role" in message &&
-    message.role === "toolResult"
-  );
-}
-
-function normalizeModelId(modelId: string): Model<any> {
+function normalizeModelId(modelId: string): Model<Api> {
   const anthropicModels = getModels("anthropic");
   const model = anthropicModels.find((m) => m.id === modelId);
   if (!model) {
@@ -222,10 +219,10 @@ export class DaytonaAgentBackend implements AgentBackend {
     return finalText || deltaText;
   }
 
-  async uploadFile(_input: UploadFileInput): Promise<AgentFile> {
+  uploadFile(_input: UploadFileInput): Promise<AgentFile> {
     // Daytona has no separate Files API. The worker passes newly-uploaded bytes
     // through SessionResource so createSession can materialize them directly.
-    return { id: `daytona-file-${randomUUID()}` };
+    return Promise.resolve({ id: `daytona-file-${randomUUID()}` });
   }
 
   private async materializeResources(
@@ -294,7 +291,9 @@ async function loadPriorMessages(context: AgentRunContext): Promise<Message[]> {
       .filter((row) => row.id !== context.chatMessageId)
       .flatMap((row): Message[] => {
         if (row.role === "user") {
-          return [{ role: "user", content: row.content, timestamp: row.createdAt.getTime() }];
+          return [
+            { role: "user", content: row.content, timestamp: row.createdAt.getTime() },
+          ];
         }
         if (row.role === "assistant") {
           return [
@@ -401,7 +400,9 @@ function bashTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
     description: "Execute a bash command in the Daytona sandbox.",
     parameters: Type.Object({
       command: Type.String({ description: "Command to execute." }),
-      cwd: Type.Optional(Type.String({ description: "Working directory. Defaults to /workspace." })),
+      cwd: Type.Optional(
+        Type.String({ description: "Working directory. Defaults to /workspace." }),
+      ),
       timeoutSeconds: Type.Optional(Type.Number({ description: "Timeout in seconds." })),
     }),
     executionMode: "sequential",
@@ -454,7 +455,9 @@ function writeTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; content: string };
-      await sandbox.process.executeCommand(`mkdir -p ${shellQuote(path.dirname(p.path))}`);
+      await sandbox.process.executeCommand(
+        `mkdir -p ${shellQuote(path.dirname(p.path))}`,
+      );
       await sandbox.fs.uploadFile(Buffer.from(p.content, "utf8"), p.path);
       return {
         content: [{ type: "text", text: `Wrote ${p.content.length} chars to ${p.path}` }],
@@ -481,11 +484,15 @@ function editTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
       if (index === -1) {
         throw new Error(`oldString was not found in ${p.path}`);
       }
-      if (original.indexOf(p.oldString, index + p.oldString.length) !== -1) {
-        throw new Error(`oldString occurs more than once in ${p.path}; provide more context`);
+      if (original.slice(index + p.oldString.length).includes(p.oldString)) {
+        throw new Error(
+          `oldString occurs more than once in ${p.path}; provide more context`,
+        );
       }
       const updated =
-        original.slice(0, index) + p.newString + original.slice(index + p.oldString.length);
+        original.slice(0, index) +
+        p.newString +
+        original.slice(index + p.oldString.length);
       await sandbox.fs.uploadFile(Buffer.from(updated, "utf8"), p.path);
       return {
         content: [{ type: "text", text: `Edited ${p.path}` }],
@@ -502,13 +509,23 @@ function globTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
     description: "Find files by glob pattern under a root directory.",
     parameters: Type.Object({
       pattern: Type.String(),
-      root: Type.Optional(Type.String({ description: "Root directory. Defaults to /workspace." })),
+      root: Type.Optional(
+        Type.String({ description: "Root directory. Defaults to /workspace." }),
+      ),
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
-      const result = await sandbox.fs.searchFiles(p.root ?? DEFAULT_WORKSPACE_DIR, p.pattern);
+      const result = await sandbox.fs.searchFiles(
+        p.root ?? DEFAULT_WORKSPACE_DIR,
+        p.pattern,
+      );
       return {
-        content: [{ type: "text", text: truncate(JSON.stringify(result.files ?? result, null, 2)) }],
+        content: [
+          {
+            type: "text",
+            text: truncate(JSON.stringify(result.files ?? result, null, 2)),
+          },
+        ],
         details: result,
       };
     },
@@ -522,7 +539,9 @@ function grepTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
     description: "Search text in files under a root directory.",
     parameters: Type.Object({
       pattern: Type.String(),
-      root: Type.Optional(Type.String({ description: "Root directory. Defaults to /workspace." })),
+      root: Type.Optional(
+        Type.String({ description: "Root directory. Defaults to /workspace." }),
+      ),
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
@@ -532,7 +551,10 @@ function grepTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentTool {
         undefined,
         30,
       );
-      return { content: [{ type: "text", text: truncate(result.result) }], details: result };
+      return {
+        content: [{ type: "text", text: truncate(result.result) }],
+        details: result,
+      };
     },
   });
 }
@@ -553,7 +575,10 @@ function webFetchTool(sandbox: Awaited<ReturnType<Daytona["create"]>>): AgentToo
         undefined,
         30,
       );
-      return { content: [{ type: "text", text: truncate(result.result) }], details: result };
+      return {
+        content: [{ type: "text", text: truncate(result.result) }],
+        details: result,
+      };
     },
   });
 }
