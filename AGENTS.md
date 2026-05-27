@@ -297,3 +297,28 @@ setup wizard to create the first admin and store credentials.
 
 Expose the API with ngrok / Tailscale Funnel so Mailgun and Anthropic can
 reach `/mailgun/inbound` and `/mcp/<slug>`.
+
+## Cursor Cloud specific instructions
+
+### Prerequisites already installed on the VM
+
+- **Node.js 24.x** via nvm (default alias set to 24)
+- **pnpm 10.33.4** via corepack
+- **PostgreSQL 16** (Ubuntu package); cluster `16/main` on port 5432.
+  User `postgres` password is `postgres`. Auth is `md5` for local TCP.
+
+### Starting services
+
+1. Ensure Postgres is running: `sudo pg_ctlcluster 16 main start`
+2. Create the database (first time only):
+   `PGPASSWORD=postgres psql -U postgres -h localhost -c "CREATE DATABASE open_agents;"`
+3. Apply migrations: `cd packages/db && DATABASE_URL="postgresql://postgres:postgres@localhost:5432/open_agents?schema=public" npx prisma migrate deploy`
+4. Start dev: `pnpm dev` (runs API on :3000 and Vite on :5173 via turbo)
+
+### Non-obvious gotchas
+
+- The `serveStatic` warning about `../web/dist` not existing is expected in dev mode; the Vite dev server serves the SPA directly.
+- `pnpm check` includes a `prettier --check` that may fail on pre-existing formatting issues in the repo — typecheck + lint are the important gates.
+- The setup wizard (`POST /api/setup`) can only run once (while `user` table is empty). After that, credential changes go through the admin Settings UI.
+- `apps/api/.env` is the single env file; `packages/db/prisma.config.ts` loads it via dotenv. If you change `DATABASE_URL`, it takes effect in both Prisma CLI and the running API.
+- The `msw` build script warning from pnpm is benign (test mock library, not needed at runtime).
