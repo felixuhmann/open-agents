@@ -271,9 +271,10 @@ port — check the bootstrap log lines.
 Skill bundles uploaded from `/library/skills`:
 
 - The zip is stored locally under
-  `data/skills/<timestamp>-<sanitized-name>.zip` (the directory is
-  configurable via `SKILL_BUNDLE_DIR`). The filename lives on
-  `Skill.bundleStorageRef`.
+  `apps/api/data/skills/<timestamp>-<sanitized-name>.zip` (the directory is
+  configurable via `SKILL_BUNDLE_DIR`, anchored to the API package root — not
+  `process.cwd()`). `SkillVersion.bundleStorageRef` stores the zip **basename**;
+  legacy rows with a `data/skills/...` path are still resolved on read.
 - It's reflected to Anthropic via `POST /v1/skills`; the returned
   `id` + `version` go on the `Skill` row.
 - Bumping a skill is "delete + re-upload" in v1; live rebinding lands

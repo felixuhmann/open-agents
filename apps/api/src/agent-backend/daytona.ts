@@ -72,6 +72,11 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+/** Daytona TypeScript sandboxes may not ship zsh; always invoke bash explicitly. */
+function bashCommand(command: string): string {
+  return `/bin/bash -lc ${shellQuote(command)}`;
+}
+
 function readTextBlocks(message: AssistantMessage): string {
   return message.content
     .filter((block): block is { type: "text"; text: string } => block.type === "text")
@@ -143,9 +148,7 @@ export class DaytonaAgentBackend implements AgentBackend {
         { timeout: 90 },
       );
 
-      await sandbox.process.executeCommand(
-        `mkdir -p ${shellQuote(DEFAULT_WORKSPACE_DIR)}`,
-      );
+      await sandbox.fs.createFolder(DEFAULT_WORKSPACE_DIR, "755");
       await this.materializeResources(sandbox, input.resources ?? []);
 
       let skillsManifest;
@@ -296,7 +299,9 @@ export class DaytonaAgentBackend implements AgentBackend {
     for (const resource of resources) {
       if (!resource.bytes) continue;
       const remoteDir = path.dirname(resource.mountPath);
-      await sandbox.process.executeCommand(`mkdir -p ${shellQuote(remoteDir)}`);
+      if (remoteDir && remoteDir !== ".") {
+        await sandbox.fs.createFolder(remoteDir, "755");
+      }
       await sandbox.fs.uploadFile(toBuffer(resource.bytes), resource.mountPath);
     }
   }
@@ -497,7 +502,7 @@ function bashTool(sandbox: Sandbox): AgentTool {
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { command: string; cwd?: string; timeoutSeconds?: number };
       const result = await sandbox.process.executeCommand(
-        p.command,
+        bashCommand(p.command),
         p.cwd ?? DEFAULT_WORKSPACE_DIR,
         undefined,
         Math.max(1, Math.min(p.timeoutSeconds ?? DEFAULT_SHELL_TIMEOUT_SECONDS, 600)),
@@ -543,9 +548,10 @@ function writeTool(sandbox: Sandbox): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; content: string };
-      await sandbox.process.executeCommand(
-        `mkdir -p ${shellQuote(path.dirname(p.path))}`,
-      );
+      const writeDir = path.dirname(p.path);
+      if (writeDir && writeDir !== ".") {
+        await sandbox.fs.createFolder(writeDir, "755");
+      }
       await sandbox.fs.uploadFile(Buffer.from(p.content, "utf8"), p.path);
       return {
         content: [{ type: "text", text: `Wrote ${p.content.length} chars to ${p.path}` }],
@@ -634,7 +640,9 @@ function grepTool(sandbox: Sandbox): AgentTool {
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
       const result = await sandbox.process.executeCommand(
-        `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? DEFAULT_WORKSPACE_DIR)} || true`,
+        bashCommand(
+          `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? DEFAULT_WORKSPACE_DIR)} || true`,
+        ),
         DEFAULT_WORKSPACE_DIR,
         undefined,
         30,
@@ -658,7 +666,9 @@ function webFetchTool(sandbox: Sandbox): AgentTool {
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { url: string };
       const result = await sandbox.process.executeCommand(
-        `python3 - <<'PY'\nimport urllib.request\nurl = ${JSON.stringify(p.url)}\nwith urllib.request.urlopen(url, timeout=20) as r:\n    print(r.read().decode('utf-8', 'replace'))\nPY`,
+        bashCommand(
+          `python3 - <<'PY'\nimport urllib.request\nurl = ${JSON.stringify(p.url)}\nwith urllib.request.urlopen(url, timeout=20) as r:\n    print(r.read().decode('utf-8', 'replace'))\nPY`,
+        ),
         DEFAULT_WORKSPACE_DIR,
         undefined,
         30,

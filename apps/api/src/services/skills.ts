@@ -1,13 +1,16 @@
 import { File } from "node:buffer";
-import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile, unlink } from "node:fs/promises";
 import { toFile } from "@anthropic-ai/sdk";
 import yauzl from "yauzl";
 import { getAnthropicClient } from "../agent-backend/instance.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
-
-const SKILL_BUNDLE_DIR = process.env.SKILL_BUNDLE_DIR ?? "data/skills";
+import {
+  bundlePathForStorageRef,
+  getSkillBundleDir,
+  resolveSkillBundlePath,
+  toBundleStorageRef,
+} from "./skillBundlePaths.js";
 
 /**
  * Quick-and-dirty zip validation: open the bundle in-memory, scan for a
@@ -91,14 +94,13 @@ async function persistBundle(args: {
   bytes: Buffer;
   versionNumber: number;
 }): Promise<string> {
-  await mkdir(SKILL_BUNDLE_DIR, { recursive: true });
+  const bundleDir = getSkillBundleDir();
+  await mkdir(bundleDir, { recursive: true });
   const safeName = args.name.replace(/[^a-z0-9_-]+/gi, "_");
-  const localPath = join(
-    SKILL_BUNDLE_DIR,
-    `${Date.now()}-${safeName}-v${args.versionNumber}.zip`,
-  );
+  const fileName = `${Date.now()}-${safeName}-v${args.versionNumber}.zip`;
+  const localPath = bundlePathForStorageRef(fileName);
   await writeFile(localPath, args.bytes);
-  return localPath;
+  return toBundleStorageRef(fileName);
 }
 
 /**
@@ -202,7 +204,8 @@ export async function deleteSkill(id: string): Promise<void> {
   if (!skill) return;
   for (const version of skill.versions) {
     try {
-      await unlink(version.bundleStorageRef);
+      const path = await resolveSkillBundlePath(version.bundleStorageRef);
+      if (path) await unlink(path);
     } catch {
       // bundle may already be gone
     }
@@ -213,9 +216,24 @@ export async function deleteSkill(id: string): Promise<void> {
 export async function readSkillBundle(versionId: string): Promise<Buffer | null> {
   const version = await prisma.skillVersion.findUnique({ where: { id: versionId } });
   if (!version) return null;
+  const path = await resolveSkillBundlePath(version.bundleStorageRef);
+  if (!path) {
+    log.warn("skills: bundle not found on disk", {
+      versionId,
+      bundleStorageRef: version.bundleStorageRef,
+      bundleDir: getSkillBundleDir(),
+    });
+    return null;
+  }
   try {
-    return await readFile(version.bundleStorageRef);
-  } catch {
+    const { readFile } = await import("node:fs/promises");
+    return await readFile(path);
+  } catch (err) {
+    log.warn("skills: bundle read failed", {
+      versionId,
+      path,
+      err: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
 }
