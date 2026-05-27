@@ -4,6 +4,38 @@ Future v1.x / v2 ideas. The v1 milestone is "single-tenant, admin-driven
 agent platform with web chat + email"; everything below is out of scope
 for that.
 
+## Top priority: reach feature parity with the old Anthropic backend
+
+The Daytona/Pi MVP proves we can run a basic repo-owned chat agent, but
+the following gaps remain before it is a replacement for the old
+Anthropic Managed Agents backend:
+
+- Materialize bound skills into Daytona sandboxes, including predictable
+  `.agents/skills/...` layout and skill discovery instructions.
+- Wire both platform MCP handlers and third-party MCP servers into the
+  Pi/Daytona runtime, with secrets kept host-side where possible.
+- Close managed-tool parity gaps: `web_search`, richer `read` support
+  for images/PDFs/notebooks, long-lived shell sessions/background
+  processes, streaming command logs, and better timeout/resource
+  controls.
+- Replace Anthropic publish semantics with local runtime version
+  snapshots so runs can be correlated with the exact system prompt,
+  model, tools, skills, and MCP config used.
+- Add model-provider secrets, registry, and UI selection beyond
+  Anthropic, using the Pi provider seam.
+- Add Daytona sandbox lifecycle management: explicit stop/archive/delete,
+  cleanup jobs, stale sandbox recovery, status visibility, and policy
+  for whether new attachments force new sandboxes or mount into existing
+  ones.
+- Extend observability/debuggability with sandbox lifecycle events, tool
+  args/results, stdout/stderr, Daytona sandbox IDs, and issue/debug
+  bundle fields.
+- Add sandbox security policy for network access, command approvals or
+  deny rules, credential injection, resource limits, and cleanup
+  guarantees.
+- Add live or mock smoke tests for Daytona chat runs and parity-critical
+  runtime behavior.
+
 ## Per-collection memory schemas (v1.5)
 
 The current memory tool stores arbitrary JSON. We can do better: let
