@@ -258,54 +258,59 @@ async function streamRunWithEvents(
   },
 ): Promise<string> {
   const backend = await getAgentBackend();
-  return backend.streamUntilIdle(sessionId, userMessage, (event) => {
-    if (event.kind === "delta") {
-      void appendEvent({
-        runId,
-        type: "agent.delta",
-        payload: { type: "agent.delta", text: event.text },
-      }).catch(() => undefined);
-    } else if (event.kind === "message") {
-      void appendEvent({
-        runId,
-        type: "agent.message",
-        payload: { type: "agent.message", text: event.text },
-      }).catch(() => undefined);
-    } else if (event.kind === "tool_use") {
-      void appendEvent({
-        runId,
-        type: "tool.use",
-        payload: { type: "tool.use", toolName: event.toolName },
-      }).catch(() => undefined);
-    } else if (event.kind === "tool_result") {
-      void appendEvent({
-        runId,
-        type: "tool.result",
-        payload: {
+  return backend.streamUntilIdle(
+    sessionId,
+    userMessage,
+    (event) => {
+      if (event.kind === "delta") {
+        void appendEvent({
+          runId,
+          type: "agent.delta",
+          payload: { type: "agent.delta", text: event.text },
+        }).catch(() => undefined);
+      } else if (event.kind === "message") {
+        void appendEvent({
+          runId,
+          type: "agent.message",
+          payload: { type: "agent.message", text: event.text },
+        }).catch(() => undefined);
+      } else if (event.kind === "tool_use") {
+        void appendEvent({
+          runId,
+          type: "tool.use",
+          payload: { type: "tool.use", toolName: event.toolName },
+        }).catch(() => undefined);
+      } else if (event.kind === "tool_result") {
+        void appendEvent({
+          runId,
           type: "tool.result",
-          toolName: event.toolName,
-          ...(event.callId ? { callId: event.callId } : {}),
-          ...(event.result !== undefined ? { result: event.result } : {}),
-          ...(event.isError !== undefined ? { isError: event.isError } : {}),
-        },
-      }).catch(() => undefined);
-    } else if (event.kind === "model_request") {
-      void appendEvent({
-        runId,
-        type: "model.request",
-        payload: {
+          payload: {
+            type: "tool.result",
+            toolName: event.toolName,
+            ...(event.callId ? { callId: event.callId } : {}),
+            ...(event.result !== undefined ? { result: event.result } : {}),
+            ...(event.isError !== undefined ? { isError: event.isError } : {}),
+          },
+        }).catch(() => undefined);
+      } else if (event.kind === "model_request") {
+        void appendEvent({
+          runId,
           type: "model.request",
-          model: event.model,
-          isError: event.isError,
-          usage: event.usage,
-        },
-      }).catch(() => undefined);
-    } else if (event.kind === "session_error") {
-      void appendEvent({
-        runId,
-        type: "session.error",
-        payload: { type: "session.error", message: event.message },
-      }).catch(() => undefined);
-    }
-  }, context);
+          payload: {
+            type: "model.request",
+            model: event.model,
+            isError: event.isError,
+            usage: event.usage,
+          },
+        }).catch(() => undefined);
+      } else if (event.kind === "session_error") {
+        void appendEvent({
+          runId,
+          type: "session.error",
+          payload: { type: "session.error", message: event.message },
+        }).catch(() => undefined);
+      }
+    },
+    context,
+  );
 }
