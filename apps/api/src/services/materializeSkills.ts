@@ -5,7 +5,7 @@ import type {
 } from "@open-agents/types";
 import yauzl from "yauzl";
 import type { HydratedAgent } from "../agents/service.js";
-import { type DaytonaSandboxProcess, ensureSandboxDir } from "./daytonaShell.js";
+import { type DaytonaSandboxFs, ensureSandboxDir } from "./daytonaShell.js";
 import { log } from "../log.js";
 import { readSkillBundle } from "./skills.js";
 
@@ -13,8 +13,7 @@ import { readSkillBundle } from "./skills.js";
 export const SKILL_SANDBOX_ROOT = "/workspace/.agents/skills";
 
 export type SkillSandbox = {
-  process: DaytonaSandboxProcess;
-  fs: {
+  fs: DaytonaSandboxFs & {
     uploadFile(content: Buffer, remotePath: string): Promise<unknown>;
   };
 };
@@ -101,7 +100,7 @@ async function uploadSkillFile(
   remotePath: string,
   content: Buffer,
 ): Promise<void> {
-  await ensureSandboxDir(sandbox.process, path.dirname(remotePath));
+  await ensureSandboxDir(sandbox.fs, path.dirname(remotePath));
   await sandbox.fs.uploadFile(content, remotePath);
 }
 

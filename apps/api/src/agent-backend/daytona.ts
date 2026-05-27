@@ -330,7 +330,7 @@ export class DaytonaAgentBackend implements AgentBackend {
     for (const resource of resources) {
       if (!resource.bytes) continue;
       const remoteDir = path.dirname(resource.mountPath);
-      await ensureSandboxDir(sandbox.process, remoteDir);
+      await ensureSandboxDir(sandbox.fs, remoteDir);
       await sandbox.fs.uploadFile(toBuffer(resource.bytes), resource.mountPath);
     }
   }
@@ -583,7 +583,7 @@ function writeTool(sandbox: Sandbox): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; content: string };
-      await ensureSandboxDir(sandbox.process, path.dirname(p.path));
+      await ensureSandboxDir(sandbox.fs, path.dirname(p.path));
       await sandbox.fs.uploadFile(Buffer.from(p.content, "utf8"), p.path);
       return {
         content: [{ type: "text", text: `Wrote ${p.content.length} chars to ${p.path}` }],
