@@ -105,6 +105,9 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
     type: "file",
     fileId: f.id,
     mountPath: f.mountPath,
+    filename: f.filename,
+    mime: f.mime,
+    bytes: f.bytes,
   }));
 
   const sessionId = await resolveEmailSessionId(
@@ -124,7 +127,12 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
   const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
   const userMessage = `${incoming.body}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
 
-  const output = await streamRunWithEvents(runId, sessionId, userMessage);
+  const output = await streamRunWithEvents(runId, sessionId, userMessage, {
+    runId,
+    surface: "email",
+    agentId: agent.id,
+    emailMessageId: data.emailMessageId,
+  });
 
   await prisma.agentRun.update({
     where: { id: runId },
@@ -174,6 +182,9 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     type: "file",
     fileId: f.id,
     mountPath: f.mountPath,
+    filename: f.filename,
+    mime: f.mime,
+    bytes: f.bytes,
   }));
 
   const sessionId = await resolveChatSessionId(
@@ -201,7 +212,12 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
   const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
   const userMessage = `${message.content}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
 
-  const output = await streamRunWithEvents(runId, sessionId, userMessage);
+  const output = await streamRunWithEvents(runId, sessionId, userMessage, {
+    runId,
+    surface: "chat",
+    agentId: agent.id,
+    chatMessageId: data.chatMessageId,
+  });
 
   await prisma.agentRun.update({
     where: { id: runId },
@@ -233,10 +249,23 @@ async function streamRunWithEvents(
   runId: string,
   sessionId: string,
   userMessage: string,
+  context: {
+    runId: string;
+    surface: "chat" | "email";
+    agentId: string;
+    chatMessageId?: string;
+    emailMessageId?: string;
+  },
 ): Promise<string> {
   const backend = await getAgentBackend();
   return backend.streamUntilIdle(sessionId, userMessage, (event) => {
-    if (event.kind === "message") {
+    if (event.kind === "delta") {
+      void appendEvent({
+        runId,
+        type: "agent.delta",
+        payload: { type: "agent.delta", text: event.text },
+      }).catch(() => undefined);
+    } else if (event.kind === "message") {
       void appendEvent({
         runId,
         type: "agent.message",
@@ -247,6 +276,18 @@ async function streamRunWithEvents(
         runId,
         type: "tool.use",
         payload: { type: "tool.use", toolName: event.toolName },
+      }).catch(() => undefined);
+    } else if (event.kind === "tool_result") {
+      void appendEvent({
+        runId,
+        type: "tool.result",
+        payload: {
+          type: "tool.result",
+          toolName: event.toolName,
+          ...(event.callId ? { callId: event.callId } : {}),
+          ...(event.result !== undefined ? { result: event.result } : {}),
+          ...(event.isError !== undefined ? { isError: event.isError } : {}),
+        },
       }).catch(() => undefined);
     } else if (event.kind === "model_request") {
       void appendEvent({
@@ -266,5 +307,5 @@ async function streamRunWithEvents(
         payload: { type: "session.error", message: event.message },
       }).catch(() => undefined);
     }
-  });
+  }, context);
 }

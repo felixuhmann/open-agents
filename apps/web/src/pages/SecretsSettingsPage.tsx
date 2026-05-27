@@ -37,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API key",
+  daytona_api_key: "Daytona API key",
   mailgun_api_key: "Mailgun API key",
   mailgun_domain: "Mailgun domain (e.g. mg.example.com)",
   mailgun_signing_key: "Mailgun signing key (HTTP webhook signing)",
@@ -84,12 +85,12 @@ export default function SecretsSettingsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Service secrets"
-        description="Anthropic and Mailgun credentials. Stored AES-GCM encrypted in the database. Saved values are never returned by the API."
+        description="Model, sandbox, and Mailgun credentials. Stored AES-GCM encrypted in the database. Saved values are never returned by the API."
       />
 
       <ul className="flex flex-col gap-3">
         {secrets.isLoading
-          ? Array.from({ length: 4 }).map((_, idx) => (
+          ? Array.from({ length: 5 }).map((_, idx) => (
               <li key={idx}>
                 <Skeleton className="h-32 w-full" />
               </li>

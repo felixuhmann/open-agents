@@ -20,6 +20,7 @@ function bytes(b: Buffer): Uint8Array<ArrayBuffer> {
 export const SERVICE_KEYS = {
   ANTHROPIC_API_KEY: "anthropic_api_key",
   ANTHROPIC_VAULT_ID: "anthropic_vault_id",
+  DAYTONA_API_KEY: "daytona_api_key",
   MAILGUN_API_KEY: "mailgun_api_key",
   MAILGUN_DOMAIN: "mailgun_domain",
   MAILGUN_SIGNING_KEY: "mailgun_signing_key",

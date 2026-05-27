@@ -18,7 +18,7 @@ export type EmailThreadSessionInput = {
  * the worker forces a new session whenever there are unhandled attachments).
  */
 export async function resolveEmailSessionId(
-  agent: Pick<Agent, "anthropicAgentId" | "environmentId">,
+  agent: Pick<Agent, "id" | "slug" | "anthropicAgentId" | "environmentId">,
   thread: EmailThreadSessionInput,
   resources: SessionResource[],
   forceNewSession: boolean,
@@ -31,19 +31,27 @@ export async function resolveEmailSessionId(
     return thread.sessionId;
   }
 
-  if (!agent.anthropicAgentId || !agent.environmentId) {
+  const backend = await getAgentBackend();
+  if (backend.runtime === "anthropic" && (!agent.anthropicAgentId || !agent.environmentId)) {
     throw new Error(
       `Agent is not provisioned with Anthropic yet (missing agentId or environmentId)`,
     );
   }
-
-  const backend = await getAgentBackend();
-  const session = await backend.createSession({
-    agentId: agent.anthropicAgentId,
-    environmentId: agent.environmentId,
-    title: thread.subject.slice(0, 120),
-    resources: resources.length > 0 ? resources : undefined,
-  });
+  const session = await backend.createSession(
+    backend.runtime === "anthropic"
+      ? {
+          agentId: agent.anthropicAgentId!,
+          environmentId: agent.environmentId!,
+          title: thread.subject.slice(0, 120),
+          resources: resources.length > 0 ? resources : undefined,
+        }
+      : {
+          agentId: agent.id,
+          agentSlug: agent.slug,
+          title: thread.subject.slice(0, 120),
+          resources: resources.length > 0 ? resources : undefined,
+        },
+  );
   await prisma.emailThread.update({
     where: { id: thread.id },
     data: { sessionId: session.id },
@@ -68,7 +76,7 @@ export type ChatConversationSessionInput = {
  * there's no prior session OR `forceNewSession` is true.
  */
 export async function resolveChatSessionId(
-  agent: Pick<Agent, "anthropicAgentId" | "environmentId">,
+  agent: Pick<Agent, "id" | "slug" | "anthropicAgentId" | "environmentId">,
   conversation: ChatConversationSessionInput,
   resources: SessionResource[],
   forceNewSession: boolean,
@@ -81,19 +89,27 @@ export async function resolveChatSessionId(
     return conversation.anthropicSessionId;
   }
 
-  if (!agent.anthropicAgentId || !agent.environmentId) {
+  const backend = await getAgentBackend();
+  if (backend.runtime === "anthropic" && (!agent.anthropicAgentId || !agent.environmentId)) {
     throw new Error(
       `Agent is not provisioned with Anthropic yet (missing agentId or environmentId)`,
     );
   }
-
-  const backend = await getAgentBackend();
-  const session = await backend.createSession({
-    agentId: agent.anthropicAgentId,
-    environmentId: agent.environmentId,
-    title: conversation.title.slice(0, 120),
-    resources: resources.length > 0 ? resources : undefined,
-  });
+  const session = await backend.createSession(
+    backend.runtime === "anthropic"
+      ? {
+          agentId: agent.anthropicAgentId!,
+          environmentId: agent.environmentId!,
+          title: conversation.title.slice(0, 120),
+          resources: resources.length > 0 ? resources : undefined,
+        }
+      : {
+          agentId: agent.id,
+          agentSlug: agent.slug,
+          title: conversation.title.slice(0, 120),
+          resources: resources.length > 0 ? resources : undefined,
+        },
+  );
   await prisma.chatConversation.update({
     where: { id: conversation.id },
     data: { anthropicSessionId: session.id },

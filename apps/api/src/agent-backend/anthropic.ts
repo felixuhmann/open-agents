@@ -25,12 +25,17 @@ import {
  * leaking into the generic `AgentBackend` surface.
  */
 export class AnthropicAgentBackend implements AgentBackend {
+  readonly runtime = "anthropic" as const;
+
   constructor(
     private readonly client: Anthropic,
     private readonly vaultIds: readonly string[] = [],
   ) {}
 
   async createSession(input: CreateSessionInput): Promise<AgentSession> {
+    if (!input.environmentId) {
+      throw new AgentBackendError("Anthropic session creation requires environmentId");
+    }
     log.info("anthropic: createSession start", {
       agentId: input.agentId,
       environmentId: input.environmentId,

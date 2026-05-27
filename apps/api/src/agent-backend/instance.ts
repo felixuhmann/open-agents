@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.js";
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
 import { AnthropicAgentBackend } from "./anthropic.js";
+import { DaytonaAgentBackend } from "./daytona.js";
 import type { AgentBackend } from "./types.js";
 
 /**
@@ -18,8 +19,21 @@ import type { AgentBackend } from "./types.js";
 let cached: AgentBackend | null = null;
 let cachedApiKey: string | null = null;
 let cachedVaultId: string | null = null;
+let cachedDaytonaApiKey: string | null = null;
 
 export async function getAgentBackend(): Promise<AgentBackend> {
+  const daytonaApiKey = await getServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY);
+  if (daytonaApiKey) {
+    if (cached?.runtime === "daytona" && cachedDaytonaApiKey === daytonaApiKey) {
+      return cached;
+    }
+    cached = new DaytonaAgentBackend(daytonaApiKey);
+    cachedDaytonaApiKey = daytonaApiKey;
+    cachedApiKey = null;
+    cachedVaultId = null;
+    return cached;
+  }
+
   const apiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
   if (!apiKey) {
     throw new Error(
@@ -38,6 +52,7 @@ export async function getAgentBackend(): Promise<AgentBackend> {
   );
   cachedApiKey = apiKey;
   cachedVaultId = vaultId;
+  cachedDaytonaApiKey = null;
   return cached;
 }
 
@@ -46,6 +61,7 @@ export function resetAgentBackend(): void {
   cached = null;
   cachedApiKey = null;
   cachedVaultId = null;
+  cachedDaytonaApiKey = null;
 }
 
 /**
