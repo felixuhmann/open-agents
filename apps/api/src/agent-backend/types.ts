@@ -1,3 +1,5 @@
+import type { SkillMaterializationManifest } from "@open-agents/types";
+
 /**
  * Backend-agnostic interface for a Managed-Agent-style provider. The
  * application code in `services/` and `jobs/` depends only on this
@@ -18,6 +20,8 @@ export interface AgentBackend {
 
 export type AgentSession = {
   id: string;
+  /** Present when the backend unpacked agent skill bundles into the sandbox. */
+  skillsManifest?: SkillMaterializationManifest;
 };
 
 export type AgentFile = {

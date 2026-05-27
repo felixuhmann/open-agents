@@ -277,6 +277,13 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 - **Email and chat never cross-pollinate**: each surface has its own
   thread/conversation table and creates independent Anthropic sessions.
   Don't try to share state between them.
+- **Daytona skills materialize at sandbox creation**: When
+  `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` unpacks
+  each pinned `AgentSkillBinding` into `/workspace/.agents/skills/<slug>/`
+  via [`materializeSkills.ts`](apps/api/src/services/materializeSkills.ts).
+  Resumed sandboxes keep whatever was copied when they were first created;
+  changing skill bindings mid-conversation does not re-sync until a new
+  session is forced.
 
 ## Local development
 

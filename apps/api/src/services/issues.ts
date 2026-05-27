@@ -1,3 +1,4 @@
+import type { SkillMaterializationEntry } from "@open-agents/types";
 import { prisma } from "../db.js";
 import { HttpError } from "../auth/middleware.js";
 import { log } from "../log.js";
@@ -187,6 +188,10 @@ export type IssueDetailRun = {
   output: string | null;
   startedAt: string;
   completedAt: string | null;
+  /// Skill versions unpacked into the sandbox when this run created a new
+  /// Daytona session (`skills.materialized` event). Empty when the run
+  /// resumed an existing session or the backend is Anthropic.
+  skillsAvailable: IssueDetailRunSkill[];
   events: IssueDetailRunEvent[];
 };
 
@@ -220,10 +225,14 @@ export type IssueDetailToolBinding = {
 export type IssueDetailSkillBinding = {
   bindingId: string;
   skillId: string;
+  skillVersionId: string;
   name: string;
+  versionNumber: number;
   anthropicSkillId: string | null;
   anthropicSkillVersion: string | null;
 };
+
+export type IssueDetailRunSkill = SkillMaterializationEntry;
 
 export type IssueDetailThirdPartyMcp = {
   id: string;
@@ -405,7 +414,9 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     skills: issue.agent.skillBindings.map((b) => ({
       bindingId: `${b.agentId}:${b.skillId}`,
       skillId: b.skill.id,
+      skillVersionId: b.skillVersionId,
       name: b.skill.name,
+      versionNumber: b.skillVersion.versionNumber,
       anthropicSkillId: b.skillVersion.anthropicSkillId,
       anthropicSkillVersion: b.skillVersion.anthropicSkillVersion,
     })),
@@ -456,7 +467,29 @@ type RunWithEvents = {
   events: Array<{ seq: number; type: string; payload: unknown; createdAt: Date }>;
 };
 
+function isSkillsMaterializedPayload(
+  payload: unknown,
+): payload is { skills: IssueDetailRunSkill[] } {
+  if (typeof payload !== "object" || payload === null) return false;
+  if (!("skills" in payload)) return false;
+  return Array.isArray(payload.skills);
+}
+
+function skillsFromRunEvents(events: RunWithEvents["events"]): IssueDetailRunSkill[] {
+  const materialized = events.find((e) => e.type === "skills.materialized");
+  if (!materialized || !isSkillsMaterializedPayload(materialized.payload)) {
+    return [];
+  }
+  return materialized.payload.skills;
+}
+
 function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
+  const events = r.events.map((e) => ({
+    seq: e.seq,
+    type: e.type,
+    createdAt: e.createdAt.toISOString(),
+    payload: e.payload,
+  }));
   return {
     id: r.id,
     surface: r.surface as "chat" | "email",
@@ -466,12 +499,8 @@ function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
     output: r.output,
     startedAt: r.startedAt.toISOString(),
     completedAt: r.completedAt?.toISOString() ?? null,
-    events: r.events.map((e) => ({
-      seq: e.seq,
-      type: e.type,
-      createdAt: e.createdAt.toISOString(),
-      payload: e.payload,
-    })),
+    skillsAvailable: skillsFromRunEvents(r.events),
+    events,
   };
 }
 

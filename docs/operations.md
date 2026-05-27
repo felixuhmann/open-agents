@@ -90,16 +90,17 @@ SELECT seq, type, payload->>'toolName' AS tool_name, "createdAt"
 
 Event types worth knowing:
 
-| Type            | Payload shape                                  |
-| --------------- | ---------------------------------------------- |
-| `run.started`   | `{}`                                           |
-| `agent.message` | `{ text }` — running aggregated assistant text |
-| `agent.delta`   | `{ delta }` — char-by-char delta (optional)    |
-| `tool.use`      | `{ toolName, args }`                           |
-| `tool.result`   | `{ toolName, result, isError? }`               |
-| `session.error` | `{ message }` — non-fatal session warning      |
-| `run.succeeded` | `{}`                                           |
-| `run.failed`    | `{ error }`                                    |
+| Type                  | Payload shape                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `run.started`         | `{ runId, sessionId }`                                                                  |
+| `skills.materialized` | `{ skills: SkillMaterializationEntry[] }` — Daytona only, when a new sandbox is created |
+| `agent.message`       | `{ text }` — running aggregated assistant text                                          |
+| `agent.delta`         | `{ delta }` — char-by-char delta (optional)                                             |
+| `tool.use`            | `{ toolName, args }`                                                                    |
+| `tool.result`         | `{ toolName, result, isError? }`                                                        |
+| `session.error`       | `{ message }` — non-fatal session warning                                               |
+| `run.succeeded`       | `{}`                                                                                    |
+| `run.failed`          | `{ error }`                                                                             |
 
 Terminal events (`run.succeeded` / `run.failed`) close the SSE stream.
 
