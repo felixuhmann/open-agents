@@ -23,32 +23,17 @@ parity.
 
 ### Skills in Daytona sandboxes
 
-Current state:
+**Done (2026-05):** On new Daytona session creation, `materializeAgentSkills`
+unpacks each pinned `AgentSkillBinding` zip into
+`/workspace/.agents/skills/<slug>/`, adds Pi runtime instructions, emits
+`skills.materialized` `RunEvent`s, and surfaces `skillsAvailable` on issue
+runs. Skills are **copied per sandbox** (same pattern as attachments), not
+mounted from shared storage.
 
-- Skill upload/storage already exists in the app.
-- `SkillVersion.bundleStorageRef` points at the local zip bundle.
-- Anthropic skill mirroring exists, but the Daytona runtime ignores bound
-  skills.
+Remaining (optional):
 
-What is needed:
-
-- On session creation or run start, unpack every bound skill version into
-  a deterministic sandbox path, probably `.agents/skills/<skill-slug>/`.
-- Preserve the existing skill version pinning behavior: a run should use
-  the exact `AgentSkillBinding.skillVersionId` attached to the agent.
-- Add runtime instructions that tell the Pi/Daytona agent where skills
-  live and when to inspect them.
-- Decide whether skills are copied into each sandbox, mounted from
-  durable storage, or cached in a Daytona snapshot/base image.
-- Emit observability when skills are materialized, skipped, missing, or
-  invalid.
-
-Acceptance criteria:
-
-- Binding a skill in the existing UI changes the Daytona agent's runtime
-  behavior without any Anthropic API calls.
-- A Daytona run can list/read the skill files from inside the sandbox.
-- Issue/debug bundles show which skill versions were available for a run.
+- Re-materialize or sync skills when bindings change on a resumed sandbox.
+- Daytona snapshot/base-image caching for large skill libraries.
 
 ### MCP tools: platform and third-party
 

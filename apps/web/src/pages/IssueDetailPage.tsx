@@ -319,19 +319,29 @@ function AgentContextCard({
               {agent.skills.map((s) => (
                 <li
                   key={s.bindingId}
-                  className="flex items-center justify-between gap-2 border bg-card px-2 py-1 text-xs"
+                  className="flex flex-col gap-0.5 border bg-card px-2 py-1 text-xs"
                 >
-                  <span className="truncate font-medium">{s.name}</span>
-                  {s.anthropicSkillId ? (
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      {s.anthropicSkillId}
-                      {s.anthropicSkillVersion ? `@${s.anthropicSkillVersion}` : ""}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-medium">
+                      {s.name}
+                      <span className="ml-1 font-normal text-muted-foreground">
+                        v{s.versionNumber}
+                      </span>
                     </span>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px]">
-                      local only
-                    </Badge>
-                  )}
+                    {s.anthropicSkillId ? (
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {s.anthropicSkillId}
+                        {s.anthropicSkillVersion ? `@${s.anthropicSkillVersion}` : ""}
+                      </span>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px]">
+                        local only
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {s.skillVersionId}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -828,6 +838,7 @@ function UnifiedTraceView({ data }: { data: IssueDetail }) {
                 error: r.error,
                 startedAt: r.startedAt,
                 completedAt: r.completedAt,
+                skillsAvailable: r.skillsAvailable,
                 events: r.events,
               })),
               null,
@@ -972,6 +983,13 @@ function badgeVariantForEvent(
 function summariseEvent(ev: IssueDetailRunEvent): string {
   const p = ev.payload as Record<string, unknown> | null;
   if (!p || typeof p !== "object") return "";
+  if (ev.type === "skills.materialized" && Array.isArray(p.skills)) {
+    const count = p.skills.length;
+    const ok = (p.skills as Array<{ status?: string }>).filter(
+      (s) => s.status === "materialized",
+    ).length;
+    return `${ok}/${count} skills materialized`;
+  }
   if (typeof p.toolName === "string") return p.toolName;
   if (typeof p.text === "string") {
     const flat = p.text.replace(/\s+/g, " ").trim();

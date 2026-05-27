@@ -8,7 +8,11 @@ import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
 import { uploadPendingChatAttachments } from "../services/chatAttachments.js";
 import { uploadPendingAttachments } from "../services/attachments.js";
-import { resolveChatSessionId, resolveEmailSessionId } from "../services/sessions.js";
+import {
+  resolveChatSessionId,
+  resolveEmailSessionId,
+  type ResolvedSession,
+} from "../services/sessions.js";
 import { signRunUploadUrl } from "../services/uploadSigning.js";
 import { getBoss } from "./queue.js";
 import {
@@ -110,24 +114,23 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
     bytes: f.bytes,
   }));
 
-  const sessionId = await resolveEmailSessionId(
+  const resolved = await resolveEmailSessionId(
     agent,
     { id: thread.id, sessionId: thread.sessionId, subject: thread.subject },
     resources,
     hasNewAttachments,
   );
-  await prisma.agentRun.update({ where: { id: runId }, data: { sessionId } });
-  await appendEvent({
-    runId,
-    type: "run.started",
-    payload: { type: "run.started", runId, sessionId },
+  await prisma.agentRun.update({
+    where: { id: runId },
+    data: { sessionId: resolved.sessionId },
   });
+  await appendRunStarted(runId, resolved);
 
   const uploadSig = signRunUploadUrl(runId);
   const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
   const userMessage = `${incoming.body}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
 
-  const output = await streamRunWithEvents(runId, sessionId, userMessage, {
+  const output = await streamRunWithEvents(runId, resolved.sessionId, userMessage, {
     runId,
     surface: "email",
     agentId: agent.id,
@@ -187,7 +190,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     bytes: f.bytes,
   }));
 
-  const sessionId = await resolveChatSessionId(
+  const resolved = await resolveChatSessionId(
     agent,
     {
       id: conversation.id,
@@ -197,12 +200,11 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     resources,
     hasNewAttachments,
   );
-  await prisma.agentRun.update({ where: { id: runId }, data: { sessionId } });
-  await appendEvent({
-    runId,
-    type: "run.started",
-    payload: { type: "run.started", runId, sessionId },
+  await prisma.agentRun.update({
+    where: { id: runId },
+    data: { sessionId: resolved.sessionId },
   });
+  await appendRunStarted(runId, resolved);
 
   // Mirror the email-surface attachment-return flow: inject a signed,
   // run-scoped upload URL that the agent's bash tool can `curl -F file=@…`
@@ -212,7 +214,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
   const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
   const userMessage = `${message.content}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
 
-  const output = await streamRunWithEvents(runId, sessionId, userMessage, {
+  const output = await streamRunWithEvents(runId, resolved.sessionId, userMessage, {
     runId,
     surface: "chat",
     agentId: agent.id,
@@ -240,6 +242,24 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     type: "run.succeeded",
     payload: { type: "run.succeeded", output },
   });
+}
+
+async function appendRunStarted(runId: string, resolved: ResolvedSession): Promise<void> {
+  await appendEvent({
+    runId,
+    type: "run.started",
+    payload: { type: "run.started", runId, sessionId: resolved.sessionId },
+  });
+  if (resolved.skillsManifest?.entries.length) {
+    await appendEvent({
+      runId,
+      type: "skills.materialized",
+      payload: {
+        type: "skills.materialized",
+        skills: resolved.skillsManifest.entries,
+      },
+    });
+  }
 }
 
 /**

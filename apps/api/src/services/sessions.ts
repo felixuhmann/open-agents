@@ -1,8 +1,14 @@
 import type { Agent } from "@open-agents/db";
+import type { SkillMaterializationManifest } from "@open-agents/types";
 import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+
+export type ResolvedSession = {
+  sessionId: string;
+  skillsManifest?: SkillMaterializationManifest;
+};
 
 export type EmailThreadSessionInput = {
   id: string;
@@ -22,13 +28,13 @@ export async function resolveEmailSessionId(
   thread: EmailThreadSessionInput,
   resources: SessionResource[],
   forceNewSession: boolean,
-): Promise<string> {
+): Promise<ResolvedSession> {
   if (thread.sessionId && !forceNewSession) {
     log.info("sessions: resuming email thread", {
       threadId: thread.id,
       sessionId: thread.sessionId,
     });
-    return thread.sessionId;
+    return { sessionId: thread.sessionId };
   }
 
   const backend = await getAgentBackend();
@@ -64,8 +70,9 @@ export async function resolveEmailSessionId(
     sessionId: session.id,
     resources: resources.length,
     forceNewSession,
+    skillsMaterialized: session.skillsManifest?.materialized ?? 0,
   });
-  return session.id;
+  return { sessionId: session.id, skillsManifest: session.skillsManifest };
 }
 
 export type ChatConversationSessionInput = {
@@ -83,13 +90,13 @@ export async function resolveChatSessionId(
   conversation: ChatConversationSessionInput,
   resources: SessionResource[],
   forceNewSession: boolean,
-): Promise<string> {
+): Promise<ResolvedSession> {
   if (conversation.anthropicSessionId && !forceNewSession) {
     log.info("sessions: resuming chat conversation", {
       conversationId: conversation.id,
       sessionId: conversation.anthropicSessionId,
     });
-    return conversation.anthropicSessionId;
+    return { sessionId: conversation.anthropicSessionId };
   }
 
   const backend = await getAgentBackend();
@@ -125,6 +132,7 @@ export async function resolveChatSessionId(
     sessionId: session.id,
     resources: resources.length,
     forceNewSession,
+    skillsMaterialized: session.skillsManifest?.materialized ?? 0,
   });
-  return session.id;
+  return { sessionId: session.id, skillsManifest: session.skillsManifest };
 }

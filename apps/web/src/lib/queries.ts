@@ -476,6 +476,18 @@ export type IssueDetailRunEvent = {
   payload: unknown;
 };
 
+export type IssueDetailRunSkill = {
+  skillId: string;
+  skillVersionId: string;
+  name: string;
+  slug: string;
+  versionNumber: number;
+  sandboxPath: string;
+  status: "materialized" | "skipped" | "missing" | "invalid";
+  fileCount?: number;
+  error?: string;
+};
+
 export type IssueDetailRun = {
   id: string;
   surface: IssueSurface;
@@ -485,6 +497,7 @@ export type IssueDetailRun = {
   output: string | null;
   startedAt: string;
   completedAt: string | null;
+  skillsAvailable: IssueDetailRunSkill[];
   events: IssueDetailRunEvent[];
 };
 
@@ -518,7 +531,9 @@ export type IssueDetailToolBinding = {
 export type IssueDetailSkillBinding = {
   bindingId: string;
   skillId: string;
+  skillVersionId: string;
   name: string;
+  versionNumber: number;
   anthropicSkillId: string | null;
   anthropicSkillVersion: string | null;
 };

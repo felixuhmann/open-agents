@@ -21,6 +21,11 @@ import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+import {
+  SKILL_SANDBOX_ROOT,
+  materializeAgentSkills,
+  skillSlugFromName,
+} from "../services/materializeSkills.js";
 import { SERVICE_KEYS, getServiceSecret } from "../secrets/service.js";
 import {
   AgentBackendError,
@@ -139,12 +144,23 @@ export class DaytonaAgentBackend implements AgentBackend {
     await sandbox.process.executeCommand(`mkdir -p ${shellQuote(DEFAULT_WORKSPACE_DIR)}`);
     await this.materializeResources(sandbox, input.resources ?? []);
 
+    let skillsManifest;
+    const agent = await getAgentById(input.agentId);
+    if (agent?.skillBindings.length) {
+      skillsManifest = await materializeAgentSkills(sandbox, agent.skillBindings);
+    }
+
     log.info("daytona: session created", {
       agentId: input.agentId,
       sandboxId: sandbox.id,
       resources: input.resources?.length ?? 0,
+      skillsMaterialized: skillsManifest?.materialized ?? 0,
+      skillsFailed: skillsManifest?.failed ?? 0,
     });
-    return { id: buildDaytonaSessionId(input.agentId, sandbox.id) };
+    return {
+      id: buildDaytonaSessionId(input.agentId, sandbox.id),
+      skillsManifest,
+    };
   }
 
   async streamUntilIdle(
@@ -174,7 +190,11 @@ export class DaytonaAgentBackend implements AgentBackend {
     let finalText = "";
     let deltaText = "";
 
-    const runtimePrompt = buildRuntimePrompt(agent, Boolean(tools.length));
+    const runtimePrompt = buildRuntimePrompt(
+      agent,
+      Boolean(tools.length),
+      session.sandboxId,
+    );
     const piAgent = new Agent({
       initialState: {
         systemPrompt: runtimePrompt,
@@ -355,7 +375,25 @@ function emptyUsage(): AssistantMessage["usage"] {
   };
 }
 
-function buildRuntimePrompt(agent: HydratedAgent, hasTools: boolean): string {
+function buildSkillInstructions(agent: HydratedAgent): string | null {
+  if (!agent.skillBindings.length) return null;
+  const lines = agent.skillBindings.map((binding) => {
+    const slug = skillSlugFromName(binding.skill.name);
+    return `- ${binding.skill.name} (pinned v${binding.skillVersion.versionNumber}): ${SKILL_SANDBOX_ROOT}/${slug}/SKILL.md`;
+  });
+  return [
+    `Bundled skills are unpacked under ${SKILL_SANDBOX_ROOT}/<slug>/ in this sandbox.`,
+    "When a task matches a skill, read that skill's SKILL.md before using other files in the same directory.",
+    "Skills bound to this agent:",
+    ...lines,
+  ].join("\n");
+}
+
+function buildRuntimePrompt(
+  agent: HydratedAgent,
+  hasTools: boolean,
+  sandboxId: string,
+): string {
   const toolInstructions = hasTools
     ? [
         "You have a Daytona Linux sandbox workspace. Treat /workspace as the working directory.",
@@ -364,7 +402,16 @@ function buildRuntimePrompt(agent: HydratedAgent, hasTools: boolean): string {
       ].join("\n")
     : "No sandbox tools are currently enabled for this agent.";
 
-  return [agent.systemPrompt.trim(), toolInstructions].filter(Boolean).join("\n\n");
+  const skillInstructions = buildSkillInstructions(agent);
+
+  const sections = [
+    agent.systemPrompt.trim(),
+    toolInstructions,
+    skillInstructions,
+    `Daytona sandbox id: ${sandboxId}`,
+  ].filter(Boolean);
+
+  return sections.join("\n\n");
 }
 
 function boundManagedTools(agent: HydratedAgent): Set<string> {

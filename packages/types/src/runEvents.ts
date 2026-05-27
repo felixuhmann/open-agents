@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SkillMaterializationEntry } from "./skills.js";
 
 /**
  * Wire shape of every event in `RunEvent` and the SSE stream the chat UI
@@ -7,6 +8,7 @@ import { z } from "zod";
  */
 export const RunEventTypes = z.enum([
   "run.started",
+  "skills.materialized",
   "agent.delta",
   "agent.message",
   "tool.use",
@@ -23,6 +25,10 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     type: z.literal("run.started"),
     runId: z.string(),
     sessionId: z.string(),
+  }),
+  z.object({
+    type: z.literal("skills.materialized"),
+    skills: z.array(SkillMaterializationEntry),
   }),
   z.object({
     type: z.literal("agent.delta"),
