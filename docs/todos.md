@@ -37,34 +37,17 @@ Remaining (optional):
 
 ### MCP tools: platform and third-party
 
-Current state:
+**Done (Daytona / Pi path):** orchestrator-side adapter in
+`apps/api/src/mcp/piTools.ts` — platform tools invoke in-process;
+third-party servers use the MCP SDK client. `/mcp/<slug>` kept for
+Anthropic Managed Agents. Library → **MCP** page is a coming-soon shell
+for deployment-wide presets.
 
-- Platform MCP handlers already exist under `apps/api/src/mcp/platform`.
-- Anthropic used to call our `/mcp/<slug>` route from its hosted
-  sandbox.
-- The Pi/Daytona runtime currently only exposes local managed tools
-  (`bash`, `read`, `write`, etc.).
+**Follow-ups:**
 
-What is needed:
-
-- Add an MCP client/adaptor on the orchestrator side so the Pi loop can
-  expose platform tools as native Pi tools.
-- Prefer host-side execution for platform MCP tools so service/tool
-  secrets never need to enter the sandbox unless explicitly required.
-- Add third-party MCP support by connecting to each
-  `AgentThirdPartyMcp.serverUrl`, discovering tools, and adapting them
-  into Pi tool definitions.
-- Preserve existing per-binding config and encrypted tool secrets.
-- Decide whether the existing `/mcp/<slug>` route remains only for
-  backwards compatibility or becomes an internal implementation detail.
-
-Acceptance criteria:
-
-- Existing platform tools, starting with memory, work from Daytona runs.
-- Third-party MCP tools attached in the agent editor can be called by the
-  Pi loop.
-- Tool calls/results show up in `RunEvent` with enough data to debug
-  failures.
+- Deployment-wide MCP catalog (Library page) instead of per-agent URLs only.
+- OAuth / stdio transports for third-party servers.
+- Cache `tools/list` per agent revision to avoid reconnecting every run.
 
 ### Managed tool parity
 

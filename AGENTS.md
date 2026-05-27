@@ -288,6 +288,10 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   Resumed sandboxes keep whatever was copied when they were first created;
   changing skill bindings mid-conversation does not re-sync until a new
   session is forced.
+- **Daytona MCP runs on the orchestrator**: Platform tools and third-party
+  MCP servers are wired into the Pi loop via
+  [`apps/api/src/mcp/piTools.ts`](apps/api/src/mcp/piTools.ts) (host-side).
+  The `/mcp/<slug>` HTTP route is for Anthropic Managed Agents only.
 
 ## Local development
 
