@@ -298,7 +298,12 @@ async function streamRunWithEvents(
         void appendEvent({
           runId,
           type: "tool.use",
-          payload: { type: "tool.use", toolName: event.toolName },
+          payload: {
+            type: "tool.use",
+            toolName: event.toolName,
+            ...(event.callId ? { callId: event.callId } : {}),
+            ...(event.args !== undefined ? { args: event.args } : {}),
+          },
         }).catch(() => undefined);
       } else if (event.kind === "tool_result") {
         void appendEvent({

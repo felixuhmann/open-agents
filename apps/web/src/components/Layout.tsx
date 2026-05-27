@@ -10,6 +10,7 @@ import {
   ChartLineIcon,
   HouseIcon,
   KeyIcon,
+  PlugsConnectedIcon,
   PuzzlePieceIcon,
   RobotIcon,
   SignOutIcon,
@@ -78,6 +79,7 @@ const NAV_BASE: Array<NavItem> = [
 const NAV_LIBRARY: Array<NavItem> = [
   { to: "/library/tools", label: "Tools", icon: WrenchIcon },
   { to: "/library/skills", label: "Skills", icon: PuzzlePieceIcon },
+  { to: "/library/mcp", label: "MCP", icon: PlugsConnectedIcon },
 ];
 
 const NAV_REVIEW: Array<NavItem> = [
@@ -97,6 +99,7 @@ const PATH_LABELS: Record<string, string> = {
   "/agents": "Agents",
   "/library/tools": "Tools",
   "/library/skills": "Skills",
+  "/library/mcp": "MCP",
   "/issues": "Issues",
   "/settings/profile": "Profile",
   "/settings/secrets": "Secrets",

@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { log } from "../log.js";
-import { getToolSecrets } from "../secrets/service.js";
+import { invokePlatformTool } from "./invokePlatformTool.js";
 import { getPlatformHandler } from "./platform/index.js";
 
 /**
@@ -41,30 +41,20 @@ export function buildMcpHandler(
             inputSchema: tool.inputShape,
           },
           async (args: Record<string, unknown>) => {
-            try {
-              const secrets = await getToolSecrets(binding.id);
-              const result = await tool.handler(args, {
-                agentId: agent.id,
-                agentSlug: agent.slug,
-                configJson: (binding.configJson ?? {}) as Record<string, unknown>,
-                secrets,
-              });
-              return {
-                content: [{ type: "text", text: JSON.stringify(result) }],
-              };
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              log.warn("mcp tool error", {
-                agentSlug: agent.slug,
-                tool: tool.name,
-                handlerKey: handler.key,
-                err: msg,
-              });
-              return {
-                isError: true,
-                content: [{ type: "text", text: `Error: ${msg}` }],
-              };
-            }
+            const { result, isError } = await invokePlatformTool(
+              agent,
+              binding.id,
+              binding.tool.key,
+              tool.name,
+              args,
+              (binding.configJson ?? {}) as Record<string, unknown>,
+            );
+            const text =
+              typeof result === "string" ? result : JSON.stringify(result, null, 2);
+            return {
+              isError,
+              content: [{ type: "text", text }],
+            };
           },
         );
       }

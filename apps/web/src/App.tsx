@@ -33,6 +33,7 @@ const AgentChatPage = lazy(() => import("./pages/AgentChatPage"));
 const AgentConversationsPage = lazy(() => import("./pages/AgentConversationsPage"));
 const ToolsLibraryPage = lazy(() => import("./pages/ToolsLibraryPage"));
 const SkillsLibraryPage = lazy(() => import("./pages/SkillsLibraryPage"));
+const McpLibraryPage = lazy(() => import("./pages/McpLibraryPage"));
 const IssuesListPage = lazy(() => import("./pages/IssuesListPage"));
 const IssueDetailPage = lazy(() => import("./pages/IssueDetailPage"));
 const SecretsSettingsPage = lazy(() => import("./pages/SecretsSettingsPage"));
@@ -115,6 +116,14 @@ function ProtectedRoutes() {
             element={
               <RequirePermission user={user.data} roles="operator">
                 <SkillsLibraryPage />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/library/mcp"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <McpLibraryPage />
               </RequirePermission>
             }
           />

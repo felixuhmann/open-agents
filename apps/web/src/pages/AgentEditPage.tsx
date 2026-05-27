@@ -107,7 +107,13 @@ type EditState = {
   inboundLocalPart: string;
   toolIds: string[];
   skillBindings: Array<{ skillId: string; skillVersionId: string }>;
-  thirdPartyMcp: Array<{ id?: string; label: string; serverUrl: string }>;
+  thirdPartyMcp: Array<{
+    id?: string;
+    label: string;
+    serverUrl: string;
+    /** Set only when the operator enters or clears a bearer token. */
+    bearer?: string;
+  }>;
 };
 
 function fromDto(a: FullAgentDto): EditState {
@@ -163,7 +169,12 @@ export default function AgentEditPage() {
           inboundLocalPart: s.inboundLocalPart,
           toolBindings: s.toolIds.map((id) => ({ toolId: id })),
           skillBindings: s.skillBindings,
-          thirdPartyMcp: s.thirdPartyMcp,
+          thirdPartyMcp: s.thirdPartyMcp.map((m) => ({
+            id: m.id,
+            label: m.label,
+            serverUrl: m.serverUrl,
+            ...(m.bearer !== undefined ? { bearer: m.bearer } : {}),
+          })),
         },
       }),
     onSuccess: async () => {
@@ -729,8 +740,8 @@ export default function AgentEditPage() {
             Third-party MCP servers
           </CardTitle>
           <CardDescription>
-            Remote MCP servers exposed to the agent. The Anthropic sandbox connects on
-            each run.
+            Remote MCP servers for this agent. With Daytona, the orchestrator connects on
+            each run; with Anthropic Managed Agents, the hosted sandbox connects directly.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -763,6 +774,21 @@ export default function AgentEditPage() {
                       onChange={(e) => {
                         const next = [...state.thirdPartyMcp];
                         next[idx] = { ...m, serverUrl: e.target.value };
+                        setS({ thirdPartyMcp: next });
+                      }}
+                    />
+                  </FieldContent>
+                  <FieldContent>
+                    <FieldLabel htmlFor={`mcp-bearer-${idx}`}>Bearer token</FieldLabel>
+                    <Input
+                      id={`mcp-bearer-${idx}`}
+                      type="password"
+                      autoComplete="off"
+                      placeholder={m.id ? "Leave blank to keep stored token" : "Optional"}
+                      value={m.bearer ?? ""}
+                      onChange={(e) => {
+                        const next = [...state.thirdPartyMcp];
+                        next[idx] = { ...m, bearer: e.target.value };
                         setS({ thirdPartyMcp: next });
                       }}
                     />

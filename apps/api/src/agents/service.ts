@@ -4,6 +4,7 @@ import { upsertAnthropicAgent } from "../anthropic/provisioning.js";
 import { ensureMcpCredential } from "../anthropic/vault.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+import { sealThirdPartyBearer } from "../mcp/thirdPartySecrets.js";
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
 
 /**
@@ -324,14 +325,25 @@ export async function updateAgent(
         }
       }
       for (const m of args.thirdPartyMcp) {
+        const bearerData =
+          m.bearer !== undefined
+            ? m.bearer.trim()
+              ? sealThirdPartyBearer(m.bearer.trim())
+              : {
+                  bearerCipher: null,
+                  bearerIv: null,
+                  bearerTag: null,
+                }
+            : {};
+
         if (m.id) {
           await tx.agentThirdPartyMcp.update({
             where: { id: m.id },
-            data: { label: m.label, serverUrl: m.serverUrl },
+            data: { label: m.label, serverUrl: m.serverUrl, ...bearerData },
           });
         } else {
           await tx.agentThirdPartyMcp.create({
-            data: { agentId: id, label: m.label, serverUrl: m.serverUrl },
+            data: { agentId: id, label: m.label, serverUrl: m.serverUrl, ...bearerData },
           });
         }
       }

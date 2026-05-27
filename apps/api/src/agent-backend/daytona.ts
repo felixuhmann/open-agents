@@ -22,6 +22,8 @@ import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
+import { loadThirdPartyBearerMap } from "../mcp/thirdPartySecrets.js";
 import {
   SKILL_SANDBOX_ROOT,
   materializeAgentSkills,
@@ -67,6 +69,30 @@ function parseDaytonaSessionId(sessionId: string): DaytonaSessionRef {
     throw new AgentBackendError(`Invalid Daytona session id: ${sessionId}`);
   }
   return { agentId, sandboxId };
+}
+
+function summarizeToolResult(result: unknown): unknown {
+  if (result === null || result === undefined) return result;
+  if (typeof result === "string") return truncate(result);
+  if (typeof result === "object" && result !== null && "content" in result) {
+    const content = (result as { content?: unknown }).content;
+    if (Array.isArray(content)) {
+      const text = content
+        .filter(
+          (b): b is { type?: string; text?: string } =>
+            typeof b === "object" && b !== null,
+        )
+        .filter((b) => b.type === "text" && typeof b.text === "string")
+        .map((b) => b.text)
+        .join("\n");
+      if (text) return truncate(text);
+    }
+  }
+  try {
+    return truncate(JSON.stringify(result, null, 2));
+  } catch {
+    return "[unserializable tool result]";
+  }
 }
 
 function truncate(text: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
@@ -203,59 +229,68 @@ export class DaytonaAgentBackend implements AgentBackend {
         const priorMessages = context
           ? await loadPriorMessages(context)
           : ([] satisfies Message[]);
-        const tools = buildTools(agent, sandbox);
+        const thirdPartyBearer = loadThirdPartyBearerMap(agent.thirdPartyMcp);
+        const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
+          agent,
+          thirdPartyBearer,
+        );
+        const tools = [...buildTools(agent, sandbox), ...mcpTools];
         const model = normalizeModelId(agent.model);
         const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
         let finalText = "";
         let deltaText = "";
 
-        const runtimePrompt = buildRuntimePrompt(
-          agent,
-          Boolean(tools.length),
-          session.sandboxId,
-        );
-        const piAgent = new Agent({
-          initialState: {
-            systemPrompt: runtimePrompt,
-            model,
-            thinkingLevel: "high",
-            messages: priorMessages,
-            tools,
-          },
-          sessionId,
-          toolExecution: "sequential",
-          getApiKey: (provider) => {
-            if (provider === "anthropic") return anthropicApiKey ?? undefined;
-            return undefined;
-          },
-        });
-
-        piAgent.subscribe((event) => {
-          this.handlePiEvent(event, onEvent, (text) => {
-            deltaText += text;
+        try {
+          const runtimePrompt = buildRuntimePrompt(
+            agent,
+            Boolean(tools.length),
+            session.sandboxId,
+          );
+          const piAgent = new Agent({
+            initialState: {
+              systemPrompt: runtimePrompt,
+              model,
+              thinkingLevel: "high",
+              messages: priorMessages,
+              tools,
+            },
+            sessionId,
+            toolExecution: "sequential",
+            getApiKey: (provider) => {
+              if (provider === "anthropic") return anthropicApiKey ?? undefined;
+              return undefined;
+            },
           });
-          if (event.type === "message_end" && isAssistantMessage(event.message)) {
-            finalText = readTextBlocks(event.message);
-          }
-          if (event.type === "turn_end" && isAssistantMessage(event.message)) {
-            const usage = event.message.usage;
-            onEvent?.({
-              kind: "model_request",
-              rawType: "pi.turn_end",
-              model: event.message.model,
-              isError: event.message.stopReason === "error",
-              usage: {
-                inputTokens: usage.input,
-                outputTokens: usage.output,
-                cacheCreationInputTokens: usage.cacheWrite,
-                cacheReadInputTokens: usage.cacheRead,
-              },
-            });
-          }
-        });
 
-        await piAgent.prompt(userMessage);
-        return finalText || deltaText;
+          piAgent.subscribe((event) => {
+            this.handlePiEvent(event, onEvent, (text) => {
+              deltaText += text;
+            });
+            if (event.type === "message_end" && isAssistantMessage(event.message)) {
+              finalText = readTextBlocks(event.message);
+            }
+            if (event.type === "turn_end" && isAssistantMessage(event.message)) {
+              const usage = event.message.usage;
+              onEvent?.({
+                kind: "model_request",
+                rawType: "pi.turn_end",
+                model: event.message.model,
+                isError: event.message.stopReason === "error",
+                usage: {
+                  inputTokens: usage.input,
+                  outputTokens: usage.output,
+                  cacheCreationInputTokens: usage.cacheWrite,
+                  cacheReadInputTokens: usage.cacheRead,
+                },
+              });
+            }
+          });
+
+          await piAgent.prompt(userMessage);
+          return finalText || deltaText;
+        } finally {
+          await closeThirdPartyMcpConnections(mcpConnections);
+        }
       });
     } catch (err) {
       const wrapped = wrapDaytonaError(err, "Daytona sandbox run failed");
@@ -324,6 +359,11 @@ export class DaytonaAgentBackend implements AgentBackend {
       onEvent?.({
         kind: "tool_use",
         toolName: event.toolName,
+        callId: event.toolCallId,
+        args:
+          event.args && typeof event.args === "object"
+            ? (event.args as Record<string, unknown>)
+            : undefined,
         rawType: "pi.tool_execution_start",
       });
       return;
@@ -334,7 +374,7 @@ export class DaytonaAgentBackend implements AgentBackend {
         kind: "tool_result",
         toolName: event.toolName,
         callId: event.toolCallId,
-        result: event.result,
+        result: summarizeToolResult(event.result),
         isError: event.isError,
         rawType: "pi.tool_execution_end",
       });
@@ -441,6 +481,7 @@ function buildRuntimePrompt(
     ? [
         "You have a Daytona Linux sandbox workspace. Treat /workspace as the working directory.",
         "Use tools to inspect files, write artifacts, and run commands when useful.",
+        "Platform tools (for example memory_*) and third-party MCP tools (name prefix server:tool) run on the orchestrator host, not inside the sandbox.",
         "If the user message contains REPLY_ATTACHMENT_UPLOAD_URL, upload final files there with curl when the user asks for downloadable artifacts.",
       ].join("\n")
     : "No sandbox tools are currently enabled for this agent.";

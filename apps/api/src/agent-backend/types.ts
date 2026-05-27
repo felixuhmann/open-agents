@@ -72,7 +72,13 @@ export type AgentRunContext = {
 export type AgentStreamEvent =
   | { kind: "delta"; text: string; rawType: string }
   | { kind: "message"; text: string; rawType: string }
-  | { kind: "tool_use"; toolName: string; rawType: string }
+  | {
+      kind: "tool_use";
+      toolName: string;
+      rawType: string;
+      callId?: string;
+      args?: Record<string, unknown>;
+    }
   | {
       kind: "tool_result";
       toolName: string;

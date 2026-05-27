@@ -116,6 +116,30 @@ restart.
   them via `getToolSecrets(bindingId)` before calling your handler. Use
   this for OAuth tokens, API keys — anything per-binding.
 
+## Pi / Daytona (orchestrator-side MCP)
+
+`@earendil-works/pi-agent-core` does **not** ship native MCP support — the
+Pi author recommends CLI wrappers (`mcporter`) or community extensions such
+as [`pi-mcp-adapter`](https://github.com/nicobailon/pi-mcp-adapter) /
+[`@0xkobold/pi-mcp`](https://github.com/0xKobold/pi-mcp) for interactive
+coding agents. For this platform we take a different path that fits a
+hosted multi-tenant orchestrator:
+
+| Capability                             | Mechanism                                                                                                                                                                    |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Platform tools (`memory`, …)           | In-process `invokePlatformTool()` on the API host — same handlers as the HTTP MCP server, secrets never enter the Daytona sandbox.                                           |
+| Third-party MCP (`AgentThirdPartyMcp`) | MCP SDK `Client` + `StreamableHTTPClientTransport` on the orchestrator; tools discovered via `tools/list` and exposed as native Pi `AgentTool`s named `<label-slug>:<tool>`. |
+| Anthropic Managed Agents (legacy)      | Unchanged: published `mcp_servers` + vault bearer; Anthropic's sandbox calls `POST /mcp/<slug>`.                                                                             |
+
+Implementation lives under [`apps/api/src/mcp/`](../apps/api/src/mcp/)
+(`piTools.ts`, `thirdPartyClient.ts`, `invokePlatformTool.ts`). The HTTP
+route [`routes/mcp.ts`](../apps/api/src/routes/mcp.ts) remains for
+Anthropic backward compatibility; Daytona runs do not loop back through
+it for platform tools.
+
+`RunEvent` payloads for `tool.use` / `tool.result` now include `callId`,
+`args`, and truncated `result` text where available for debugging.
+
 ## What the platform does
 
 [`apps/api/src/mcp/server.ts`](../apps/api/src/mcp/server.ts) builds the
