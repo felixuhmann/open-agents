@@ -14,12 +14,18 @@ import { PLATFORM_HANDLERS } from "../mcp/platform/index.js";
  * `deprecated` flag — existing bindings keep working until an admin
  * re-picks, but the row is hidden from the picker.
  */
-const MANAGED_TOOLS: ReadonlyArray<{ key: string; name: string; description: string }> = [
+const MANAGED_TOOLS: ReadonlyArray<{
+  key: string;
+  name: string;
+  description: string;
+  deprecated?: boolean;
+}> = [
   { key: "bash", name: "Bash", description: "Execute bash commands in a shell session." },
   {
     key: "read",
     name: "Read file",
-    description: "Read a file from the workspace (text, image, PDF, ipynb).",
+    description:
+      "Read a text file from the workspace (UTF-8; large files are truncated).",
   },
   { key: "write", name: "Write file", description: "Write a file to the workspace." },
   { key: "edit", name: "Edit file", description: "String replacement in a file." },
@@ -33,7 +39,8 @@ const MANAGED_TOOLS: ReadonlyArray<{ key: string; name: string; description: str
   {
     key: "web_search",
     name: "Web search",
-    description: "Search the web for information.",
+    description:
+      "Search the web (Anthropic managed runtime; not implemented on Daytona — use curl or a third-party MCP search server).",
   },
 ];
 
@@ -60,12 +67,13 @@ export async function seedToolCatalog(): Promise<void> {
         runtime: "managed",
         configSchema: {},
         requiresSecrets: false,
+        deprecated: tool.deprecated ?? false,
       },
       update: {
         name: tool.name,
         description: tool.description,
         runtime: "managed",
-        deprecated: false,
+        deprecated: tool.deprecated ?? false,
       },
     });
   }

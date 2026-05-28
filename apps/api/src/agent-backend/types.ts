@@ -80,6 +80,14 @@ export type AgentStreamEvent =
       args?: Record<string, unknown>;
     }
   | {
+      kind: "tool_output";
+      toolName: string;
+      rawType: string;
+      callId?: string;
+      stream: "stdout" | "stderr";
+      text: string;
+    }
+  | {
       kind: "tool_result";
       toolName: string;
       rawType: string;

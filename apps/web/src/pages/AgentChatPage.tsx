@@ -69,6 +69,25 @@ type PendingUpload = {
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
+type LiveToolCall = { callId: string; toolName: string; output: string };
+
+function appendToolOutput(
+  prev: LiveToolCall[],
+  callId: string,
+  toolName: string,
+  chunk: string,
+): LiveToolCall[] {
+  const idx = prev.findIndex((tc) => tc.callId === callId);
+  if (idx < 0) {
+    return [...prev, { callId, toolName, output: chunk }];
+  }
+  const next = [...prev];
+  const row = next[idx];
+  if (!row) return prev;
+  next[idx] = { ...row, output: row.output + chunk };
+  return next;
+}
+
 export default function AgentChatPage() {
   const { slug, conversationId } = useParams<{
     slug: string;
@@ -80,9 +99,9 @@ export default function AgentChatPage() {
   const conversation = useConversation(conversationId);
   const [draft, setDraft] = useState("");
   const [streamingText, setStreamingText] = useState("");
-  const [toolCalls, setToolCalls] = useState<Array<{ seq: number; toolName: string }>>(
-    [],
-  );
+  const [toolCalls, setToolCalls] = useState<
+    Array<{ callId: string; toolName: string; output: string }>
+  >([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -239,10 +258,42 @@ export default function AgentChatPage() {
           data.type === "tool.use" &&
           typeof data.payload.toolName === "string"
         ) {
-          setToolCalls((prev) => [
-            ...prev,
-            { seq: data.seq, toolName: data.payload.toolName as string },
-          ]);
+          const callId =
+            typeof data.payload.callId === "string"
+              ? data.payload.callId
+              : `seq-${data.seq}`;
+          setToolCalls((prev) => {
+            if (prev.some((tc) => tc.callId === callId)) return prev;
+            return [
+              ...prev,
+              {
+                callId,
+                toolName:
+                  typeof data.payload.toolName === "string"
+                    ? data.payload.toolName
+                    : "tool",
+                output: "",
+              },
+            ];
+          });
+        } else if (
+          data.type === "tool.output" &&
+          typeof data.payload.toolName === "string" &&
+          typeof data.payload.text === "string"
+        ) {
+          const stream = data.payload.stream === "stderr" ? "[stderr] " : "";
+          const chunk = `${stream}${data.payload.text}`;
+          const toolName =
+            typeof data.payload.toolName === "string" ? data.payload.toolName : "";
+          if (!toolName) return;
+          setToolCalls((prev) => {
+            const callId =
+              typeof data.payload.callId === "string"
+                ? data.payload.callId
+                : (prev.findLast((tc) => tc.toolName === toolName)?.callId ??
+                  `unknown-${toolName}`);
+            return appendToolOutput(prev, callId, toolName, chunk);
+          });
         } else if (data.type === "run.succeeded" || data.type === "run.failed") {
           source.close();
           const finishedRunId = activeRunId;
@@ -271,6 +322,7 @@ export default function AgentChatPage() {
     source.addEventListener("agent.message", handle as EventListener);
     source.addEventListener("agent.delta", handle as EventListener);
     source.addEventListener("tool.use", handle as EventListener);
+    source.addEventListener("tool.output", handle as EventListener);
     source.addEventListener("tool.result", handle as EventListener);
     source.addEventListener("run.started", handle as EventListener);
     source.addEventListener("run.succeeded", handle as EventListener);
@@ -376,12 +428,24 @@ export default function AgentChatPage() {
                 />
               ))}
               {toolCalls.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-col gap-2">
                   {toolCalls.map((tc) => (
-                    <Badge key={tc.seq} variant="secondary" className="font-mono">
-                      <WrenchIcon data-icon="inline-start" />
-                      {tc.toolName}
-                    </Badge>
+                    <div
+                      key={tc.callId}
+                      className="rounded-md border bg-muted/40 px-3 py-2 text-xs"
+                    >
+                      <div className="mb-1 flex items-center gap-1.5 font-mono text-muted-foreground">
+                        <WrenchIcon className="size-3.5 shrink-0" />
+                        {tc.toolName}
+                      </div>
+                      {tc.output ? (
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+                          {tc.output}
+                        </pre>
+                      ) : (
+                        <p className="text-muted-foreground">Running…</p>
+                      )}
+                    </div>
                   ))}
                 </div>
               ) : null}

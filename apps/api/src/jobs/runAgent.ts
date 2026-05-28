@@ -305,6 +305,18 @@ async function streamRunWithEvents(
             ...(event.args !== undefined ? { args: event.args } : {}),
           },
         }).catch(() => undefined);
+      } else if (event.kind === "tool_output") {
+        void appendEvent({
+          runId,
+          type: "tool.output",
+          payload: {
+            type: "tool.output",
+            toolName: event.toolName,
+            stream: event.stream,
+            text: event.text,
+            ...(event.callId ? { callId: event.callId } : {}),
+          },
+        }).catch(() => undefined);
       } else if (event.kind === "tool_result") {
         void appendEvent({
           runId,
