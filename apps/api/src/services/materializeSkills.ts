@@ -9,8 +9,21 @@ import { type DaytonaSandboxFs, ensureSandboxDir } from "./daytonaShell.js";
 import { log } from "../log.js";
 import { readSkillBundle } from "./skills.js";
 
-/** Root inside the Daytona workspace where bound skills are unpacked. */
-export const SKILL_SANDBOX_ROOT = "/workspace/.agents/skills";
+/**
+ * Subdirectory of the sandbox working directory where bound skills are
+ * unpacked. Combined with the resolved workspaceDir (see
+ * `resolveSandboxWorkspaceDir`) to produce an absolute mount path.
+ */
+export const SKILL_SANDBOX_SUBDIR = ".agents/skills";
+
+/**
+ * Resolve the absolute directory inside the sandbox where skill bundles
+ * should be unpacked, given the sandbox's actual working directory.
+ */
+export function skillSandboxRootFor(workspaceDir: string): string {
+  const base = workspaceDir.endsWith("/") ? workspaceDir.slice(0, -1) : workspaceDir;
+  return `${base}/${SKILL_SANDBOX_SUBDIR}`;
+}
 
 export type SkillSandbox = {
   fs: DaytonaSandboxFs & {
@@ -106,14 +119,21 @@ async function uploadSkillFile(
 
 /**
  * Copy each pinned skill bundle from local disk into the Daytona sandbox.
- * Skills are unpacked under `/workspace/.agents/skills/<slug>/` so the Pi
- * agent can read them with the same paths as Cursor-style skill folders.
+ * Skills are unpacked under `<workspaceDir>/.agents/skills/<slug>/` so the
+ * Pi agent can read them with the same paths as Cursor-style skill folders.
+ *
+ * `workspaceDir` MUST be the sandbox's actual working directory (resolved
+ * via `resolveSandboxWorkspaceDir`). Passing `/workspace` on an image whose
+ * WORKDIR is `/home/daytona` will cause the daemon to fail with
+ * `mkdir /workspace: permission denied`.
  */
 export async function materializeAgentSkills(
   sandbox: SkillSandbox,
   bindings: HydratedAgent["skillBindings"],
+  workspaceDir: string,
 ): Promise<SkillMaterializationManifest> {
   const entries: SkillMaterializationEntry[] = [];
+  const skillsRoot = skillSandboxRootFor(workspaceDir);
 
   if (!bindings.length) {
     log.info("skills: materialize skipped — no bindings");
@@ -122,7 +142,7 @@ export async function materializeAgentSkills(
 
   for (const binding of bindings) {
     const slug = skillSlugFromName(binding.skill.name);
-    const sandboxPath = `${SKILL_SANDBOX_ROOT}/${slug}`;
+    const sandboxPath = `${skillsRoot}/${slug}`;
     const base = {
       skillId: binding.skillId,
       skillVersionId: binding.skillVersionId,

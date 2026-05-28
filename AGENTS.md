@@ -280,8 +280,10 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   thread/conversation table and creates independent Anthropic sessions.
   Don't try to share state between them.
 - **Daytona skills materialize at sandbox creation**: When
-  `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` unpacks
-  each pinned `AgentSkillBinding` into `/workspace/.agents/skills/<slug>/`
+  `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` resolves the
+  sandbox's actual working directory via `resolveSandboxWorkspaceDir` (some
+  TS sandbox images use `/home/daytona` rather than `/workspace`) and
+  unpacks each pinned `AgentSkillBinding` into `<workspaceDir>/.agents/skills/<slug>/`
   via [`materializeSkills.ts`](apps/api/src/services/materializeSkills.ts).
   Bundle bytes live on disk under `apps/api/data/skills/` (see
   `SKILL_BUNDLE_DIR`); mount that directory persistently in production.

@@ -25,14 +25,15 @@ import { log } from "../log.js";
 import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
 import { loadThirdPartyBearerMap } from "../mcp/thirdPartySecrets.js";
 import {
-  SKILL_SANDBOX_ROOT,
   materializeAgentSkills,
+  skillSandboxRootFor,
   skillSlugFromName,
 } from "../services/materializeSkills.js";
 import {
-  DAYTONA_WORKSPACE_DIR,
   bashCommand,
   ensureSandboxDir,
+  remapWorkspacePath,
+  resolveSandboxWorkspaceDir,
   shellQuote,
 } from "../services/daytonaShell.js";
 import { SERVICE_KEYS, getServiceSecret } from "../secrets/service.js";
@@ -49,7 +50,6 @@ import {
 } from "./types.js";
 
 const DAYTONA_SESSION_PREFIX = "daytona";
-const DEFAULT_WORKSPACE_DIR = DAYTONA_WORKSPACE_DIR;
 const DEFAULT_SHELL_TIMEOUT_SECONDS = 60;
 const MAX_TOOL_OUTPUT_CHARS = 20_000;
 const MAX_READ_CHARS = 80_000;
@@ -171,17 +171,23 @@ export class DaytonaAgentBackend implements AgentBackend {
         { timeout: 90 },
       );
 
-      await this.materializeResources(sandbox, input.resources ?? []);
+      const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
+      await this.materializeResources(sandbox, input.resources ?? [], workspaceDir);
 
       let skillsManifest;
       const agent = await getAgentById(input.agentId);
       if (agent?.skillBindings.length) {
-        skillsManifest = await materializeAgentSkills(sandbox, agent.skillBindings);
+        skillsManifest = await materializeAgentSkills(
+          sandbox,
+          agent.skillBindings,
+          workspaceDir,
+        );
       }
 
       log.info("daytona: session created", {
         agentId: input.agentId,
         sandboxId: sandbox.id,
+        workspaceDir,
         resources: input.resources?.length ?? 0,
         skillsMaterialized: skillsManifest?.materialized ?? 0,
         skillsFailed: skillsManifest?.failed ?? 0,
@@ -202,7 +208,8 @@ export class DaytonaAgentBackend implements AgentBackend {
     if (!resources.length) return;
     try {
       await this.withSandbox(sessionId, async (sandbox) => {
-        await this.materializeResources(sandbox, resources);
+        const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
+        await this.materializeResources(sandbox, resources, workspaceDir);
       });
       log.info("daytona: mounted session resources", {
         sessionId,
@@ -226,6 +233,7 @@ export class DaytonaAgentBackend implements AgentBackend {
       if (!agent) throw new AgentBackendError(`Agent not found: ${agentId}`);
 
       return await this.withSandbox(sessionId, async (sandbox) => {
+        const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
         const priorMessages = context
           ? await loadPriorMessages(context)
           : ([] satisfies Message[]);
@@ -234,7 +242,7 @@ export class DaytonaAgentBackend implements AgentBackend {
           agent,
           thirdPartyBearer,
         );
-        const tools = [...buildTools(agent, sandbox), ...mcpTools];
+        const tools = [...buildTools(agent, sandbox, workspaceDir), ...mcpTools];
         const model = normalizeModelId(agent.model);
         const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
         let finalText = "";
@@ -245,6 +253,7 @@ export class DaytonaAgentBackend implements AgentBackend {
             agent,
             Boolean(tools.length),
             session.sandboxId,
+            workspaceDir,
           );
           const piAgent = new Agent({
             initialState: {
@@ -326,12 +335,14 @@ export class DaytonaAgentBackend implements AgentBackend {
   private async materializeResources(
     sandbox: Sandbox,
     resources: SessionResource[],
+    workspaceDir: string,
   ): Promise<void> {
     for (const resource of resources) {
       if (!resource.bytes) continue;
-      const remoteDir = path.dirname(resource.mountPath);
+      const remotePath = remapWorkspacePath(resource.mountPath, workspaceDir);
+      const remoteDir = path.dirname(remotePath);
       await ensureSandboxDir(sandbox.fs, remoteDir);
-      await sandbox.fs.uploadFile(toBuffer(resource.bytes), resource.mountPath);
+      await sandbox.fs.uploadFile(toBuffer(resource.bytes), remotePath);
     }
   }
 
@@ -458,14 +469,14 @@ function emptyUsage(): AssistantMessage["usage"] {
   };
 }
 
-function buildSkillInstructions(agent: HydratedAgent): string | null {
+function buildSkillInstructions(agent: HydratedAgent, skillsRoot: string): string | null {
   if (!agent.skillBindings.length) return null;
   const lines = agent.skillBindings.map((binding) => {
     const slug = skillSlugFromName(binding.skill.name);
-    return `- ${binding.skill.name} (pinned v${binding.skillVersion.versionNumber}): ${SKILL_SANDBOX_ROOT}/${slug}/SKILL.md`;
+    return `- ${binding.skill.name} (pinned v${binding.skillVersion.versionNumber}): ${skillsRoot}/${slug}/SKILL.md`;
   });
   return [
-    `Bundled skills are unpacked under ${SKILL_SANDBOX_ROOT}/<slug>/ in this sandbox.`,
+    `Bundled skills are unpacked under ${skillsRoot}/<slug>/ in this sandbox.`,
     "When a task matches a skill, read that skill's SKILL.md before using other files in the same directory.",
     "Skills bound to this agent:",
     ...lines,
@@ -476,17 +487,21 @@ function buildRuntimePrompt(
   agent: HydratedAgent,
   hasTools: boolean,
   sandboxId: string,
+  workspaceDir: string,
 ): string {
   const toolInstructions = hasTools
     ? [
-        "You have a Daytona Linux sandbox workspace. Treat /workspace as the working directory.",
+        `You have a Daytona Linux sandbox workspace. Treat ${workspaceDir} as the working directory.`,
         "Use tools to inspect files, write artifacts, and run commands when useful.",
         "Platform tools (for example memory_*) and third-party MCP tools (name prefix server:tool) run on the orchestrator host, not inside the sandbox.",
         "If the user message contains REPLY_ATTACHMENT_UPLOAD_URL, upload final files there with curl when the user asks for downloadable artifacts.",
       ].join("\n")
     : "No sandbox tools are currently enabled for this agent.";
 
-  const skillInstructions = buildSkillInstructions(agent);
+  const skillInstructions = buildSkillInstructions(
+    agent,
+    skillSandboxRootFor(workspaceDir),
+  );
 
   const sections = [
     agent.systemPrompt.trim(),
@@ -506,22 +521,26 @@ function boundManagedTools(agent: HydratedAgent): Set<string> {
   );
 }
 
-function buildTools(agent: HydratedAgent, sandbox: Sandbox): AgentTool[] {
+function buildTools(
+  agent: HydratedAgent,
+  sandbox: Sandbox,
+  workspaceDir: string,
+): AgentTool[] {
   const bound = boundManagedTools(agent);
   const tools: AgentTool[] = [];
 
-  if (bound.has("bash")) tools.push(bashTool(sandbox));
+  if (bound.has("bash")) tools.push(bashTool(sandbox, workspaceDir));
   if (bound.has("read")) tools.push(readTool(sandbox));
   if (bound.has("write")) tools.push(writeTool(sandbox));
   if (bound.has("edit")) tools.push(editTool(sandbox));
-  if (bound.has("glob")) tools.push(globTool(sandbox));
-  if (bound.has("grep")) tools.push(grepTool(sandbox));
-  if (bound.has("web_fetch")) tools.push(webFetchTool(sandbox));
+  if (bound.has("glob")) tools.push(globTool(sandbox, workspaceDir));
+  if (bound.has("grep")) tools.push(grepTool(sandbox, workspaceDir));
+  if (bound.has("web_fetch")) tools.push(webFetchTool(sandbox, workspaceDir));
 
   return tools;
 }
 
-function bashTool(sandbox: Sandbox): AgentTool {
+function bashTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "bash",
     label: "Bash",
@@ -529,7 +548,7 @@ function bashTool(sandbox: Sandbox): AgentTool {
     parameters: Type.Object({
       command: Type.String({ description: "Command to execute." }),
       cwd: Type.Optional(
-        Type.String({ description: "Working directory. Defaults to /workspace." }),
+        Type.String({ description: `Working directory. Defaults to ${workspaceDir}.` }),
       ),
       timeoutSeconds: Type.Optional(Type.Number({ description: "Timeout in seconds." })),
     }),
@@ -538,7 +557,7 @@ function bashTool(sandbox: Sandbox): AgentTool {
       const p = params as { command: string; cwd?: string; timeoutSeconds?: number };
       const result = await sandbox.process.executeCommand(
         bashCommand(p.command),
-        p.cwd ?? DEFAULT_WORKSPACE_DIR,
+        p.cwd ?? workspaceDir,
         undefined,
         Math.max(1, Math.min(p.timeoutSeconds ?? DEFAULT_SHELL_TIMEOUT_SECONDS, 600)),
       );
@@ -628,7 +647,7 @@ function editTool(sandbox: Sandbox): AgentTool {
   });
 }
 
-function globTool(sandbox: Sandbox): AgentTool {
+function globTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "glob",
     label: "Glob",
@@ -636,15 +655,12 @@ function globTool(sandbox: Sandbox): AgentTool {
     parameters: Type.Object({
       pattern: Type.String(),
       root: Type.Optional(
-        Type.String({ description: "Root directory. Defaults to /workspace." }),
+        Type.String({ description: `Root directory. Defaults to ${workspaceDir}.` }),
       ),
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
-      const result = await sandbox.fs.searchFiles(
-        p.root ?? DEFAULT_WORKSPACE_DIR,
-        p.pattern,
-      );
+      const result = await sandbox.fs.searchFiles(p.root ?? workspaceDir, p.pattern);
       return {
         content: [
           {
@@ -658,7 +674,7 @@ function globTool(sandbox: Sandbox): AgentTool {
   });
 }
 
-function grepTool(sandbox: Sandbox): AgentTool {
+function grepTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "grep",
     label: "Grep",
@@ -666,16 +682,16 @@ function grepTool(sandbox: Sandbox): AgentTool {
     parameters: Type.Object({
       pattern: Type.String(),
       root: Type.Optional(
-        Type.String({ description: "Root directory. Defaults to /workspace." }),
+        Type.String({ description: `Root directory. Defaults to ${workspaceDir}.` }),
       ),
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
       const result = await sandbox.process.executeCommand(
         bashCommand(
-          `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? DEFAULT_WORKSPACE_DIR)} || true`,
+          `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? workspaceDir)} || true`,
         ),
-        DEFAULT_WORKSPACE_DIR,
+        workspaceDir,
         undefined,
         30,
       );
@@ -687,7 +703,7 @@ function grepTool(sandbox: Sandbox): AgentTool {
   });
 }
 
-function webFetchTool(sandbox: Sandbox): AgentTool {
+function webFetchTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "web_fetch",
     label: "Web fetch",
@@ -701,7 +717,7 @@ function webFetchTool(sandbox: Sandbox): AgentTool {
         bashCommand(
           `python3 - <<'PY'\nimport urllib.request\nurl = ${JSON.stringify(p.url)}\nwith urllib.request.urlopen(url, timeout=20) as r:\n    print(r.read().decode('utf-8', 'replace'))\nPY`,
         ),
-        DEFAULT_WORKSPACE_DIR,
+        workspaceDir,
         undefined,
         30,
       );
