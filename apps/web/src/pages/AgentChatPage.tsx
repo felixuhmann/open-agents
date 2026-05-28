@@ -10,6 +10,7 @@ import {
   PaperclipIcon,
   PaperPlaneTiltIcon,
   RobotIcon,
+  TerminalWindowIcon,
   UserIcon,
   WarningCircleIcon,
   WrenchIcon,
@@ -18,11 +19,13 @@ import {
 import { ApiError, api } from "@/lib/api";
 import {
   avatarSrc,
+  canOperateAgents,
   type ChatAttachmentSummary,
   type ChatMessage,
   runAttachmentDownloadUrl,
   useAgent,
   useConversation,
+  useCurrentUser,
   useRunAttachments,
 } from "@/lib/queries";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -96,7 +99,9 @@ export default function AgentChatPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const agent = useAgent(slug);
+  const me = useCurrentUser();
   const conversation = useConversation(conversationId);
+  const isOperator = canOperateAgents(me.data?.role);
   const [draft, setDraft] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [toolCalls, setToolCalls] = useState<
@@ -430,6 +435,14 @@ export default function AgentChatPage() {
         </div>
         {conversationId && messages.length > 0 ? (
           <ReportIssueDialog conversationId={conversationId} />
+        ) : null}
+        {conversationId && isOperator ? (
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/agents/${slug}/chat/${conversationId}/debug`}>
+              <TerminalWindowIcon data-icon="inline-start" />
+              Debug
+            </Link>
+          </Button>
         ) : null}
         <Button asChild variant="outline" size="sm">
           <Link to={`/agents/${agent.data.slug}/conversations`}>

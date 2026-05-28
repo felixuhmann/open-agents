@@ -5,11 +5,13 @@ import {
   HttpError,
   canOperateAgents,
   requireAgentAccess,
+  requireAgentOperator,
   requireUser,
 } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 import { enqueueChatTurn } from "../../services/chat.js";
+import { getConversationTrace } from "../../services/sessionTrace.js";
 
 export const conversationsRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -80,6 +82,17 @@ conversationsRoutes.post("/", async (c) => {
     title: conv.title,
     createdAt: conv.createdAt.toISOString(),
   });
+});
+
+/**
+ * Full agent trace for builders (admin/contributor). Same payload shape as
+ * the issue detail viewer minus reporter/issue metadata.
+ */
+conversationsRoutes.get("/:id/trace", async (c) => {
+  requireAgentOperator(c);
+  const id = c.req.param("id");
+  const trace = await getConversationTrace(id);
+  return c.json(trace);
 });
 
 conversationsRoutes.get("/:id", async (c) => {

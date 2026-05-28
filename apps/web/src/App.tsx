@@ -36,6 +36,7 @@ const SkillsLibraryPage = lazy(() => import("./pages/SkillsLibraryPage"));
 const McpLibraryPage = lazy(() => import("./pages/McpLibraryPage"));
 const IssuesListPage = lazy(() => import("./pages/IssuesListPage"));
 const IssueDetailPage = lazy(() => import("./pages/IssueDetailPage"));
+const ConversationDebugPage = lazy(() => import("./pages/ConversationDebugPage"));
 const SecretsSettingsPage = lazy(() => import("./pages/SecretsSettingsPage"));
 const SandboxesSettingsPage = lazy(() => import("./pages/SandboxesSettingsPage"));
 const UsersSettingsPage = lazy(() => import("./pages/UsersSettingsPage"));
@@ -95,6 +96,14 @@ function ProtectedRoutes() {
             }
           />
           <Route path="/agents/:slug/chat" element={<AgentChatPage />} />
+          <Route
+            path="/agents/:slug/chat/:conversationId/debug"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <ConversationDebugPage />
+              </RequirePermission>
+            }
+          />
           <Route path="/agents/:slug/chat/:conversationId" element={<AgentChatPage />} />
           <Route
             path="/agents/:slug/conversations"
