@@ -68,39 +68,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-/**
- * Anthropic models we expose to admins. Mirrors `AgentModel` in
- * `packages/types/src/agents.ts` (kept literal here to avoid pulling
- * Zod into the bundle just for an enum). Keep these in lock-step.
- */
-const MODEL_OPTIONS: ReadonlyArray<{ id: string; label: string; hint: string }> = [
-  {
-    id: "claude-opus-4-7",
-    label: "Claude Opus 4.7",
-    hint: "Best quality, highest cost. Default.",
-  },
-  {
-    id: "claude-opus-4-6",
-    label: "Claude Opus 4.6",
-    hint: "Previous Opus generation.",
-  },
-  {
-    id: "claude-sonnet-4-6",
-    label: "Claude Sonnet 4.6",
-    hint: "Strong general-purpose model, lower cost than Opus.",
-  },
-  {
-    id: "claude-haiku-4-5",
-    label: "Claude Haiku 4.5",
-    hint: "Fastest and cheapest, smaller context window.",
-  },
-];
+import { ModelPicker, type ModelSelection } from "@/components/ModelPicker";
 
 type EditState = {
   displayName: string;
   description: string;
   systemPrompt: string;
-  model: string;
+  modelProvider: string;
+  modelId: string;
   emailEnabled: boolean;
   webEnabled: boolean;
   accessMode: "everyone" | "specific";
@@ -130,7 +105,8 @@ function fromDto(a: FullAgentDto): EditState {
     displayName: a.displayName,
     description: a.description ?? "",
     systemPrompt: a.systemPrompt,
-    model: a.model,
+    modelProvider: a.modelProvider,
+    modelId: a.modelId,
     emailEnabled: a.emailEnabled,
     webEnabled: a.webEnabled,
     accessMode: a.accessMode,
@@ -186,7 +162,8 @@ export default function AgentEditPage() {
           displayName: s.displayName,
           description: s.description || null,
           systemPrompt: s.systemPrompt,
-          model: s.model,
+          modelProvider: s.modelProvider,
+          modelId: s.modelId,
           emailEnabled: s.emailEnabled,
           webEnabled: s.webEnabled,
           accessMode: s.accessMode,
@@ -596,27 +573,12 @@ export default function AgentEditPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Field>
-            <FieldLabel htmlFor="model">Model</FieldLabel>
-            <Select value={state.model} onValueChange={(v) => setS({ model: v })}>
-              <SelectTrigger id="model" className="w-full sm:w-96">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {MODEL_OPTIONS.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              {MODEL_OPTIONS.find((m) => m.id === state.model)?.hint ??
-                "Custom model id — must match a model id Anthropic accepts."}
-            </FieldDescription>
-          </Field>
+          <ModelPicker
+            value={{ modelProvider: state.modelProvider, modelId: state.modelId }}
+            onChange={(model: ModelSelection) =>
+              setS({ modelProvider: model.modelProvider, modelId: model.modelId })
+            }
+          />
         </CardContent>
       </Card>
 

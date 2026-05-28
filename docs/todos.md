@@ -84,39 +84,18 @@ Implemented:
 
 Remaining (future):
 
-- Model-provider abstraction beyond Anthropic model ids.
 - Full removal of Anthropic Managed Agents backend.
+- Additional Pi providers (Google, Bedrock, …) once service-secret slots exist.
 
 ### Model-provider abstraction
 
-Current state:
+Implemented:
 
-- Pi provides a model-provider seam.
-- MVP still uses the stored Anthropic API key and currently resolves
-  Anthropic model IDs.
-
-What is needed:
-
-- Add service secrets for additional providers: OpenAI, Google/Vertex,
-  OpenRouter, Bedrock, etc.
-- Add a provider/model registry in the backend and expose it to the web
-  app.
-- Update the agent editor so `Agent.model` is no longer effectively an
-  Anthropic-only string.
-- Decide how to represent provider + model in the DB. Options:
-  - keep one string like `anthropic:claude-opus-4-7`
-  - add explicit `modelProvider` + `modelId` fields
-  - store provider config in a JSON runtime config field
-- Normalize usage/cost events across providers so analytics keep
-  working.
-
-Acceptance criteria:
-
-- An admin can configure at least one non-Anthropic provider and select a
-  model for an agent.
-- The same Daytona sandbox/tool runtime works regardless of model
-  provider.
-- `model.request` events include provider/model/usage consistently.
+- `Agent.modelProvider` + `Agent.modelId` columns (Pi provider + catalog id).
+- Dynamic catalog API (`GET /api/models/catalog`) backed by pi-ai `getProviders` / `getModels`.
+- Service secrets for `openai_api_key` and `openrouter_api_key`; Daytona resolves keys via Pi `getApiKey`.
+- Agent editor model picker (provider + searchable model list).
+- Published snapshots and analytics use provider + model consistently.
 
 ### Daytona sandbox lifecycle management
 
@@ -183,6 +162,7 @@ Current state:
   same command gate.
 
 What is still needed:
+
 - Keep credentials host-side by default. Only inject credentials into the
   sandbox when a tool explicitly requires sandbox-local access.
 - Add resource limits and per-agent/per-run quotas.

@@ -65,7 +65,8 @@ analyticsRoutes.get("/", async (c) => {
           id: true,
           slug: true,
           displayName: true,
-          model: true,
+          modelProvider: true,
+          modelId: true,
         },
       },
       events: {
@@ -114,8 +115,9 @@ analyticsRoutes.get("/", async (c) => {
       const payload = parseUsagePayload(event.payload);
       if (!payload) continue;
 
-      const model = payload.model ?? run.agent.model ?? "unknown";
-      const provider = payload.provider ?? inferProviderFromModel(model);
+      const agentModelRef = `${run.agent.modelProvider}/${run.agent.modelId}`;
+      const model = payload.model ?? agentModelRef;
+      const provider = payload.provider ?? run.agent.modelProvider;
       const modelRow = getOrCreate(byModel, model, () => ({
         ...emptyAccumulator(),
         model,

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { AgentSummaryDto } from "@open-agents/types";
+import type { AgentSummaryDto, ModelCatalogDto } from "@open-agents/types";
 import { api } from "./api";
 
 export type SetupStatus = { complete: boolean; userCount: number };
@@ -199,7 +199,8 @@ export type FullAgentDto = {
   displayName: string;
   description: string | null;
   systemPrompt: string;
-  model: string;
+  modelProvider: string;
+  modelId: string;
   avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;
@@ -282,6 +283,14 @@ export function useTools() {
   return useQuery({
     queryKey: ["tools"],
     queryFn: () => api<{ tools: Tool[] }>("/api/tools").then((r) => r.tools),
+  });
+}
+
+export function useModelCatalog() {
+  return useQuery({
+    queryKey: ["models", "catalog"],
+    queryFn: () => api<ModelCatalogDto>("/api/models/catalog"),
+    staleTime: 60_000,
   });
 }
 
@@ -584,7 +593,8 @@ export type IssueDetailAgent = {
   displayName: string;
   avatar: string | null;
   description: string | null;
-  model: string;
+  modelProvider: string;
+  modelId: string;
   systemPrompt: string;
   emailEnabled: boolean;
   webEnabled: boolean;

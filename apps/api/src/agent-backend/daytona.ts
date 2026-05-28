@@ -8,11 +8,8 @@ import {
 } from "@earendil-works/pi-agent-core";
 import {
   Type,
-  getModels,
-  type Api,
   type AssistantMessage,
   type Message,
-  type Model,
   type Static,
   type TSchema,
 } from "@earendil-works/pi-ai";
@@ -63,7 +60,7 @@ import {
   resolveSandboxWorkspaceDir,
   shellQuote,
 } from "../services/daytonaShell.js";
-import { SERVICE_KEYS, getServiceSecret } from "../secrets/service.js";
+import { resolvePiModel, resolvePiProviderApiKey } from "../services/piModel.js";
 import {
   AgentBackendError,
   type AgentBackend,
@@ -95,17 +92,6 @@ function isAssistantMessage(message: AgentMessage): message is AssistantMessage 
     "role" in message &&
     message.role === "assistant"
   );
-}
-
-function normalizeModelId(modelId: string): Model<Api> {
-  const anthropicModels = getModels("anthropic");
-  const model = anthropicModels.find((m) => m.id === modelId);
-  if (!model) {
-    throw new AgentBackendError(
-      `Daytona MVP currently supports Anthropic model ids known to pi-ai; unknown model: ${modelId}`,
-    );
-  }
-  return model;
 }
 
 function toBuffer(bytes: Uint8Array): Buffer {
@@ -293,8 +279,9 @@ export class DaytonaAgentBackend implements AgentBackend {
       return await this.withSandbox(
         sessionId,
         async (sandbox, workspaceDir) => {
+          const model = resolvePiModel(agent.modelProvider, agent.modelId);
           const priorMessages = context
-            ? await loadPriorMessages(context)
+            ? await loadPriorMessages(context, model)
             : ([] satisfies Message[]);
           const thirdPartyBearer = loadThirdPartyBearerMap(agent.thirdPartyMcp);
           const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
@@ -305,8 +292,6 @@ export class DaytonaAgentBackend implements AgentBackend {
             ...buildTools(agent, sandbox, workspaceDir, sandboxPolicy, onEvent),
             ...mcpTools,
           ];
-          const model = normalizeModelId(agent.model);
-          const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
           let finalText = "";
           let deltaText = "";
 
@@ -327,10 +312,7 @@ export class DaytonaAgentBackend implements AgentBackend {
               },
               sessionId,
               toolExecution: "sequential",
-              getApiKey: (provider) => {
-                if (provider === "anthropic") return anthropicApiKey ?? undefined;
-                return undefined;
-              },
+              getApiKey: (provider) => resolvePiProviderApiKey(provider),
             });
 
             piAgent.subscribe((event) => {
@@ -346,7 +328,7 @@ export class DaytonaAgentBackend implements AgentBackend {
                   kind: "model_request",
                   rawType: "pi.turn_end",
                   model: event.message.model,
-                  provider: "anthropic",
+                  provider: event.message.provider,
                   stopReason: event.message.stopReason,
                   isError: event.message.stopReason === "error",
                   usage: {
@@ -504,7 +486,20 @@ export class DaytonaAgentBackend implements AgentBackend {
   }
 }
 
-async function loadPriorMessages(context: AgentRunContext): Promise<Message[]> {
+async function loadPriorMessages(
+  context: AgentRunContext,
+  model: { api: AssistantMessage["api"]; provider: string; id: string },
+): Promise<Message[]> {
+  const assistantStub = (): AssistantMessage => ({
+    role: "assistant",
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    content: [{ type: "text", text: "" }],
+    usage: emptyUsage(),
+    stopReason: "stop",
+    timestamp: Date.now(),
+  });
   if (context.surface === "chat") {
     const run = await prisma.agentRun.findUnique({ where: { id: context.runId } });
     if (!run?.conversationId) return [];
@@ -523,13 +518,8 @@ async function loadPriorMessages(context: AgentRunContext): Promise<Message[]> {
         if (row.role === "assistant") {
           return [
             {
-              role: "assistant",
-              api: "anthropic-messages",
-              provider: "anthropic",
-              model: "unknown",
+              ...assistantStub(),
               content: [{ type: "text", text: row.content }],
-              usage: emptyUsage(),
-              stopReason: "stop",
               timestamp: row.createdAt.getTime(),
             },
           ];
@@ -549,13 +539,8 @@ async function loadPriorMessages(context: AgentRunContext): Promise<Message[]> {
     .map((row): Message => {
       if (row.direction === "outbound") {
         return {
-          role: "assistant",
-          api: "anthropic-messages",
-          provider: "anthropic",
-          model: "unknown",
+          ...assistantStub(),
           content: [{ type: "text", text: row.body }],
-          usage: emptyUsage(),
-          stopReason: "stop",
           timestamp: row.createdAt.getTime(),
         };
       }

@@ -40,8 +40,8 @@ export async function buildAgentConfigSnapshot(
   return AgentConfigSnapshot.parse({
     schemaVersion: 1,
     systemPrompt: agent.systemPrompt,
-    model: agent.model,
-    provider: { name: "anthropic" },
+    modelProvider: agent.modelProvider,
+    modelId: agent.modelId,
     managedTools,
     platformTools,
     thirdPartyMcp: agent.thirdPartyMcp.map((m) => ({
@@ -163,7 +163,8 @@ export async function loadVersionedAgent(
   return {
     ...agent,
     systemPrompt: snapshot.systemPrompt,
-    model: snapshot.model,
+    modelProvider: snapshot.modelProvider,
+    modelId: snapshot.modelId,
     toolBindings,
     skillBindings,
     thirdPartyMcp,

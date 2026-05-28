@@ -155,7 +155,9 @@ export default function AgentDetailPage() {
               </Row>
             ) : null}
             <Row label="Model">
-              <code className="font-mono text-xs">{a.model}</code>
+              <code className="font-mono text-xs">
+                {a.modelProvider}/{a.modelId}
+              </code>
             </Row>
             {reachableEmail ? (
               <Row label="Email address">

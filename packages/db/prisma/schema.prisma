@@ -160,10 +160,10 @@ model Agent {
   /// Optional agent system prompt mirrored locally for the editor; the
   /// canonical version lives on the Anthropic agent.
   systemPrompt String  @default("")
-  /// Anthropic model identifier the published agent should run on
-  /// (e.g. `claude-opus-4-7`, `claude-sonnet-4-6`). Plain string so we can
-  /// add new models without a schema migration.
-  model        String  @default("claude-opus-4-7")
+  /// Pi-ai provider id (e.g. `anthropic`, `openai`, `openrouter`).
+  modelProvider String @default("anthropic")
+  /// Model id within the provider catalog (e.g. `claude-opus-4-7`, `gpt-4o-mini`).
+  modelId       String @default("claude-opus-4-7")
 
   /// IDs returned by Anthropic. Nullable while the create call is in flight.
   anthropicAgentId      String?
