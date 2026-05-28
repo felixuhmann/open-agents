@@ -10,6 +10,7 @@ import {
   type AgentSession,
   type AgentStreamEvent,
   type CreateSessionInput,
+  type RunObservabilityContext,
   type SessionResource,
   type UploadFileInput,
 } from "./types.js";
@@ -75,7 +76,11 @@ export class AnthropicAgentBackend implements AgentBackend {
     }
   }
 
-  mountSessionResources(_sessionId: string, resources: SessionResource[]): Promise<void> {
+  mountSessionResources(
+    _sessionId: string,
+    resources: SessionResource[],
+    _observability?: RunObservabilityContext,
+  ): Promise<void> {
     if (resources.length > 0) {
       return Promise.reject(
         new AgentBackendError(

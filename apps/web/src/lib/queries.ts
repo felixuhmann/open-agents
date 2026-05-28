@@ -490,10 +490,27 @@ export type IssueDetailRunSkill = {
   error?: string;
 };
 
+export type IssueDetailSandbox = {
+  id: string;
+  provider: string;
+  providerSandboxId: string;
+  sessionId: string;
+  state: string;
+  workspaceDir: string | null;
+  lifecyclePolicy: unknown;
+  lastActivityAt: string;
+  lastSyncedAt: string | null;
+  errorReason: string | null;
+  recoverable: boolean | null;
+};
+
 export type IssueDetailRun = {
   id: string;
   surface: IssueSurface;
   sessionId: string | null;
+  runtimeBackend: string | null;
+  providerSandboxId: string | null;
+  workspaceDir: string | null;
   agentVersionId: string | null;
   versionNumber: number | null;
   versionPayload: unknown;
@@ -589,6 +606,7 @@ export type IssueDetail = {
     label: string;
     userEmail: string | null;
     backendSessionIds: string[];
+    sandboxes: IssueDetailSandbox[];
   };
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];

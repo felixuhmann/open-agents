@@ -13,7 +13,11 @@ export interface AgentBackend {
    * Upload session resources into an existing backend session. Anthropic only
    * mounts at creation time; Daytona can add files to a resumed sandbox.
    */
-  mountSessionResources(sessionId: string, resources: SessionResource[]): Promise<void>;
+  mountSessionResources(
+    sessionId: string,
+    resources: SessionResource[],
+    observability?: RunObservabilityContext,
+  ): Promise<void>;
   streamUntilIdle(
     sessionId: string,
     userMessage: string,
@@ -27,6 +31,9 @@ export type AgentSession = {
   id: string;
   /** Present when the backend unpacked agent skill bundles into the sandbox. */
   skillsManifest?: SkillMaterializationManifest;
+  /** Daytona provider sandbox id (for run/issue observability). */
+  providerSandboxId?: string;
+  workspaceDir?: string;
 };
 
 export type AgentFile = {
@@ -42,6 +49,11 @@ export type SessionResource = {
   bytes?: Uint8Array;
 };
 
+/** When set, Daytona lifecycle transitions are appended to this run's event log. */
+export type RunObservabilityContext = {
+  runId: string;
+};
+
 export type CreateSessionInput = {
   agentId: string;
   environmentId?: string;
@@ -55,6 +67,7 @@ export type CreateSessionInput = {
   /** Link sandbox metadata to an email thread (Daytona). */
   threadId?: string;
   surface?: "chat" | "email";
+  observability?: RunObservabilityContext;
 };
 
 export type UploadFileInput = {
@@ -108,6 +121,8 @@ export type AgentStreamEvent =
       kind: "model_request";
       rawType: string;
       model?: string | null;
+      provider?: string;
+      stopReason?: string;
       isError?: boolean;
       usage: {
         inputTokens: number;

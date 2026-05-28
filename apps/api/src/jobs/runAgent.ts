@@ -7,6 +7,10 @@ import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
+import {
+  redactToolArgs,
+  summarizeToolResultForRunLog,
+} from "../services/runObservability.js";
 import { uploadPendingChatAttachments } from "../services/chatAttachments.js";
 import { uploadPendingAttachments } from "../services/attachments.js";
 import {
@@ -122,6 +126,7 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
     resources,
     hasNewAttachments,
     run.agentVersionId ?? undefined,
+    runId,
   );
   await prisma.agentRun.update({
     where: { id: runId },
@@ -205,6 +210,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     resources,
     hasNewAttachments,
     run.agentVersionId ?? undefined,
+    runId,
   );
   await prisma.agentRun.update({
     where: { id: runId },
@@ -255,7 +261,16 @@ async function appendRunStarted(runId: string, resolved: ResolvedSession): Promi
   await appendEvent({
     runId,
     type: "run.started",
-    payload: { type: "run.started", runId, sessionId: resolved.sessionId },
+    payload: {
+      type: "run.started",
+      runId,
+      sessionId: resolved.sessionId,
+      backend: resolved.providerSandboxId ? "daytona" : "anthropic",
+      ...(resolved.providerSandboxId
+        ? { providerSandboxId: resolved.providerSandboxId }
+        : {}),
+      ...(resolved.workspaceDir ? { workspaceDir: resolved.workspaceDir } : {}),
+    },
   });
   if (resolved.skillsManifest?.entries.length) {
     await appendEvent({
@@ -294,13 +309,21 @@ async function streamRunWithEvents(
         void appendEvent({
           runId,
           type: "agent.delta",
-          payload: { type: "agent.delta", text: event.text },
+          payload: {
+            type: "agent.delta",
+            text: event.text,
+            rawType: event.rawType,
+          },
         }).catch(() => undefined);
       } else if (event.kind === "message") {
         void appendEvent({
           runId,
           type: "agent.message",
-          payload: { type: "agent.message", text: event.text },
+          payload: {
+            type: "agent.message",
+            text: event.text,
+            rawType: event.rawType,
+          },
         }).catch(() => undefined);
       } else if (event.kind === "tool_use") {
         void appendEvent({
@@ -309,8 +332,9 @@ async function streamRunWithEvents(
           payload: {
             type: "tool.use",
             toolName: event.toolName,
+            rawType: event.rawType,
             ...(event.callId ? { callId: event.callId } : {}),
-            ...(event.args !== undefined ? { args: event.args } : {}),
+            ...(event.args !== undefined ? { args: redactToolArgs(event.args) } : {}),
           },
         }).catch(() => undefined);
       } else if (event.kind === "tool_output") {
@@ -322,6 +346,7 @@ async function streamRunWithEvents(
             toolName: event.toolName,
             stream: event.stream,
             text: event.text,
+            rawType: event.rawType,
             ...(event.callId ? { callId: event.callId } : {}),
           },
         }).catch(() => undefined);
@@ -332,8 +357,11 @@ async function streamRunWithEvents(
           payload: {
             type: "tool.result",
             toolName: event.toolName,
+            rawType: event.rawType,
             ...(event.callId ? { callId: event.callId } : {}),
-            ...(event.result !== undefined ? { result: event.result } : {}),
+            ...(event.result !== undefined
+              ? { result: summarizeToolResultForRunLog(event.result) }
+              : {}),
             ...(event.isError !== undefined ? { isError: event.isError } : {}),
           },
         }).catch(() => undefined);
@@ -344,7 +372,10 @@ async function streamRunWithEvents(
           payload: {
             type: "model.request",
             model: event.model,
+            provider: event.provider,
+            stopReason: event.stopReason,
             isError: event.isError,
+            rawType: event.rawType,
             usage: event.usage,
           },
         }).catch(() => undefined);
@@ -352,7 +383,11 @@ async function streamRunWithEvents(
         void appendEvent({
           runId,
           type: "session.error",
-          payload: { type: "session.error", message: event.message },
+          payload: {
+            type: "session.error",
+            message: event.message,
+            rawType: event.rawType,
+          },
         }).catch(() => undefined);
       }
     },

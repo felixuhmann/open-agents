@@ -277,6 +277,46 @@ export default function AgentChatPage() {
             ];
           });
         } else if (
+          data.type === "tool.result" &&
+          typeof data.payload.toolName === "string"
+        ) {
+          const callId =
+            typeof data.payload.callId === "string"
+              ? data.payload.callId
+              : `seq-${data.seq}`;
+          const toolName = data.payload.toolName;
+          const resultText =
+            typeof data.payload.result === "string"
+              ? data.payload.result
+              : data.payload.result !== undefined
+                ? JSON.stringify(data.payload.result, null, 2)
+                : data.payload.isError
+                  ? "[tool error]"
+                  : "";
+          if (resultText) {
+            setToolCalls((prev) => {
+              const idx = prev.findIndex((tc) => tc.callId === callId);
+              if (idx < 0) {
+                return [
+                  ...prev,
+                  {
+                    callId,
+                    toolName,
+                    output: resultText.endsWith("\n") ? resultText : `${resultText}\n`,
+                  },
+                ];
+              }
+              const next = [...prev];
+              const row = next[idx];
+              if (!row) return prev;
+              next[idx] = {
+                ...row,
+                output: resultText.endsWith("\n") ? resultText : `${resultText}\n`,
+              };
+              return next;
+            });
+          }
+        } else if (
           data.type === "tool.output" &&
           typeof data.payload.toolName === "string" &&
           typeof data.payload.text === "string"

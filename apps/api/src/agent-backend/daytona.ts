@@ -17,11 +17,17 @@ import {
   type TSchema,
 } from "@earendil-works/pi-ai";
 import { Daytona, type Sandbox } from "@daytona/sdk";
+import type { SandboxResourceMounted } from "@open-agents/types";
 import {
   buildDaytonaSessionId,
   ensureDaytonaSandboxReady,
   parseDaytonaSessionId,
 } from "../services/daytonaSandbox.js";
+import {
+  emitSandboxRunEvent,
+  sandboxContextFromSession,
+  summarizeToolResultForRunLog,
+} from "../services/runObservability.js";
 import { DEFAULT_DAYTONA_LIFECYCLE } from "../services/sandboxLifecyclePolicy.js";
 import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
 import { wrapDaytonaError } from "./daytonaErrors.js";
@@ -60,33 +66,10 @@ import {
   type AgentRunContext,
   type AgentSession,
   type CreateSessionInput,
+  type RunObservabilityContext,
   type SessionResource,
   type UploadFileInput,
 } from "./types.js";
-
-function summarizeToolResult(result: unknown): unknown {
-  if (result === null || result === undefined) return result;
-  if (typeof result === "string") return truncate(result);
-  if (typeof result === "object" && result !== null && "content" in result) {
-    const content = (result as { content?: unknown }).content;
-    if (Array.isArray(content)) {
-      const text = content
-        .filter(
-          (b): b is { type?: string; text?: string } =>
-            typeof b === "object" && b !== null,
-        )
-        .filter((b) => b.type === "text" && typeof b.text === "string")
-        .map((b) => b.text)
-        .join("\n");
-      if (text) return truncate(text);
-    }
-  }
-  try {
-    return truncate(JSON.stringify(result, null, 2));
-  } catch {
-    return "[unserializable tool result]";
-  }
-}
 
 function truncate(text: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
   return truncateText(text, maxChars).text;
@@ -165,7 +148,14 @@ export class DaytonaAgentBackend implements AgentBackend {
       );
 
       const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
-      await this.materializeResources(sandbox, input.resources ?? [], workspaceDir);
+      const sessionId = buildDaytonaSessionId(input.agentId, sandbox.id);
+
+      await this.materializeResources(
+        sandbox,
+        input.resources ?? [],
+        workspaceDir,
+        input.observability ? { runId: input.observability.runId, sessionId } : undefined,
+      );
 
       let skillsManifest;
       const agent = await getAgentById(input.agentId);
@@ -181,7 +171,6 @@ export class DaytonaAgentBackend implements AgentBackend {
         );
       }
 
-      const sessionId = buildDaytonaSessionId(input.agentId, sandbox.id);
       await registerAgentSandbox({
         agentId: input.agentId,
         providerSandboxId: sandbox.id,
@@ -191,6 +180,18 @@ export class DaytonaAgentBackend implements AgentBackend {
         threadId: input.threadId,
         state: sandbox.state ?? "started",
       });
+
+      if (input.observability) {
+        const ctx = sandboxContextFromSession(
+          sessionId,
+          workspaceDir,
+          sandbox.state ?? "started",
+        );
+        await emitSandboxRunEvent(input.observability.runId, "sandbox.created", {
+          type: "sandbox.created",
+          ...ctx,
+        });
+      }
 
       log.info("daytona: session created", {
         agentId: input.agentId,
@@ -203,6 +204,8 @@ export class DaytonaAgentBackend implements AgentBackend {
       return {
         id: sessionId,
         skillsManifest,
+        providerSandboxId: sandbox.id,
+        workspaceDir,
       };
     } catch (err) {
       throw wrapDaytonaError(err, "Failed to create Daytona sandbox session");
@@ -212,13 +215,22 @@ export class DaytonaAgentBackend implements AgentBackend {
   async mountSessionResources(
     sessionId: string,
     resources: SessionResource[],
+    observability?: RunObservabilityContext,
   ): Promise<void> {
     if (!resources.length) return;
     try {
-      await this.withSandbox(sessionId, async (sandbox) => {
-        const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
-        await this.materializeResources(sandbox, resources, workspaceDir);
-      });
+      await this.withSandbox(
+        sessionId,
+        async (sandbox, workspaceDir) => {
+          await this.materializeResources(
+            sandbox,
+            resources,
+            workspaceDir,
+            observability ? { runId: observability.runId, sessionId } : undefined,
+          );
+        },
+        observability?.runId,
+      );
       log.info("daytona: mounted session resources", {
         sessionId,
         resourceCount: resources.length,
@@ -244,75 +256,83 @@ export class DaytonaAgentBackend implements AgentBackend {
         ? await loadVersionedAgent(baseAgent, context.agentVersionId)
         : baseAgent;
 
-      return await this.withSandbox(sessionId, async (sandbox) => {
-        const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
-        const priorMessages = context
-          ? await loadPriorMessages(context)
-          : ([] satisfies Message[]);
-        const thirdPartyBearer = loadThirdPartyBearerMap(agent.thirdPartyMcp);
-        const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
-          agent,
-          thirdPartyBearer,
-        );
-        const tools = [...buildTools(agent, sandbox, workspaceDir, onEvent), ...mcpTools];
-        const model = normalizeModelId(agent.model);
-        const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
-        let finalText = "";
-        let deltaText = "";
-
-        try {
-          const runtimePrompt = buildRuntimePrompt(
+      return await this.withSandbox(
+        sessionId,
+        async (sandbox, workspaceDir) => {
+          const priorMessages = context
+            ? await loadPriorMessages(context)
+            : ([] satisfies Message[]);
+          const thirdPartyBearer = loadThirdPartyBearerMap(agent.thirdPartyMcp);
+          const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
             agent,
-            Boolean(tools.length),
-            session.sandboxId,
-            workspaceDir,
+            thirdPartyBearer,
           );
-          const piAgent = new Agent({
-            initialState: {
-              systemPrompt: runtimePrompt,
-              model,
-              thinkingLevel: "high",
-              messages: priorMessages,
-              tools,
-            },
-            sessionId,
-            toolExecution: "sequential",
-            getApiKey: (provider) => {
-              if (provider === "anthropic") return anthropicApiKey ?? undefined;
-              return undefined;
-            },
-          });
+          const tools = [
+            ...buildTools(agent, sandbox, workspaceDir, onEvent),
+            ...mcpTools,
+          ];
+          const model = normalizeModelId(agent.model);
+          const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
+          let finalText = "";
+          let deltaText = "";
 
-          piAgent.subscribe((event) => {
-            this.handlePiEvent(event, onEvent, (text) => {
-              deltaText += text;
+          try {
+            const runtimePrompt = buildRuntimePrompt(
+              agent,
+              Boolean(tools.length),
+              session.sandboxId,
+              workspaceDir,
+            );
+            const piAgent = new Agent({
+              initialState: {
+                systemPrompt: runtimePrompt,
+                model,
+                thinkingLevel: "high",
+                messages: priorMessages,
+                tools,
+              },
+              sessionId,
+              toolExecution: "sequential",
+              getApiKey: (provider) => {
+                if (provider === "anthropic") return anthropicApiKey ?? undefined;
+                return undefined;
+              },
             });
-            if (event.type === "message_end" && isAssistantMessage(event.message)) {
-              finalText = readTextBlocks(event.message);
-            }
-            if (event.type === "turn_end" && isAssistantMessage(event.message)) {
-              const usage = event.message.usage;
-              onEvent?.({
-                kind: "model_request",
-                rawType: "pi.turn_end",
-                model: event.message.model,
-                isError: event.message.stopReason === "error",
-                usage: {
-                  inputTokens: usage.input,
-                  outputTokens: usage.output,
-                  cacheCreationInputTokens: usage.cacheWrite,
-                  cacheReadInputTokens: usage.cacheRead,
-                },
-              });
-            }
-          });
 
-          await piAgent.prompt(userMessage);
-          return finalText || deltaText;
-        } finally {
-          await closeThirdPartyMcpConnections(mcpConnections);
-        }
-      });
+            piAgent.subscribe((event) => {
+              this.handlePiEvent(event, onEvent, (text) => {
+                deltaText += text;
+              });
+              if (event.type === "message_end" && isAssistantMessage(event.message)) {
+                finalText = readTextBlocks(event.message);
+              }
+              if (event.type === "turn_end" && isAssistantMessage(event.message)) {
+                const usage = event.message.usage;
+                onEvent?.({
+                  kind: "model_request",
+                  rawType: "pi.turn_end",
+                  model: event.message.model,
+                  provider: "anthropic",
+                  stopReason: event.message.stopReason,
+                  isError: event.message.stopReason === "error",
+                  usage: {
+                    inputTokens: usage.input,
+                    outputTokens: usage.output,
+                    cacheCreationInputTokens: usage.cacheWrite,
+                    cacheReadInputTokens: usage.cacheRead,
+                  },
+                });
+              }
+            });
+
+            await piAgent.prompt(userMessage);
+            return finalText || deltaText;
+          } finally {
+            await closeThirdPartyMcpConnections(mcpConnections);
+          }
+        },
+        context?.runId,
+      );
     } catch (err) {
       const wrapped = wrapDaytonaError(err, "Daytona sandbox run failed");
       onEvent?.({
@@ -332,27 +352,74 @@ export class DaytonaAgentBackend implements AgentBackend {
 
   private async withSandbox<T>(
     sessionId: string,
-    fn: (sandbox: Sandbox) => Promise<T>,
+    fn: (sandbox: Sandbox, workspaceDir: string) => Promise<T>,
+    observabilityRunId?: string,
   ): Promise<T> {
     const session = parseDaytonaSessionId(sessionId);
     const daytona = new Daytona({ apiKey: this.apiKey });
     const sandbox = await daytona.get(session.sandboxId);
-    const ready = await ensureDaytonaSandboxReady(sandbox);
+    const {
+      sandbox: ready,
+      previousState,
+      transitions,
+    } = await ensureDaytonaSandboxReady(sandbox);
+    const workspaceDir = await resolveSandboxWorkspaceDir(ready);
+    if (observabilityRunId) {
+      const ctx = sandboxContextFromSession(
+        sessionId,
+        workspaceDir,
+        ready.state ?? "started",
+        previousState,
+      );
+      for (const transition of transitions) {
+        if (transition === "recover") {
+          await emitSandboxRunEvent(observabilityRunId, "sandbox.recovered", {
+            type: "sandbox.recovered",
+            ...ctx,
+          });
+        }
+        if (transition === "start") {
+          await emitSandboxRunEvent(observabilityRunId, "sandbox.started", {
+            type: "sandbox.started",
+            ...ctx,
+          });
+        }
+      }
+    }
     await touchSandboxActivity(sessionId);
-    return fn(ready);
+    return fn(ready, workspaceDir);
   }
 
   private async materializeResources(
     sandbox: Sandbox,
     resources: SessionResource[],
     workspaceDir: string,
+    observability?: { runId: string; sessionId: string },
   ): Promise<void> {
+    const mounted: SandboxResourceMounted[] = [];
     for (const resource of resources) {
       if (!resource.bytes) continue;
       const remotePath = remapWorkspacePath(resource.mountPath, workspaceDir);
       const remoteDir = path.dirname(remotePath);
       await ensureSandboxDir(sandbox.fs, remoteDir);
       await sandbox.fs.uploadFile(toBuffer(resource.bytes), remotePath);
+      mounted.push({
+        ...(resource.fileId ? { fileId: resource.fileId } : {}),
+        ...(resource.filename ? { filename: resource.filename } : {}),
+        mountPath: remotePath,
+        sizeBytes: resource.bytes.byteLength,
+      });
+    }
+    if (observability && mounted.length > 0) {
+      await emitSandboxRunEvent(observability.runId, "sandbox.resource_mounted", {
+        type: "sandbox.resource_mounted",
+        ...sandboxContextFromSession(
+          observability.sessionId,
+          workspaceDir,
+          sandbox.state ?? "started",
+        ),
+        resources: mounted,
+      });
     }
   }
 
@@ -395,7 +462,7 @@ export class DaytonaAgentBackend implements AgentBackend {
         kind: "tool_result",
         toolName: event.toolName,
         callId: event.toolCallId,
-        result: summarizeToolResult(event.result),
+        result: summarizeToolResultForRunLog(event.result),
         isError: event.isError,
         rawType: "pi.tool_execution_end",
       });

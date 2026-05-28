@@ -151,30 +151,24 @@ Acceptance criteria:
 
 ### Observability and debug parity
 
-Current state:
+**Done (Daytona path):**
 
-- Existing `RunEvent`/SSE infrastructure works and is a strong reusable
-  foundation.
-- MVP emits agent deltas, full messages, tool use/results, and model
-  request usage.
+- Sandbox lifecycle `RunEvent`s: `sandbox.created`, `sandbox.started`,
+  `sandbox.recovered`, `sandbox.resource_mounted` (plus existing
+  `skills.materialized`). Admin stop/archive/delete remain on
+  `AgentSandbox` rows (not run-scoped).
+- Redacted `tool.use` args and summarized `tool.result` payloads;
+  `rawType` / `stopReason` / `provider` on model and tool events.
+- Issue bundles join `AgentSandbox` metadata and per-run
+  `providerSandboxId` / `workspaceDir` / `runtimeBackend`.
+- Analytics groups by provider; spend only when a model price is known.
+- Live chat renders final `tool.result` text alongside streamed output.
 
-What is needed:
+**Follow-ups:**
 
-- Add sandbox lifecycle events: create, start, stop, archive, recover,
-  delete, upload attachment, materialize skills.
-- Capture tool args and structured result summaries where safe.
-- Stream stdout/stderr separately for command tools.
-- Add Daytona sandbox IDs and runtime metadata to issue/debug bundles.
-- Preserve enough provider payload/response metadata to diagnose model
-  failures without leaking secrets.
-- Make analytics provider-neutral.
-
-Acceptance criteria:
-
-- Debugging a failed Daytona run is at least as easy as debugging the old
-  Anthropic run.
-- Issue bundles include the full chain: user message -> runtime config ->
-  sandbox -> tools -> model requests -> final output/error.
+- Run-scoped events for operator-initiated sandbox stop/archive/delete.
+- Broader `tool.output` streaming for non-shell tools (e.g. `web_fetch`).
+- Optional dedicated audit log table for sandbox admin actions.
 
 ### Sandbox security and policy
 

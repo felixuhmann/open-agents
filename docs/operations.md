@@ -90,17 +90,23 @@ SELECT seq, type, payload->>'toolName' AS tool_name, "createdAt"
 
 Event types worth knowing:
 
-| Type                  | Payload shape                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| `run.started`         | `{ runId, sessionId }`                                                                  |
-| `skills.materialized` | `{ skills: SkillMaterializationEntry[] }` — Daytona only, when a new sandbox is created |
-| `agent.message`       | `{ text }` — running aggregated assistant text                                          |
-| `agent.delta`         | `{ delta }` — char-by-char delta (optional)                                             |
-| `tool.use`            | `{ toolName, args }`                                                                    |
-| `tool.result`         | `{ toolName, result, isError? }`                                                        |
-| `session.error`       | `{ message }` — non-fatal session warning                                               |
-| `run.succeeded`       | `{}`                                                                                    |
-| `run.failed`          | `{ error }`                                                                             |
+| Type                        | Payload shape                                                                                      |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| `run.started`               | `{ runId, sessionId, backend?, providerSandboxId?, workspaceDir? }`                                |
+| `sandbox.created`           | Daytona context + provider sandbox id (new sandbox for this run)                                   |
+| `sandbox.started`           | Daytona context when a stopped/archived VM is started mid-run                                      |
+| `sandbox.recovered`         | Daytona context after `recover` from error state                                                   |
+| `sandbox.resource_mounted`  | `{ resources: [{ mountPath, filename?, sizeBytes? }] }` — chat/email attachments                 |
+| `skills.materialized`       | `{ skills: SkillMaterializationEntry[] }` — skill bundles unpacked at sandbox creation             |
+| `agent.message`             | `{ text, rawType? }`                                                                               |
+| `agent.delta`               | `{ text, rawType? }`                                                                               |
+| `tool.use`                  | `{ toolName, callId?, args? }` — args redacted (secrets, upload URLs)                             |
+| `tool.output`               | `{ toolName, stream: stdout\|stderr, text }` — live command output                                 |
+| `tool.result`               | `{ toolName, result?, isError?, rawType? }` — truncated summary                                  |
+| `model.request`             | `{ model?, provider?, stopReason?, usage, isError?, rawType? }`                                    |
+| `session.error`             | `{ message, rawType? }`                                                                            |
+| `run.succeeded`             | `{ output }`                                                                                       |
+| `run.failed`                | `{ error }`                                                                                        |
 
 Terminal events (`run.succeeded` / `run.failed`) close the SSE stream.
 

@@ -1,5 +1,6 @@
-import type { SkillMaterializationEntry } from "@open-agents/types";
+import { AgentConfigSnapshot, type SkillMaterializationEntry } from "@open-agents/types";
 import { prisma } from "../db.js";
+import { parseDaytonaSessionId } from "./daytonaSandbox.js";
 import { HttpError } from "../auth/middleware.js";
 import { log } from "../log.js";
 
@@ -177,11 +178,29 @@ export type IssueDetailRunEvent = {
   payload: unknown;
 };
 
+export type IssueDetailSandbox = {
+  id: string;
+  provider: string;
+  providerSandboxId: string;
+  sessionId: string;
+  state: string;
+  workspaceDir: string | null;
+  lifecyclePolicy: unknown;
+  lastActivityAt: string;
+  lastSyncedAt: string | null;
+  errorReason: string | null;
+  recoverable: boolean | null;
+};
+
 export type IssueDetailRun = {
   id: string;
   surface: "chat" | "email";
   /// Backend session id this run executed against.
   sessionId: string | null;
+  /// Runtime backend from pinned version snapshot (`daytona` | `anthropic`).
+  runtimeBackend: string | null;
+  providerSandboxId: string | null;
+  workspaceDir: string | null;
   /// Frozen config version pinned at enqueue time.
   agentVersionId: string | null;
   versionNumber: number | null;
@@ -286,6 +305,8 @@ export type IssueDetail = {
     userEmail: string | null;
     /// Distinct backend session ids observed across runs on this session.
     backendSessionIds: string[];
+    /// Daytona sandboxes linked to this conversation/thread or session ids.
+    sandboxes: IssueDetailSandbox[];
   };
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];
@@ -395,6 +416,34 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     }
   }
 
+  const sandboxOr: Array<
+    { conversationId: string } | { threadId: string } | { sessionId: { in: string[] } }
+  > = [
+    ...(issue.conversationId ? [{ conversationId: issue.conversationId }] : []),
+    ...(issue.threadId ? [{ threadId: issue.threadId }] : []),
+    ...(sessionIds.length > 0 ? [{ sessionId: { in: sessionIds } }] : []),
+  ];
+  const sandboxRows =
+    sandboxOr.length > 0
+      ? await prisma.agentSandbox.findMany({
+          where: { OR: sandboxOr },
+          orderBy: { lastActivityAt: "desc" },
+        })
+      : [];
+  const sandboxes: IssueDetailSandbox[] = sandboxRows.map((row) => ({
+    id: row.id,
+    provider: row.provider,
+    providerSandboxId: row.providerSandboxId,
+    sessionId: row.sessionId,
+    state: row.state,
+    workspaceDir: extractWorkspaceDirFromRuns(runs, row.sessionId),
+    lifecyclePolicy: row.lifecyclePolicy,
+    lastActivityAt: row.lastActivityAt.toISOString(),
+    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
+    errorReason: row.errorReason,
+    recoverable: row.recoverable,
+  }));
+
   const agent: IssueDetailAgent = {
     id: issue.agent.id,
     slug: issue.agent.slug,
@@ -454,6 +503,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
       label: sessionLabel,
       userEmail,
       backendSessionIds: sessionIds,
+      sandboxes,
     },
     messages,
     runs,
@@ -490,6 +540,58 @@ function skillsFromRunEvents(events: RunWithEvents["events"]): IssueDetailRunSki
   return materialized.payload.skills;
 }
 
+function runtimeBackendFromVersion(payload: unknown): string | null {
+  if (!payload) return null;
+  try {
+    return AgentConfigSnapshot.parse(payload).runtime.backend;
+  } catch {
+    return null;
+  }
+}
+
+function sandboxMetaFromRunEvents(events: RunWithEvents["events"]): {
+  providerSandboxId: string | null;
+  workspaceDir: string | null;
+} {
+  const started = events.find((e) => e.type === "run.started");
+  if (started?.payload && typeof started.payload === "object") {
+    const p = started.payload as Record<string, unknown>;
+    const providerSandboxId =
+      typeof p.providerSandboxId === "string" ? p.providerSandboxId : null;
+    const workspaceDir = typeof p.workspaceDir === "string" ? p.workspaceDir : null;
+    if (providerSandboxId || workspaceDir) {
+      return { providerSandboxId, workspaceDir };
+    }
+  }
+  const created = events.find((e) => e.type === "sandbox.created");
+  if (created?.payload && typeof created.payload === "object") {
+    const p = created.payload as Record<string, unknown>;
+    return {
+      providerSandboxId:
+        typeof p.providerSandboxId === "string" ? p.providerSandboxId : null,
+      workspaceDir: typeof p.workspaceDir === "string" ? p.workspaceDir : null,
+    };
+  }
+  return { providerSandboxId: null, workspaceDir: null };
+}
+
+function extractWorkspaceDirFromRuns(
+  runs: IssueDetailRun[],
+  sessionId: string,
+): string | null {
+  const run = runs.find((r) => r.sessionId === sessionId);
+  return run?.workspaceDir ?? null;
+}
+
+function providerSandboxIdFromSessionId(sessionId: string | null): string | null {
+  if (!sessionId?.startsWith("daytona:")) return null;
+  try {
+    return parseDaytonaSessionId(sessionId).sandboxId;
+  } catch {
+    return null;
+  }
+}
+
 function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
   const events = r.events.map((e) => ({
     seq: e.seq,
@@ -497,10 +599,17 @@ function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
     createdAt: e.createdAt.toISOString(),
     payload: e.payload,
   }));
+  const sessionId = r.sessionId === "" ? null : r.sessionId;
+  const sandboxMeta = sandboxMetaFromRunEvents(r.events);
+  const providerSandboxId =
+    sandboxMeta.providerSandboxId ?? providerSandboxIdFromSessionId(sessionId);
   return {
     id: r.id,
     surface: r.surface as "chat" | "email",
-    sessionId: r.sessionId === "" ? null : r.sessionId,
+    sessionId,
+    runtimeBackend: runtimeBackendFromVersion(r.agentVersion?.payload),
+    providerSandboxId,
+    workspaceDir: sandboxMeta.workspaceDir,
     agentVersionId: r.agentVersionId,
     versionNumber: r.agentVersion?.versionNumber ?? null,
     versionPayload: r.agentVersion?.payload ?? null,

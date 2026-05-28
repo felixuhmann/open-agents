@@ -9,6 +9,10 @@ import { touchSandboxActivity } from "./sandboxes.js";
 export type ResolvedSession = {
   sessionId: string;
   skillsManifest?: SkillMaterializationManifest;
+  /** Set when a new Daytona sandbox was created for this run. */
+  sandboxCreated?: boolean;
+  providerSandboxId?: string;
+  workspaceDir?: string;
 };
 
 export type EmailThreadSessionInput = {
@@ -42,6 +46,7 @@ export async function resolveEmailSessionId(
   resources: SessionResource[],
   forceNewSession: boolean,
   agentVersionId?: string,
+  observabilityRunId?: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
   const forceNew = effectiveForceNewSession(backend.runtime, forceNewSession);
@@ -53,12 +58,16 @@ export async function resolveEmailSessionId(
       mountResources: resources.length,
     });
     if (resources.length > 0) {
-      await backend.mountSessionResources(thread.sessionId, resources);
+      await backend.mountSessionResources(
+        thread.sessionId,
+        resources,
+        observabilityRunId ? { runId: observabilityRunId } : undefined,
+      );
     }
     if (backend.runtime === "daytona") {
       await touchSandboxActivity(thread.sessionId);
     }
-    return { sessionId: thread.sessionId };
+    return { sessionId: thread.sessionId, sandboxCreated: false };
   }
 
   if (!agent.currentVersionId) {
@@ -92,6 +101,7 @@ export async function resolveEmailSessionId(
           agentVersionId: agentVersionId ?? agent.currentVersionId,
           threadId: thread.id,
           surface: "email",
+          observability: observabilityRunId ? { runId: observabilityRunId } : undefined,
         },
   );
   await prisma.emailThread.update({
@@ -105,7 +115,13 @@ export async function resolveEmailSessionId(
     forceNewSession: forceNew,
     skillsMaterialized: session.skillsManifest?.materialized ?? 0,
   });
-  return { sessionId: session.id, skillsManifest: session.skillsManifest };
+  return {
+    sessionId: session.id,
+    skillsManifest: session.skillsManifest,
+    sandboxCreated: backend.runtime === "daytona",
+    providerSandboxId: session.providerSandboxId,
+    workspaceDir: session.workspaceDir,
+  };
 }
 
 export type ChatConversationSessionInput = {
@@ -127,6 +143,7 @@ export async function resolveChatSessionId(
   resources: SessionResource[],
   forceNewSession: boolean,
   agentVersionId?: string,
+  observabilityRunId?: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
   const forceNew = effectiveForceNewSession(backend.runtime, forceNewSession);
@@ -138,12 +155,16 @@ export async function resolveChatSessionId(
       mountResources: resources.length,
     });
     if (resources.length > 0) {
-      await backend.mountSessionResources(conversation.anthropicSessionId, resources);
+      await backend.mountSessionResources(
+        conversation.anthropicSessionId,
+        resources,
+        observabilityRunId ? { runId: observabilityRunId } : undefined,
+      );
     }
     if (backend.runtime === "daytona") {
       await touchSandboxActivity(conversation.anthropicSessionId);
     }
-    return { sessionId: conversation.anthropicSessionId };
+    return { sessionId: conversation.anthropicSessionId, sandboxCreated: false };
   }
 
   if (!agent.currentVersionId) {
@@ -177,6 +198,7 @@ export async function resolveChatSessionId(
           agentVersionId: agentVersionId ?? agent.currentVersionId,
           conversationId: conversation.id,
           surface: "chat",
+          observability: observabilityRunId ? { runId: observabilityRunId } : undefined,
         },
   );
   await prisma.chatConversation.update({
@@ -190,5 +212,11 @@ export async function resolveChatSessionId(
     forceNewSession: forceNew,
     skillsMaterialized: session.skillsManifest?.materialized ?? 0,
   });
-  return { sessionId: session.id, skillsManifest: session.skillsManifest };
+  return {
+    sessionId: session.id,
+    skillsManifest: session.skillsManifest,
+    sandboxCreated: backend.runtime === "daytona",
+    providerSandboxId: session.providerSandboxId,
+    workspaceDir: session.workspaceDir,
+  };
 }
