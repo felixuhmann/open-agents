@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import {
   ChartLineIcon,
+  CloudIcon,
   HouseIcon,
   KeyIcon,
   PlugsConnectedIcon,
@@ -89,6 +90,7 @@ const NAV_REVIEW: Array<NavItem> = [
 
 const NAV_SETTINGS: Array<NavItem> = [
   { to: "/settings/secrets", label: "Secrets", icon: KeyIcon },
+  { to: "/settings/sandboxes", label: "Sandboxes", icon: CloudIcon },
   { to: "/settings/users", label: "Users", icon: UsersIcon },
   { to: "/settings/general", label: "General", icon: SlidersIcon },
 ];
@@ -103,6 +105,7 @@ const PATH_LABELS: Record<string, string> = {
   "/issues": "Issues",
   "/settings/profile": "Profile",
   "/settings/secrets": "Secrets",
+  "/settings/sandboxes": "Sandboxes",
   "/settings/users": "Users",
   "/settings/general": "General",
 };

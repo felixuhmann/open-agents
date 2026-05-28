@@ -50,6 +50,11 @@ export type CreateSessionInput = {
   resources?: SessionResource[];
   /** Pinned published version whose skill bindings should be materialized. */
   agentVersionId?: string;
+  /** Link sandbox metadata to a chat conversation (Daytona). */
+  conversationId?: string;
+  /** Link sandbox metadata to an email thread (Daytona). */
+  threadId?: string;
+  surface?: "chat" | "email";
 };
 
 export type UploadFileInput = {
