@@ -1,7 +1,7 @@
 import { PgBoss } from "pg-boss";
 import { config } from "../config.js";
 import { log } from "../log.js";
-import { JOB_RUN_AGENT, JOB_SEND_EMAIL } from "./types.js";
+import { JOB_RUN_AGENT, JOB_SANDBOX_RECONCILE, JOB_SEND_EMAIL } from "./types.js";
 
 let boss: PgBoss | null = null;
 
@@ -17,8 +17,11 @@ export async function getBoss(): Promise<PgBoss> {
   await instance.start();
   await instance.createQueue(JOB_RUN_AGENT);
   await instance.createQueue(JOB_SEND_EMAIL);
+  await instance.createQueue(JOB_SANDBOX_RECONCILE);
   boss = instance;
-  log.info("pg-boss started", { queues: [JOB_RUN_AGENT, JOB_SEND_EMAIL] });
+  log.info("pg-boss started", {
+    queues: [JOB_RUN_AGENT, JOB_SEND_EMAIL, JOB_SANDBOX_RECONCILE],
+  });
   return instance;
 }
 

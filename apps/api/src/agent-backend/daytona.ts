@@ -17,6 +17,13 @@ import {
   type TSchema,
 } from "@earendil-works/pi-ai";
 import { Daytona, type Sandbox } from "@daytona/sdk";
+import {
+  buildDaytonaSessionId,
+  ensureDaytonaSandboxReady,
+  parseDaytonaSessionId,
+} from "../services/daytonaSandbox.js";
+import { DEFAULT_DAYTONA_LIFECYCLE } from "../services/sandboxLifecyclePolicy.js";
+import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
 import { wrapDaytonaError } from "./daytonaErrors.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
@@ -56,25 +63,6 @@ import {
   type SessionResource,
   type UploadFileInput,
 } from "./types.js";
-
-const DAYTONA_SESSION_PREFIX = "daytona";
-
-type DaytonaSessionRef = {
-  agentId: string;
-  sandboxId: string;
-};
-
-function buildDaytonaSessionId(agentId: string, sandboxId: string): string {
-  return `${DAYTONA_SESSION_PREFIX}:${agentId}:${sandboxId}`;
-}
-
-function parseDaytonaSessionId(sessionId: string): DaytonaSessionRef {
-  const [prefix, agentId, sandboxId] = sessionId.split(":");
-  if (prefix !== DAYTONA_SESSION_PREFIX || !agentId || !sandboxId) {
-    throw new AgentBackendError(`Invalid Daytona session id: ${sessionId}`);
-  }
-  return { agentId, sandboxId };
-}
 
 function summarizeToolResult(result: unknown): unknown {
   if (result === null || result === undefined) return result;
@@ -160,13 +148,14 @@ export class DaytonaAgentBackend implements AgentBackend {
   async createSession(input: CreateSessionInput): Promise<AgentSession> {
     try {
       const daytona = new Daytona({ apiKey: this.apiKey });
+      const lifecycle = DEFAULT_DAYTONA_LIFECYCLE;
       const sandbox = await daytona.create(
         {
           name: `oa-${(input.agentSlug ?? input.agentId).replace(/[^a-z0-9-]/gi, "-").slice(0, 32)}-${randomUUID().slice(0, 8)}`,
           language: "typescript",
-          autoStopInterval: 15,
-          autoArchiveInterval: 60 * 24 * 7,
-          autoDeleteInterval: -1,
+          autoStopInterval: lifecycle.autoStopInterval,
+          autoArchiveInterval: lifecycle.autoArchiveInterval,
+          autoDeleteInterval: lifecycle.autoDeleteInterval,
           labels: {
             "open-agents-agent-id": input.agentId,
             "open-agents-agent-slug": input.agentSlug ?? "",
@@ -192,6 +181,17 @@ export class DaytonaAgentBackend implements AgentBackend {
         );
       }
 
+      const sessionId = buildDaytonaSessionId(input.agentId, sandbox.id);
+      await registerAgentSandbox({
+        agentId: input.agentId,
+        providerSandboxId: sandbox.id,
+        lifecyclePolicy: lifecycle,
+        surface: input.surface,
+        conversationId: input.conversationId,
+        threadId: input.threadId,
+        state: sandbox.state ?? "started",
+      });
+
       log.info("daytona: session created", {
         agentId: input.agentId,
         sandboxId: sandbox.id,
@@ -201,7 +201,7 @@ export class DaytonaAgentBackend implements AgentBackend {
         skillsFailed: skillsManifest?.failed ?? 0,
       });
       return {
-        id: buildDaytonaSessionId(input.agentId, sandbox.id),
+        id: sessionId,
         skillsManifest,
       };
     } catch (err) {
@@ -337,11 +337,9 @@ export class DaytonaAgentBackend implements AgentBackend {
     const session = parseDaytonaSessionId(sessionId);
     const daytona = new Daytona({ apiKey: this.apiKey });
     const sandbox = await daytona.get(session.sandboxId);
-    if (sandbox.state !== "started") {
-      await sandbox.start(90);
-    }
-    await sandbox.refreshActivity();
-    return fn(sandbox);
+    const ready = await ensureDaytonaSandboxReady(sandbox);
+    await touchSandboxActivity(sessionId);
+    return fn(ready);
   }
 
   private async materializeResources(

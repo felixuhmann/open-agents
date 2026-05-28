@@ -209,6 +209,7 @@ model Agent {
   emailThreads  EmailThread[]
   runs          AgentRun[]
   issues        Issue[]
+  sandboxes     AgentSandbox[]
 
   @@index([createdById])
 }
@@ -393,6 +394,45 @@ model MemoryDoc {
 }
 
 // ---------------------------------------------------------------------------
+// Provider sandbox lifecycle (Daytona, etc.). Session ids on conversations
+// and threads still point at `sessionId`; this table is the source of truth
+// for sandbox metadata, state, and operator controls.
+// ---------------------------------------------------------------------------
+
+model AgentSandbox {
+  id                String    @id @default(cuid())
+  /// Provider identifier, e.g. `daytona`.
+  provider          String
+  /// Sandbox id in the provider control plane.
+  providerSandboxId String
+  /// Backend session id (`daytona:{agentId}:{providerSandboxId}`).
+  sessionId         String    @unique
+  /// Mirror of provider state (`started`, `stopped`, `archived`, `error`, …).
+  state             String    @default("unknown")
+  agentId           String
+  /// `chat` | `email` when bound to a surface.
+  surface           String?
+  conversationId    String?   @unique
+  threadId          String?   @unique
+  /// Lifecycle policy at creation: autoStop/Archive/Delete intervals (minutes).
+  lifecyclePolicy   Json
+  lastActivityAt    DateTime  @default(now())
+  lastSyncedAt      DateTime?
+  errorReason       String?
+  recoverable       Boolean?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  agent        Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  conversation ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  thread       EmailThread?      @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerSandboxId])
+  @@index([agentId])
+  @@index([state, lastActivityAt])
+}
+
+// ---------------------------------------------------------------------------
 // Web chat persistence (separate from email).
 // ---------------------------------------------------------------------------
 
@@ -410,6 +450,7 @@ model ChatConversation {
   messages           ChatMessage[]
   runs               AgentRun[]
   issues             Issue[]
+  sandbox            AgentSandbox?
 
   @@index([agentId])
   @@index([userId])
@@ -538,6 +579,7 @@ model EmailThread {
   messages       EmailMessage[]
   runs           AgentRun[]
   issues         Issue[]
+  sandbox        AgentSandbox?
 
   @@index([agentId])
   @@index([userEmail])

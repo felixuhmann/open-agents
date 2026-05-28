@@ -295,6 +295,14 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   MCP servers are wired into the Pi loop via
   [`apps/api/src/mcp/piTools.ts`](apps/api/src/mcp/piTools.ts) (host-side).
   The `/mcp/<slug>` HTTP route is for Anthropic Managed Agents only.
+- **Daytona sandbox lifecycle**: First-class metadata lives in the
+  `AgentSandbox` table (`provider`, `providerSandboxId`, `state`,
+  `lastActivityAt`, lifecycle policy JSON, links to agent + conversation/thread).
+  Session ids on conversations/threads remain `daytona:{agentId}:{sandboxId}`.
+  Admins manage sandboxes at `/settings/sandboxes` (`GET/POST /api/sandboxes/*`).
+  A pg-boss `sandbox-reconcile` job (every 6h) syncs provider state, stops stale
+  VMs, and clears pointers when sandboxes are gone. New chat attachments mount into
+  the existing sandbox via `mountSessionResources` (no forced session rotation).
 
 ## Local development
 

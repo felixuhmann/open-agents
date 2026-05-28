@@ -601,3 +601,68 @@ export function useIssue(id: string | undefined) {
     queryFn: () => api<IssueDetail>(`/api/issues/${id}`),
   });
 }
+
+export type SandboxSummary = {
+  id: string;
+  provider: string;
+  providerSandboxId: string;
+  sessionId: string;
+  state: string;
+  agentId: string;
+  agentSlug?: string;
+  agentDisplayName?: string;
+  surface: "chat" | "email" | null;
+  conversationId: string | null;
+  conversationTitle: string | null;
+  threadId: string | null;
+  threadSubject: string | null;
+  lifecyclePolicy: {
+    autoStopInterval: number;
+    autoArchiveInterval: number;
+    autoDeleteInterval: number;
+  };
+  lastActivityAt: string;
+  lastSyncedAt: string | null;
+  errorReason: string | null;
+  recoverable: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function useSandboxes(state?: string) {
+  const params = new URLSearchParams();
+  if (state) params.set("state", state);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ["sandboxes", state ?? "all"],
+    queryFn: () =>
+      api<{ sandboxes: SandboxSummary[]; total: number }>(
+        `/api/sandboxes${qs ? `?${qs}` : ""}`,
+      ),
+  });
+}
+
+export function useSandboxOrphans() {
+  return useQuery({
+    queryKey: ["sandboxes", "orphans"],
+    queryFn: () =>
+      api<{
+        orphans: Array<{
+          providerSandboxId: string;
+          state: string;
+          agentId?: string;
+        }>;
+      }>("/api/sandboxes/orphans"),
+  });
+}
+
+export function useConversationSandbox(conversationId: string | undefined) {
+  return useQuery({
+    enabled: Boolean(conversationId),
+    queryKey: ["sandboxes", "conversation", conversationId],
+    queryFn: () =>
+      api<{ sandbox: SandboxSummary | null }>(
+        `/api/sandboxes/by-conversation/${conversationId}`,
+      ),
+  });
+}

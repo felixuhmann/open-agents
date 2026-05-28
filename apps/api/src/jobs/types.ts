@@ -6,6 +6,7 @@
 
 export const JOB_RUN_AGENT = "run-agent";
 export const JOB_SEND_EMAIL = "send-email";
+export const JOB_SANDBOX_RECONCILE = "sandbox-reconcile";
 
 /**
  * `surface` decides what the worker does at the end of a successful run:
@@ -31,3 +32,5 @@ export type SendEmailJobData = {
   runId: string;
   body: string;
 };
+
+export type SandboxReconcileJobData = Record<string, never>;

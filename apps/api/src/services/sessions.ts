@@ -4,6 +4,7 @@ import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+import { touchSandboxActivity } from "./sandboxes.js";
 
 export type ResolvedSession = {
   sessionId: string;
@@ -54,6 +55,9 @@ export async function resolveEmailSessionId(
     if (resources.length > 0) {
       await backend.mountSessionResources(thread.sessionId, resources);
     }
+    if (backend.runtime === "daytona") {
+      await touchSandboxActivity(thread.sessionId);
+    }
     return { sessionId: thread.sessionId };
   }
 
@@ -86,6 +90,8 @@ export async function resolveEmailSessionId(
           title: thread.subject.slice(0, 120),
           resources: resources.length > 0 ? resources : undefined,
           agentVersionId: agentVersionId ?? agent.currentVersionId,
+          threadId: thread.id,
+          surface: "email",
         },
   );
   await prisma.emailThread.update({
@@ -134,6 +140,9 @@ export async function resolveChatSessionId(
     if (resources.length > 0) {
       await backend.mountSessionResources(conversation.anthropicSessionId, resources);
     }
+    if (backend.runtime === "daytona") {
+      await touchSandboxActivity(conversation.anthropicSessionId);
+    }
     return { sessionId: conversation.anthropicSessionId };
   }
 
@@ -166,6 +175,8 @@ export async function resolveChatSessionId(
           title: conversation.title.slice(0, 120),
           resources: resources.length > 0 ? resources : undefined,
           agentVersionId: agentVersionId ?? agent.currentVersionId,
+          conversationId: conversation.id,
+          surface: "chat",
         },
   );
   await prisma.chatConversation.update({
