@@ -43,11 +43,6 @@ export const AgentConfigRuntime = z.object({
 });
 export type AgentConfigRuntime = z.infer<typeof AgentConfigRuntime>;
 
-export const AgentConfigProvider = z.object({
-  name: z.enum(["anthropic"]),
-});
-export type AgentConfigProvider = z.infer<typeof AgentConfigProvider>;
-
 /**
  * Provider-neutral frozen agent config stored in `AgentVersion.payload`.
  * Captures everything a run needs to audit against the exact runtime definition.
@@ -55,8 +50,8 @@ export type AgentConfigProvider = z.infer<typeof AgentConfigProvider>;
 export const AgentConfigSnapshot = z.object({
   schemaVersion: z.literal(AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION),
   systemPrompt: z.string(),
-  model: z.string(),
-  provider: AgentConfigProvider,
+  modelProvider: z.string().min(1),
+  modelId: z.string().min(1),
   managedTools: z.array(AgentConfigToolBinding),
   platformTools: z.array(AgentConfigToolBinding),
   thirdPartyMcp: z.array(AgentConfigThirdPartyMcp),

@@ -44,7 +44,7 @@ export async function syncAgentToAnthropic(agent: HydratedAgent): Promise<void> 
     existingEnvironmentId: agent.environmentId,
     slug: agent.slug,
     displayName: agent.displayName,
-    model: agent.model,
+    model: agent.modelId,
     systemPrompt: agent.systemPrompt,
     tools,
     thirdPartyMcp,
@@ -124,7 +124,7 @@ export function anthropicInputsFromSnapshot(agent: HydratedAgent, payload: unkno
     runtime: t.runtime,
   }));
   return {
-    model: snapshot.model,
+    model: snapshot.modelId,
     systemPrompt: snapshot.systemPrompt,
     tools,
     thirdPartyMcp: snapshot.thirdPartyMcp.map((m) => ({

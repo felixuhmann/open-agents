@@ -268,7 +268,8 @@ export type IssueDetailAgent = {
   displayName: string;
   avatar: string | null;
   description: string | null;
-  model: string;
+  modelProvider: string;
+  modelId: string;
   systemPrompt: string;
   emailEnabled: boolean;
   webEnabled: boolean;
@@ -450,7 +451,8 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     displayName: issue.agent.displayName,
     avatar: issue.agent.avatar,
     description: issue.agent.description,
-    model: issue.agent.model,
+    modelProvider: issue.agent.modelProvider,
+    modelId: issue.agent.modelId,
     systemPrompt: issue.agent.systemPrompt,
     emailEnabled: issue.agent.emailEnabled,
     webEnabled: issue.agent.webEnabled,

@@ -1,5 +1,6 @@
 export * from "./agentVersion.js";
 export * from "./agents.js";
+export * from "./modelCatalog.js";
 export * from "./runEvents.js";
 export * from "./sandboxPolicy.js";
 export * from "./sandboxes.js";

@@ -37,6 +37,8 @@ import { Spinner } from "@/components/ui/spinner";
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API key",
+  openai_api_key: "OpenAI API key",
+  openrouter_api_key: "OpenRouter API key",
   daytona_api_key: "Daytona API key",
   mailgun_api_key: "Mailgun API key",
   mailgun_domain: "Mailgun domain (e.g. mg.example.com)",

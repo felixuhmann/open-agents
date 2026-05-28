@@ -16,18 +16,7 @@ export type RunStatus = z.infer<typeof RunStatus>;
 export const UserRole = z.enum(["admin", "contributor", "member"]);
 export type UserRole = z.infer<typeof UserRole>;
 
-/**
- * Anthropic model identifiers we offer in the agent edit page. Free-form
- * string in the DB so a new model can be added without a migration; the
- * enum is the explicit allow-list for UI / API validation.
- */
-export const AgentModel = z.enum([
-  "claude-opus-4-7",
-  "claude-opus-4-6",
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5",
-]);
-export type AgentModel = z.infer<typeof AgentModel>;
+import { AgentModelSelection } from "./modelCatalog.js";
 
 export const AgentDto = z.object({
   id: z.string(),
@@ -35,7 +24,8 @@ export const AgentDto = z.object({
   displayName: z.string(),
   description: z.string().nullable(),
   systemPrompt: z.string(),
-  model: z.string(),
+  modelProvider: z.string(),
+  modelId: z.string(),
   /**
    * Stored avatar reference. Either a bare filename inside the bundled
    * `apps/api/src/emails/static/` directory, a `/static/...` URL path
@@ -90,7 +80,8 @@ export const UpdateAgentInput = z.object({
   displayName: z.string().min(1).max(120).optional(),
   description: z.string().max(1000).nullable().optional(),
   systemPrompt: z.string().max(20000).optional(),
-  model: AgentModel.optional(),
+  modelProvider: AgentModelSelection.shape.modelProvider.optional(),
+  modelId: AgentModelSelection.shape.modelId.optional(),
   emailEnabled: z.boolean().optional(),
   webEnabled: z.boolean().optional(),
   accessMode: AgentAccessMode.optional(),

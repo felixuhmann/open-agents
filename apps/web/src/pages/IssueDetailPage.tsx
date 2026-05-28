@@ -248,7 +248,11 @@ function AgentContextCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-          <KeyValue label="Model" value={agent.model} mono />
+          <KeyValue
+            label="Model"
+            value={`${agent.modelProvider}/${agent.modelId}`}
+            mono
+          />
           <KeyValue
             label="Published version"
             value={

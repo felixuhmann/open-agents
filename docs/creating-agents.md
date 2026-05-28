@@ -70,9 +70,10 @@ and seeds an empty system prompt.
 
 ### Model
 
-Pick the Anthropic model that powers the agent. Default is
-`claude-opus-4-7`. Switching the model is a publish-only change — the
-new id ships to Anthropic on the next **Publish** click.
+Choose a **provider** (Anthropic, OpenAI, or OpenRouter when configured
+in Settings → Service secrets) and a **model** from the live Pi catalog.
+Defaults are Anthropic `claude-opus-4-7`. Changing the model applies to
+the next published version; live runs keep the snapshot they started with.
 
 ### Tools
 

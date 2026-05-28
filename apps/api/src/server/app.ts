@@ -13,6 +13,7 @@ import { secretsRoutes } from "../routes/api/secrets.js";
 import { settingsRoutes } from "../routes/api/settings.js";
 import { skillsRoutes } from "../routes/api/skills.js";
 import { toolsRoutes } from "../routes/api/tools.js";
+import { modelsRoutes } from "../routes/api/models.js";
 import { usersRoutes } from "../routes/api/users.js";
 import { authRoutes } from "../routes/auth.js";
 import { healthRoutes } from "../routes/health.js";
@@ -80,6 +81,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/settings", settingsRoutes);
   app.route("/api/skills", skillsRoutes);
   app.route("/api/tools", toolsRoutes);
+  app.route("/api/models", modelsRoutes);
   app.route("/api/users", usersRoutes);
 
   app.route(SETUP_PREFIX, setupRoutes);

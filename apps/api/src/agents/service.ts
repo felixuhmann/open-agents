@@ -1,9 +1,8 @@
 import type { Agent, Prisma } from "@open-agents/db";
-import type {
-  AgentModel,
-  SandboxCommandPolicy,
-  SandboxNetworkPolicy,
-} from "@open-agents/types";
+import type { SandboxCommandPolicy, SandboxNetworkPolicy } from "@open-agents/types";
+import { HttpError } from "../auth/middleware.js";
+import { AgentBackendError } from "../agent-backend/types.js";
+import { resolvePiModel } from "../services/piModel.js";
 import {
   parseSandboxCommandPolicy,
   parseSandboxNetworkPolicy,
@@ -137,7 +136,8 @@ export type UpdateAgentArgs = {
   displayName?: string;
   description?: string | null;
   systemPrompt?: string;
-  model?: AgentModel;
+  modelProvider?: string;
+  modelId?: string;
   emailEnabled?: boolean;
   webEnabled?: boolean;
   accessMode?: "everyone" | "specific";
@@ -182,7 +182,19 @@ export async function updateAgent(
   if (args.displayName !== undefined) scalarUpdate.displayName = args.displayName;
   if (args.description !== undefined) scalarUpdate.description = args.description;
   if (args.systemPrompt !== undefined) scalarUpdate.systemPrompt = args.systemPrompt;
-  if (args.model !== undefined) scalarUpdate.model = args.model;
+  if (args.modelProvider !== undefined || args.modelId !== undefined) {
+    if (!args.modelProvider || !args.modelId) {
+      throw new HttpError(400, "modelProvider and modelId must be updated together");
+    }
+    try {
+      resolvePiModel(args.modelProvider, args.modelId);
+    } catch (err) {
+      const message = err instanceof AgentBackendError ? err.message : String(err);
+      throw new HttpError(400, message);
+    }
+    scalarUpdate.modelProvider = args.modelProvider;
+    scalarUpdate.modelId = args.modelId;
+  }
   if (args.emailEnabled !== undefined) scalarUpdate.emailEnabled = args.emailEnabled;
   if (args.webEnabled !== undefined) scalarUpdate.webEnabled = args.webEnabled;
   if (args.accessMode !== undefined) scalarUpdate.accessMode = args.accessMode;
