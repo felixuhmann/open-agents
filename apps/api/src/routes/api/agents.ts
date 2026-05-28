@@ -1,6 +1,7 @@
 import { File } from "node:buffer";
 import { Hono } from "hono";
 import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
+import { resolveDraftSandboxPolicy } from "../../services/sandboxPolicy.js";
 import {
   createAgent,
   deleteAgent,
@@ -54,6 +55,7 @@ function toDto(
   agent: Awaited<ReturnType<typeof listAgents>>[number],
   mailgunDomain?: string | null,
 ) {
+  const sandboxPolicy = resolveDraftSandboxPolicy(agent);
   return {
     id: agent.id,
     slug: agent.slug,
@@ -100,6 +102,8 @@ function toDto(
       serverUrl: m.serverUrl,
     })),
     accessUserIds: agent.access.map((a) => a.userId),
+    sandboxNetworkPolicy: sandboxPolicy.network,
+    sandboxCommandPolicy: sandboxPolicy.command,
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
   };

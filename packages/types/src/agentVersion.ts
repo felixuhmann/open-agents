@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  SandboxCommandPolicySchema,
+  SandboxNetworkPolicySchema,
+} from "./sandboxPolicy.js";
 
 /** Discriminator for the frozen config payload schema. */
 export const AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION = 1 as const;
@@ -29,6 +33,13 @@ export type AgentConfigThirdPartyMcp = z.infer<typeof AgentConfigThirdPartyMcp>;
 
 export const AgentConfigRuntime = z.object({
   backend: z.enum(["anthropic", "daytona"]),
+  /** Frozen sandbox security policy for Daytona runs. Omitted on legacy snapshots. */
+  sandbox: z
+    .object({
+      network: SandboxNetworkPolicySchema,
+      command: SandboxCommandPolicySchema,
+    })
+    .optional(),
 });
 export type AgentConfigRuntime = z.infer<typeof AgentConfigRuntime>;
 

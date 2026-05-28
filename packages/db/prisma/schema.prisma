@@ -189,6 +189,12 @@ model Agent {
   /// Defaults to the slug; admin can override.
   inboundLocalPart String  @unique
 
+  /// Draft sandbox network policy (internet, allowlist, internal protection).
+  /// Published copies are frozen in `AgentVersion.payload.runtime.sandbox`.
+  sandboxNetworkPolicy Json?
+  /// Draft command policy (deny rules, approval gates, limits).
+  sandboxCommandPolicy Json?
+
   /// Latest published (frozen) runtime config. Runs pin `AgentVersion` rows;
   /// this pointer is the admin-facing "live" version for new runs.
   currentVersionId String?       @unique

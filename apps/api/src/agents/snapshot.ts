@@ -5,6 +5,7 @@ import {
 } from "@open-agents/types";
 import type { HydratedAgent } from "./service.js";
 import { getAgentBackend } from "../agent-backend/instance.js";
+import { resolveDraftSandboxPolicy } from "../services/sandboxPolicy.js";
 import { HttpError } from "../auth/middleware.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
@@ -34,6 +35,7 @@ export async function buildAgentConfigSnapshot(
 
   const managedTools = toolBindings.filter((t) => t.runtime === "managed");
   const platformTools = toolBindings.filter((t) => t.runtime === "platform");
+  const sandbox = resolveDraftSandboxPolicy(agent);
 
   return AgentConfigSnapshot.parse({
     schemaVersion: 1,
@@ -53,7 +55,7 @@ export async function buildAgentConfigSnapshot(
       skillName: b.skill.name,
       versionNumber: b.skillVersion.versionNumber,
     })),
-    runtime: { backend: backend.runtime },
+    runtime: { backend: backend.runtime, sandbox },
   });
 }
 

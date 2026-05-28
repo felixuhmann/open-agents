@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  SandboxCommandPolicySchema,
+  SandboxNetworkPolicySchema,
+} from "./sandboxPolicy.js";
 
 export const AgentAccessMode = z.enum(["everyone", "specific"]);
 export type AgentAccessMode = z.infer<typeof AgentAccessMode>;
@@ -51,6 +55,8 @@ export const AgentDto = z.object({
   currentVersionNumber: z.number().int().positive().nullable().optional(),
   currentVersionId: z.string().nullable().optional(),
   publishedAt: z.string().nullable().optional(),
+  sandboxNetworkPolicy: SandboxNetworkPolicySchema,
+  sandboxCommandPolicy: SandboxCommandPolicySchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -133,5 +139,7 @@ export const UpdateAgentInput = z.object({
     )
     .optional(),
   accessUserIds: z.array(z.string()).optional(),
+  sandboxNetworkPolicy: SandboxNetworkPolicySchema.optional(),
+  sandboxCommandPolicy: SandboxCommandPolicySchema.optional(),
 });
 export type UpdateAgentInput = z.infer<typeof UpdateAgentInput>;

@@ -12,6 +12,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   PuzzlePieceIcon,
+  ShieldCheckIcon,
   TrashIcon,
   WarningOctagonIcon,
   WrenchIcon,
@@ -114,6 +115,14 @@ type EditState = {
     /** Set only when the operator enters or clears a bearer token. */
     bearer?: string;
   }>;
+  sandboxInternetEnabled: boolean;
+  sandboxAllowList: string;
+  sandboxProtectInternalNetwork: boolean;
+  sandboxDenyRules: string;
+  sandboxApprovalGates: string;
+  sandboxMaxRuntimeSeconds: number;
+  sandboxMaxOutputChars: number;
+  sandboxMaxBackgroundLifetimeSeconds: number;
 };
 
 function fromDto(a: FullAgentDto): EditState {
@@ -136,7 +145,23 @@ function fromDto(a: FullAgentDto): EditState {
       label: m.label,
       serverUrl: m.serverUrl,
     })),
+    sandboxInternetEnabled: a.sandboxNetworkPolicy.internetEnabled,
+    sandboxAllowList: a.sandboxNetworkPolicy.allowList,
+    sandboxProtectInternalNetwork: a.sandboxNetworkPolicy.protectInternalNetwork,
+    sandboxDenyRules: a.sandboxCommandPolicy.denyRules.join("\n"),
+    sandboxApprovalGates: a.sandboxCommandPolicy.approvalGatePatterns.join("\n"),
+    sandboxMaxRuntimeSeconds: a.sandboxCommandPolicy.maxRuntimeSeconds,
+    sandboxMaxOutputChars: a.sandboxCommandPolicy.maxOutputChars,
+    sandboxMaxBackgroundLifetimeSeconds:
+      a.sandboxCommandPolicy.maxBackgroundProcessLifetimeSeconds,
   };
+}
+
+function linesToPatterns(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 export default function AgentEditPage() {
@@ -175,6 +200,18 @@ export default function AgentEditPage() {
             serverUrl: m.serverUrl,
             ...(m.bearer !== undefined ? { bearer: m.bearer } : {}),
           })),
+          sandboxNetworkPolicy: {
+            internetEnabled: s.sandboxInternetEnabled,
+            allowList: s.sandboxAllowList.trim(),
+            protectInternalNetwork: s.sandboxProtectInternalNetwork,
+          },
+          sandboxCommandPolicy: {
+            denyRules: linesToPatterns(s.sandboxDenyRules),
+            approvalGatePatterns: linesToPatterns(s.sandboxApprovalGates),
+            maxRuntimeSeconds: s.sandboxMaxRuntimeSeconds,
+            maxOutputChars: s.sandboxMaxOutputChars,
+            maxBackgroundProcessLifetimeSeconds: s.sandboxMaxBackgroundLifetimeSeconds,
+          },
         },
       }),
     onSuccess: async () => {
@@ -731,6 +768,159 @@ export default function AgentEditPage() {
               </EmptyHeader>
             </Empty>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheckIcon className="size-4" weight="duotone" />
+            Sandbox security
+          </CardTitle>
+          <CardDescription>
+            Default network and command policy for Daytona sandboxes. Publish a new
+            version so runs pick up changes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <FieldSet>
+              <FieldLegend>Network</FieldLegend>
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="sandbox-internet">Internet access</FieldLabel>
+                  <FieldDescription>
+                    When off, outbound traffic from the sandbox is blocked.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="sandbox-internet"
+                  checked={state.sandboxInternetEnabled}
+                  onCheckedChange={(checked) => setS({ sandboxInternetEnabled: checked })}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="sandbox-allowlist">Egress allow list</FieldLabel>
+                <Textarea
+                  id="sandbox-allowlist"
+                  className="font-mono text-sm"
+                  rows={3}
+                  placeholder="208.80.154.232/32, 10.0.0.0/8"
+                  disabled={!state.sandboxInternetEnabled}
+                  value={state.sandboxAllowList}
+                  onChange={(e) => setS({ sandboxAllowList: e.target.value })}
+                />
+                <FieldDescription>
+                  Comma-separated IPv4 CIDR blocks (max 10). Leave empty for unrestricted
+                  egress when the internet is on (subject to your Daytona org tier).
+                </FieldDescription>
+              </Field>
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="sandbox-internal">
+                    Protect internal networks
+                  </FieldLabel>
+                  <FieldDescription>
+                    Block shell commands that target private, loopback, or link-local
+                    addresses when the internet is enabled.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="sandbox-internal"
+                  checked={state.sandboxProtectInternalNetwork}
+                  disabled={!state.sandboxInternetEnabled}
+                  onCheckedChange={(checked) =>
+                    setS({ sandboxProtectInternalNetwork: checked })
+                  }
+                />
+              </Field>
+            </FieldSet>
+            <FieldSet>
+              <FieldLegend>Commands</FieldLegend>
+              <Field>
+                <FieldLabel htmlFor="sandbox-deny">Deny rules</FieldLabel>
+                <Textarea
+                  id="sandbox-deny"
+                  className="font-mono text-sm"
+                  rows={4}
+                  placeholder="sudo\s+"
+                  value={state.sandboxDenyRules}
+                  onChange={(e) => setS({ sandboxDenyRules: e.target.value })}
+                />
+                <FieldDescription>
+                  One JavaScript regex per line (case-insensitive). Built-in destructive
+                  patterns always apply.
+                </FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="sandbox-approval">Approval gates</FieldLabel>
+                <Textarea
+                  id="sandbox-approval"
+                  className="font-mono text-sm"
+                  rows={3}
+                  placeholder="docker\s+run"
+                  value={state.sandboxApprovalGates}
+                  onChange={(e) => setS({ sandboxApprovalGates: e.target.value })}
+                />
+                <FieldDescription>
+                  Matching commands are blocked until operator approval is implemented.
+                </FieldDescription>
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field>
+                  <FieldLabel htmlFor="sandbox-max-runtime">
+                    Max runtime (seconds)
+                  </FieldLabel>
+                  <Input
+                    id="sandbox-max-runtime"
+                    type="number"
+                    min={1}
+                    max={3600}
+                    value={state.sandboxMaxRuntimeSeconds}
+                    onChange={(e) =>
+                      setS({
+                        sandboxMaxRuntimeSeconds: Number(e.target.value) || 60,
+                      })
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="sandbox-max-output">Max output (chars)</FieldLabel>
+                  <Input
+                    id="sandbox-max-output"
+                    type="number"
+                    min={1000}
+                    max={500000}
+                    value={state.sandboxMaxOutputChars}
+                    onChange={(e) =>
+                      setS({
+                        sandboxMaxOutputChars: Number(e.target.value) || 20_000,
+                      })
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="sandbox-max-bg">
+                    Max background lifetime (s)
+                  </FieldLabel>
+                  <Input
+                    id="sandbox-max-bg"
+                    type="number"
+                    min={1}
+                    max={86400}
+                    value={state.sandboxMaxBackgroundLifetimeSeconds}
+                    onChange={(e) =>
+                      setS({
+                        sandboxMaxBackgroundLifetimeSeconds:
+                          Number(e.target.value) || 600,
+                      })
+                    }
+                  />
+                  <FieldDescription>Async session command ceiling.</FieldDescription>
+                </Field>
+              </div>
+            </FieldSet>
+          </FieldGroup>
         </CardContent>
       </Card>
 

@@ -174,16 +174,15 @@ Acceptance criteria:
 
 Current state:
 
-- Daytona gives isolation, but the app does not yet own a detailed
-  runtime policy.
-- MVP tools are intentionally permissive.
+- Per-agent draft policy on `Agent.sandboxNetworkPolicy` /
+  `Agent.sandboxCommandPolicy`, frozen into `AgentVersion.payload.runtime.sandbox`
+  on publish. Agent edit UI exposes network + command controls.
+- Daytona sandboxes receive `networkBlockAll` / `networkAllowList` at create;
+  shell tools enforce deny rules, approval gates (block until workflow exists),
+  timeouts, and output caps from published policy. `web_fetch` routes through the
+  same command gate.
 
-What is needed:
-
-- Define default sandbox network policy: internet on/off, allowlists,
-  internal network protection.
-- Add command policy controls: deny rules, approval gates, max runtime,
-  max output, max background process lifetime.
+What is still needed:
 - Keep credentials host-side by default. Only inject credentials into the
   sandbox when a tool explicitly requires sandbox-local access.
 - Add resource limits and per-agent/per-run quotas.

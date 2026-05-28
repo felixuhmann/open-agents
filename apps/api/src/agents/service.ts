@@ -1,5 +1,13 @@
 import type { Agent, Prisma } from "@open-agents/db";
-import type { AgentModel } from "@open-agents/types";
+import type {
+  AgentModel,
+  SandboxCommandPolicy,
+  SandboxNetworkPolicy,
+} from "@open-agents/types";
+import {
+  parseSandboxCommandPolicy,
+  parseSandboxNetworkPolicy,
+} from "../services/sandboxPolicy.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { sealThirdPartyBearer } from "../mcp/thirdPartySecrets.js";
@@ -151,6 +159,8 @@ export type UpdateAgentArgs = {
   skillBindings?: { skillId: string; skillVersionId: string }[];
   thirdPartyMcp?: { id?: string; label: string; serverUrl: string; bearer?: string }[];
   accessUserIds?: string[];
+  sandboxNetworkPolicy?: SandboxNetworkPolicy;
+  sandboxCommandPolicy?: SandboxCommandPolicy;
 };
 
 /**
@@ -180,6 +190,16 @@ export async function updateAgent(
     scalarUpdate.inboundLocalPart = args.inboundLocalPart;
   }
   if (args.avatar !== undefined) scalarUpdate.avatar = args.avatar;
+  if (args.sandboxNetworkPolicy !== undefined) {
+    scalarUpdate.sandboxNetworkPolicy = parseSandboxNetworkPolicy(
+      args.sandboxNetworkPolicy,
+    );
+  }
+  if (args.sandboxCommandPolicy !== undefined) {
+    scalarUpdate.sandboxCommandPolicy = parseSandboxCommandPolicy(
+      args.sandboxCommandPolicy,
+    );
+  }
 
   // Resolve dangling foreign keys BEFORE the transaction. The SPA edit
   // form can hold ids that no longer exist (e.g. user deleted a skill in
