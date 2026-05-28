@@ -49,55 +49,27 @@ for deployment-wide presets.
 - OAuth / stdio transports for third-party servers.
 - Cache `tools/list` per agent revision to avoid reconnecting every run.
 
-### Managed tool parity
+### Managed tool parity (Daytona)
 
-Current MVP tools:
+**Done:**
 
-- `bash`
-- `read`
-- `write`
-- `edit`
-- `glob`
-- `grep`
-- `web_fetch`
+- `bash` / `grep` — persistent Daytona process session (`open-agents-shell`)
+  via `executeSessionCommand` + streaming `getSessionCommandLogs`
+  (`apps/api/src/services/daytonaExec.ts`).
+- Live stdout/stderr → `tool.output` RunEvents (throttled); chat UI renders
+  output while commands run.
+- Limits + truncation messages (`apps/api/src/services/daytonaLimits.ts`).
+- Basic shell policy guardrails (`apps/api/src/services/shellPolicy.ts`).
 
-Gaps versus Anthropic managed tools:
+**Still open:**
 
-- `web_search` is not implemented.
-- `read` is text-only and does not yet handle images, PDFs, notebooks, or
-  rich previews.
-- `bash` is one-shot command execution, not a long-lived shell session
-  with background process management.
-- Command output is returned at the end; stdout/stderr are not streamed
-  live into `RunEvent`.
-- `edit` is intentionally minimal exact-string replacement; it lacks the
-  robustness and ergonomics of a mature patch/edit tool.
-- There is no browser/computer-use equivalent.
-- There is no policy layer for dangerous commands, network access,
-  package installation, or long-running processes.
-
-What is needed:
-
-- Implement `web_search`, probably as a host-side platform tool or
-  provider-backed search service rather than arbitrary scraping from the
-  sandbox.
-- Upgrade `read` to detect file type and return appropriate model-facing
-  content or extracted text.
-- Add shell-session semantics on top of Daytona process sessions/PTYs:
-  create/reuse session, send commands, poll/stream logs, terminate
-  background work.
-- Stream command output into run events, while still returning compact
-  tool results to the model.
-- Add better limits: max command runtime, max output chars, max file read
-  size, and clear truncation messages.
-
-Acceptance criteria:
-
-- Agents using the same managed tool checkboxes in the UI get comparable
-  behavior on Daytona.
-- Long commands visibly stream progress in the chat/event timeline.
-- The model can inspect common uploaded file types without manual
-  conversion by the user.
+- `web_search` — not on Daytona; use `curl` in bash or a third-party MCP
+  search server.
+- Rich `read` (images, PDF, notebooks) — UTF-8 text only for now.
+- Browser / computer-use equivalent.
+- Stronger policy (package installs, egress, background job registry +
+  kill).
+- `web_fetch` — optional; bash `curl` covers many cases.
 
 ### Publish/version semantics
 

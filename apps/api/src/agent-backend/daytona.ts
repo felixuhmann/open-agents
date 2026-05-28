@@ -29,6 +29,13 @@ import {
   skillSandboxRootFor,
   skillSlugFromName,
 } from "../services/materializeSkills.js";
+import { formatCommandResult, runSandboxCommand } from "../services/daytonaExec.js";
+import {
+  DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
+  MAX_READ_FILE_CHARS,
+  MAX_TOOL_OUTPUT_CHARS,
+  truncateText,
+} from "../services/daytonaLimits.js";
 import {
   bashCommand,
   ensureSandboxDir,
@@ -50,9 +57,6 @@ import {
 } from "./types.js";
 
 const DAYTONA_SESSION_PREFIX = "daytona";
-const DEFAULT_SHELL_TIMEOUT_SECONDS = 60;
-const MAX_TOOL_OUTPUT_CHARS = 20_000;
-const MAX_READ_CHARS = 80_000;
 
 type DaytonaSessionRef = {
   agentId: string;
@@ -96,8 +100,7 @@ function summarizeToolResult(result: unknown): unknown {
 }
 
 function truncate(text: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n\n[truncated ${text.length - maxChars} chars]`;
+  return truncateText(text, maxChars).text;
 }
 
 function readTextBlocks(message: AssistantMessage): string {
@@ -242,7 +245,7 @@ export class DaytonaAgentBackend implements AgentBackend {
           agent,
           thirdPartyBearer,
         );
-        const tools = [...buildTools(agent, sandbox, workspaceDir), ...mcpTools];
+        const tools = [...buildTools(agent, sandbox, workspaceDir, onEvent), ...mcpTools];
         const model = normalizeModelId(agent.model);
         const anthropicApiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
         let finalText = "";
@@ -493,6 +496,8 @@ function buildRuntimePrompt(
     ? [
         `You have a Daytona Linux sandbox workspace. Treat ${workspaceDir} as the working directory.`,
         "Use tools to inspect files, write artifacts, and run commands when useful.",
+        "Bash uses a persistent shell session in the sandbox (cwd and env persist between calls).",
+        "For web pages or search, use curl/wget in bash or bind a third-party MCP search tool — there is no built-in web_search.",
         "Platform tools (for example memory_*) and third-party MCP tools (name prefix server:tool) run on the orchestrator host, not inside the sandbox.",
         "If the user message contains REPLY_ATTACHMENT_UPLOAD_URL, upload final files there with curl when the user asks for downloadable artifacts.",
       ].join("\n")
@@ -525,49 +530,74 @@ function buildTools(
   agent: HydratedAgent,
   sandbox: Sandbox,
   workspaceDir: string,
+  onEvent?: AgentEventHandler,
 ): AgentTool[] {
   const bound = boundManagedTools(agent);
   const tools: AgentTool[] = [];
 
-  if (bound.has("bash")) tools.push(bashTool(sandbox, workspaceDir));
+  if (bound.has("bash")) tools.push(bashTool(sandbox, workspaceDir, onEvent));
   if (bound.has("read")) tools.push(readTool(sandbox));
   if (bound.has("write")) tools.push(writeTool(sandbox));
   if (bound.has("edit")) tools.push(editTool(sandbox));
   if (bound.has("glob")) tools.push(globTool(sandbox, workspaceDir));
-  if (bound.has("grep")) tools.push(grepTool(sandbox, workspaceDir));
+  if (bound.has("grep")) tools.push(grepTool(sandbox, workspaceDir, onEvent));
   if (bound.has("web_fetch")) tools.push(webFetchTool(sandbox, workspaceDir));
 
   return tools;
 }
 
-function bashTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
+function emitToolOutput(
+  onEvent: AgentEventHandler | undefined,
+  toolName: string,
+  callId: string | undefined,
+  stream: "stdout" | "stderr",
+  text: string,
+): void {
+  if (!onEvent || !text) return;
+  onEvent({
+    kind: "tool_output",
+    toolName,
+    callId,
+    stream,
+    text,
+    rawType: "daytona.command_output",
+  });
+}
+
+function bashTool(
+  sandbox: Sandbox,
+  workspaceDir: string,
+  onEvent?: AgentEventHandler,
+): AgentTool {
   return makeTool({
     name: "bash",
     label: "Bash",
-    description: "Execute a bash command in the Daytona sandbox.",
+    description:
+      "Execute a command in a persistent shell session (state carries between calls).",
     parameters: Type.Object({
       command: Type.String({ description: "Command to execute." }),
       cwd: Type.Optional(
         Type.String({ description: `Working directory. Defaults to ${workspaceDir}.` }),
       ),
-      timeoutSeconds: Type.Optional(Type.Number({ description: "Timeout in seconds." })),
+      timeoutSeconds: Type.Optional(
+        Type.Number({ description: "Timeout in seconds (max 600)." }),
+      ),
     }),
     executionMode: "sequential",
-    execute: async (_id, params: Static<TSchema>) => {
+    execute: async (toolCallId, params: Static<TSchema>) => {
       const p = params as { command: string; cwd?: string; timeoutSeconds?: number };
-      const result = await sandbox.process.executeCommand(
-        bashCommand(p.command),
-        p.cwd ?? workspaceDir,
-        undefined,
-        Math.max(1, Math.min(p.timeoutSeconds ?? DEFAULT_SHELL_TIMEOUT_SECONDS, 600)),
-      );
+      const result = await runSandboxCommand({
+        sandbox,
+        command: p.command,
+        cwd: p.cwd ?? workspaceDir,
+        workspaceDir,
+        timeoutSeconds: p.timeoutSeconds,
+        onOutput: (chunk) =>
+          emitToolOutput(onEvent, "bash", toolCallId, chunk.stream, chunk.text),
+      });
+      const text = truncate(formatCommandResult(result));
       return {
-        content: [
-          {
-            type: "text",
-            text: truncate(`exitCode: ${result.exitCode}\n\n${result.result}`),
-          },
-        ],
+        content: [{ type: "text", text }],
         details: result,
       };
     },
@@ -578,15 +608,20 @@ function readTool(sandbox: Sandbox): AgentTool {
   return makeTool({
     name: "read",
     label: "Read file",
-    description: "Read a text file from the Daytona sandbox.",
+    description:
+      "Read a text file from the Daytona sandbox (UTF-8 text; large files are truncated).",
     parameters: Type.Object({
       path: Type.String({ description: "Path to read." }),
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string };
       const bytes = await sandbox.fs.downloadFile(p.path);
-      const text = truncate(bytes.toString("utf8"), MAX_READ_CHARS);
-      return { content: [{ type: "text", text }], details: { path: p.path } };
+      const raw = bytes.toString("utf8");
+      const { text, truncated } = truncateText(raw, MAX_READ_FILE_CHARS, "file");
+      return {
+        content: [{ type: "text", text }],
+        details: { path: p.path, bytes: bytes.byteLength, truncated },
+      };
     },
   });
 }
@@ -674,7 +709,11 @@ function globTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   });
 }
 
-function grepTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
+function grepTool(
+  sandbox: Sandbox,
+  workspaceDir: string,
+  onEvent?: AgentEventHandler,
+): AgentTool {
   return makeTool({
     name: "grep",
     label: "Grep",
@@ -685,18 +724,21 @@ function grepTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
         Type.String({ description: `Root directory. Defaults to ${workspaceDir}.` }),
       ),
     }),
-    execute: async (_id, params: Static<TSchema>) => {
+    execute: async (toolCallId, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
-      const result = await sandbox.process.executeCommand(
-        bashCommand(
-          `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? workspaceDir)} || true`,
-        ),
+      const command = `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? workspaceDir)} || true`;
+      const result = await runSandboxCommand({
+        sandbox,
+        command,
+        cwd: workspaceDir,
         workspaceDir,
-        undefined,
-        30,
-      );
+        timeoutSeconds: DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
+        onOutput: (chunk) =>
+          emitToolOutput(onEvent, "grep", toolCallId, chunk.stream, chunk.text),
+      });
+      const text = truncate(formatCommandResult(result));
       return {
-        content: [{ type: "text", text: truncate(result.result) }],
+        content: [{ type: "text", text }],
         details: result,
       };
     },

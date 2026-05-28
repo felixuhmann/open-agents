@@ -12,6 +12,7 @@ export const RunEventTypes = z.enum([
   "agent.delta",
   "agent.message",
   "tool.use",
+  "tool.output",
   "tool.result",
   "model.request",
   "session.error",
@@ -43,6 +44,13 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     toolName: z.string(),
     callId: z.string().optional(),
     args: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    type: z.literal("tool.output"),
+    toolName: z.string(),
+    callId: z.string().optional(),
+    stream: z.enum(["stdout", "stderr"]),
+    text: z.string(),
   }),
   z.object({
     type: z.literal("tool.result"),
