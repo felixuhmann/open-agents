@@ -22,6 +22,7 @@ type Usage = {
 type UsagePayload = {
   type: "model.request";
   model?: string | null;
+  provider?: string | null;
   isError?: boolean;
   usage: Usage;
 };
@@ -81,6 +82,7 @@ analyticsRoutes.get("/", async (c) => {
     Accumulator & { id: string; slug: string; displayName: string }
   >();
   const byModel = new Map<string, Accumulator & { model: string }>();
+  const byProvider = new Map<string, Accumulator & { provider: string }>();
   const bySurface = new Map<string, Accumulator & { surface: string }>();
 
   for (const run of runs) {
@@ -113,9 +115,14 @@ analyticsRoutes.get("/", async (c) => {
       if (!payload) continue;
 
       const model = payload.model ?? run.agent.model ?? "unknown";
+      const provider = payload.provider ?? inferProviderFromModel(model);
       const modelRow = getOrCreate(byModel, model, () => ({
         ...emptyAccumulator(),
         model,
+      }));
+      const providerRow = getOrCreate(byProvider, provider, () => ({
+        ...emptyAccumulator(),
+        provider,
       }));
       const spendUsd = estimateSpendUsd(model, payload.usage);
 
@@ -124,6 +131,7 @@ analyticsRoutes.get("/", async (c) => {
       addUsage(agent, payload.usage, spendUsd);
       addUsage(surface, payload.usage, spendUsd);
       addUsage(modelRow, payload.usage, spendUsd);
+      addUsage(providerRow, payload.usage, spendUsd);
     }
   }
 
@@ -145,12 +153,16 @@ analyticsRoutes.get("/", async (c) => {
     models: [...byModel.values()]
       .map((row) => ({ model: row.model, ...serializeAccumulator(row) }))
       .sort((a, b) => b.spendUsd - a.spendUsd),
+    providers: [...byProvider.values()]
+      .map((row) => ({ provider: row.provider, ...serializeAccumulator(row) }))
+      .sort((a, b) => b.totalTokens - a.totalTokens),
     surfaces: [...bySurface.values()]
       .map((row) => ({ surface: row.surface, ...serializeAccumulator(row) }))
       .sort((a, b) => b.runs - a.runs),
     notes: [
-      "Token usage comes from Managed Agents span.model_request_end events captured after analytics instrumentation is deployed.",
-      "Spend is estimated from the configured model price table and excludes provider-side billing adjustments not present in stream events.",
+      "Token usage is aggregated from durable model.request RunEvents (Daytona/Pi and legacy Anthropic streams).",
+      "Spend is estimated only when the model id matches the built-in price table; otherwise spendUsd is 0 and tokens still count.",
+      "Provider is taken from the event payload when present, otherwise inferred from the model id prefix.",
     ],
   });
 });
@@ -207,6 +219,15 @@ function serializeAccumulator(acc: Accumulator) {
   };
 }
 
+function inferProviderFromModel(model: string): string {
+  if (model.startsWith("claude-") || model.includes("anthropic")) return "anthropic";
+  if (model.startsWith("gpt-") || model.startsWith("o1") || model.startsWith("o3")) {
+    return "openai";
+  }
+  if (model.startsWith("gemini-")) return "google";
+  return "unknown";
+}
+
 function estimateSpendUsd(model: string, usage: Usage): number {
   const price = MODEL_PRICES_USD_PER_MILLION[model];
   if (!price) return 0;
@@ -228,6 +249,12 @@ function parseUsagePayload(payload: unknown): UsagePayload | null {
   return {
     type: "model.request",
     model: typeof record.model === "string" ? record.model : null,
+    provider:
+      typeof record.provider === "string"
+        ? record.provider
+        : typeof record.model === "string"
+          ? inferProviderFromModel(record.model)
+          : null,
     isError: typeof record.isError === "boolean" ? record.isError : undefined,
     usage: {
       inputTokens: readNumber(usageRecord.inputTokens),

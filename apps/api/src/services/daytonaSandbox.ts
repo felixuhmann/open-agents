@@ -57,16 +57,28 @@ export function snapshotFromSandbox(sandbox: Sandbox): DaytonaSandboxSnapshot {
   };
 }
 
+export type SandboxReadyTransition = "recover" | "start";
+
+export type SandboxReadyResult = {
+  sandbox: Sandbox;
+  previousState: string;
+  transitions: SandboxReadyTransition[];
+};
+
 /**
  * Ensure the sandbox is runnable: recover from error, start stopped/archived.
  */
 export async function ensureDaytonaSandboxReady(
   sandbox: Sandbox,
   timeoutSeconds = 90,
-): Promise<Sandbox> {
+): Promise<SandboxReadyResult> {
+  const previousState = sandbox.state ?? "unknown";
+  const transitions: SandboxReadyTransition[] = [];
+
   if (sandbox.state === "error") {
     if (sandbox.recoverable) {
       await sandbox.recover(timeoutSeconds);
+      transitions.push("recover");
     } else {
       throw new AgentBackendError(
         `Daytona sandbox is in error state and not recoverable: ${sandbox.errorReason ?? "unknown"}`,
@@ -75,9 +87,10 @@ export async function ensureDaytonaSandboxReady(
   }
   if (sandbox.state !== "started") {
     await sandbox.start(timeoutSeconds);
+    transitions.push("start");
   }
   await sandbox.refreshActivity();
-  return sandbox;
+  return { sandbox, previousState, transitions };
 }
 
 export async function withDaytonaSandbox<T>(
@@ -87,7 +100,7 @@ export async function withDaytonaSandbox<T>(
   try {
     const session = parseDaytonaSessionId(sessionId);
     const sandbox = await fetchDaytonaSandbox(session.sandboxId);
-    const ready = await ensureDaytonaSandboxReady(sandbox);
+    const { sandbox: ready } = await ensureDaytonaSandboxReady(sandbox);
     return await fn(ready);
   } catch (err) {
     throw wrapDaytonaError(err, "Daytona sandbox operation failed");

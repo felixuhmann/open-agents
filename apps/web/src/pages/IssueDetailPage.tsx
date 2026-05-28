@@ -284,11 +284,51 @@ function AgentContextCard({
           )}
           {runs.length > 1 ? (
             <p className="text-xs text-muted-foreground">
-              Sessions rotate when new attachments are added (resources only mount at
-              session-creation).
+              Multiple backend sessions may appear when sandboxes are recreated or
+              lifecycle state changes between runs.
             </p>
           ) : null}
         </div>
+
+        {session.sandboxes.length > 0 ? (
+          <>
+            <Separator />
+            <div className="flex flex-col gap-2">
+              <SectionLabel>Daytona sandboxes ({session.sandboxes.length})</SectionLabel>
+              <div className="space-y-2">
+                {session.sandboxes.map((sb) => (
+                  <div
+                    key={sb.id}
+                    className="rounded-md border bg-muted/30 px-3 py-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{sb.state}</Badge>
+                      <CopyableMono value={sb.providerSandboxId} />
+                    </div>
+                    <div className="mt-1 grid gap-1 text-muted-foreground sm:grid-cols-2">
+                      {sb.workspaceDir ? (
+                        <span>
+                          Workspace:{" "}
+                          <span className="font-mono text-foreground">
+                            {sb.workspaceDir}
+                          </span>
+                        </span>
+                      ) : null}
+                      <span>
+                        Last activity: {new Date(sb.lastActivityAt).toLocaleString()}
+                      </span>
+                      {sb.errorReason ? (
+                        <span className="text-destructive sm:col-span-2">
+                          {sb.errorReason}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : null}
 
         <Separator />
 
@@ -991,6 +1031,21 @@ function summariseEvent(ev: IssueDetailRunEvent): string {
       (s) => s.status === "materialized",
     ).length;
     return `${ok}/${count} skills materialized`;
+  }
+  if (ev.type.startsWith("sandbox.")) {
+    if (ev.type === "sandbox.resource_mounted" && Array.isArray(p.resources)) {
+      return `${p.resources.length} file(s) mounted`;
+    }
+    if (typeof p.previousState === "string" && typeof p.state === "string") {
+      return `${p.previousState} → ${p.state}`;
+    }
+    if (typeof p.providerSandboxId === "string") {
+      return p.providerSandboxId;
+    }
+  }
+  if (typeof p.stopReason === "string") return `stop: ${p.stopReason}`;
+  if (typeof p.provider === "string" && typeof p.model === "string") {
+    return `${p.provider}/${p.model}`;
   }
   if (typeof p.toolName === "string") return p.toolName;
   if (typeof p.text === "string") {
