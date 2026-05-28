@@ -48,6 +48,8 @@ export type CreateSessionInput = {
   agentSlug?: string;
   title?: string;
   resources?: SessionResource[];
+  /** Pinned published version whose skill bindings should be materialized. */
+  agentVersionId?: string;
 };
 
 export type UploadFileInput = {
@@ -60,6 +62,8 @@ export type AgentRunContext = {
   runId: string;
   surface: "chat" | "email";
   agentId: string;
+  /** Frozen config version this run executes against. */
+  agentVersionId?: string;
   chatMessageId?: string;
   emailMessageId?: string;
 };

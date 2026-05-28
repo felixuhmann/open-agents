@@ -2,6 +2,7 @@ import type { Job } from "pg-boss";
 import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
 import { getAgentById } from "../agents/service.js";
+import { loadAgentForRun } from "../agents/snapshot.js";
 import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
@@ -95,8 +96,9 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
   const thread = await prisma.emailThread.findUnique({ where: { id: run.threadId } });
   if (!thread) throw new Error(`Thread not found: ${run.threadId}`);
 
-  const agent = await getAgentById(thread.agentId);
-  if (!agent) throw new Error(`Agent not found: ${thread.agentId}`);
+  const baseAgent = await getAgentById(thread.agentId);
+  if (!baseAgent) throw new Error(`Agent not found: ${thread.agentId}`);
+  const agent = await loadAgentForRun(baseAgent, run.agentVersionId);
 
   const incoming = await prisma.emailMessage.findUnique({
     where: { id: data.emailMessageId },
@@ -115,10 +117,11 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
   }));
 
   const resolved = await resolveEmailSessionId(
-    agent,
+    baseAgent,
     { id: thread.id, sessionId: thread.sessionId, subject: thread.subject },
     resources,
     hasNewAttachments,
+    run.agentVersionId ?? undefined,
   );
   await prisma.agentRun.update({
     where: { id: runId },
@@ -134,6 +137,7 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
     runId,
     surface: "email",
     agentId: agent.id,
+    agentVersionId: agent.agentVersionId,
     emailMessageId: data.emailMessageId,
   });
 
@@ -171,8 +175,9 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
   });
   if (!conversation) throw new Error(`Conversation not found: ${run.conversationId}`);
 
-  const agent = await getAgentById(conversation.agentId);
-  if (!agent) throw new Error(`Agent not found: ${conversation.agentId}`);
+  const baseAgent = await getAgentById(conversation.agentId);
+  if (!baseAgent) throw new Error(`Agent not found: ${conversation.agentId}`);
+  const agent = await loadAgentForRun(baseAgent, run.agentVersionId);
 
   const message = await prisma.chatMessage.findUnique({
     where: { id: data.chatMessageId },
@@ -191,7 +196,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
   }));
 
   const resolved = await resolveChatSessionId(
-    agent,
+    baseAgent,
     {
       id: conversation.id,
       anthropicSessionId: conversation.anthropicSessionId,
@@ -199,6 +204,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     },
     resources,
     hasNewAttachments,
+    run.agentVersionId ?? undefined,
   );
   await prisma.agentRun.update({
     where: { id: runId },
@@ -218,6 +224,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     runId,
     surface: "chat",
     agentId: agent.id,
+    agentVersionId: agent.agentVersionId,
     chatMessageId: data.chatMessageId,
   });
 
@@ -273,6 +280,7 @@ async function streamRunWithEvents(
     runId: string;
     surface: "chat" | "email";
     agentId: string;
+    agentVersionId?: string;
     chatMessageId?: string;
     emailMessageId?: string;
   },

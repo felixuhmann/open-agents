@@ -180,9 +180,12 @@ export type IssueDetailRunEvent = {
 export type IssueDetailRun = {
   id: string;
   surface: "chat" | "email";
-  /// Anthropic session id this run executed against. Differs across runs
-  /// in the same conversation when attachments forced a new session.
+  /// Backend session id this run executed against.
   sessionId: string | null;
+  /// Frozen config version pinned at enqueue time.
+  agentVersionId: string | null;
+  versionNumber: number | null;
+  versionPayload: unknown;
   status: string;
   error: string | null;
   output: string | null;
@@ -251,16 +254,13 @@ export type IssueDetailAgent = {
   emailEnabled: boolean;
   webEnabled: boolean;
   inboundLocalPart: string;
-  anthropicAgentId: string | null;
-  environmentId: string | null;
-  anthropicAgentVersion: string | null;
+  /// Latest published version number (draft edits are not reflected here).
+  currentVersionNumber: number | null;
+  currentVersionId: string | null;
   tools: IssueDetailToolBinding[];
   skills: IssueDetailSkillBinding[];
   thirdPartyMcp: IssueDetailThirdPartyMcp[];
-  /// Snapshot of the most recent payload published to Anthropic for this
-  /// agent. Includes the system prompt, toolset configuration, and skill
-  /// references actually sent to `POST /v1/agents/:id`. May be null if
-  /// the agent has never been published.
+  /// Snapshot of the most recent published runtime config.
   publishedPayload: unknown;
   publishedAt: string | null;
 };
@@ -284,9 +284,8 @@ export type IssueDetail = {
     threadId: string | null;
     label: string;
     userEmail: string | null;
-    /// Distinct Anthropic session ids observed across the runs on this
-    /// session, oldest first. Most sessions have exactly one.
-    anthropicSessionIds: string[];
+    /// Distinct backend session ids observed across runs on this session.
+    backendSessionIds: string[];
   };
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];
@@ -296,9 +295,9 @@ export type IssueDetail = {
  * Full detail for the admin issue viewer: reporter info, the raw
  * conversation/thread messages, every `AgentRun`'s `RunEvent` log, and
  * the agent context (identity, model, tools, skills, third-party MCPs,
- * system prompt, and the most recent payload we published to Anthropic)
- * so the admin can inspect tool calls, thinking, and errors against the
- * configuration that produced them.
+ * system prompt, and published version snapshots) so the admin can inspect
+ * tool calls, thinking, and errors against the configuration that
+ * produced them.
  */
 export async function getIssueDetail(id: string): Promise<IssueDetail> {
   const issue = await prisma.issue.findUnique({
@@ -310,6 +309,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
           skillBindings: { include: { skill: true, skillVersion: true } },
           thirdPartyMcp: true,
           versions: { orderBy: { createdAt: "desc" }, take: 1 },
+          currentVersion: true,
         },
       },
       reporter: { select: { id: true, name: true } },
@@ -334,7 +334,10 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
         },
         runs: {
           orderBy: { startedAt: "asc" },
-          include: { events: { orderBy: { seq: "asc" } } },
+          include: {
+            events: { orderBy: { seq: "asc" } },
+            agentVersion: true,
+          },
         },
       },
     });
@@ -358,7 +361,10 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
         messages: { orderBy: { createdAt: "asc" } },
         runs: {
           orderBy: { startedAt: "asc" },
-          include: { events: { orderBy: { seq: "asc" } } },
+          include: {
+            events: { orderBy: { seq: "asc" } },
+            agentVersion: true,
+          },
         },
       },
     });
@@ -377,7 +383,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     }
   }
 
-  const latestVersion = issue.agent.versions[0] ?? null;
+  const latestVersion = issue.agent.currentVersion ?? issue.agent.versions[0] ?? null;
 
   // Distinct session ids in encounter order. Most sessions have one,
   // but attachments force a new session so we may have 2+ — surfacing
@@ -400,9 +406,8 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     emailEnabled: issue.agent.emailEnabled,
     webEnabled: issue.agent.webEnabled,
     inboundLocalPart: issue.agent.inboundLocalPart,
-    anthropicAgentId: issue.agent.anthropicAgentId,
-    environmentId: issue.agent.environmentId,
-    anthropicAgentVersion: issue.agent.anthropicAgentVersion,
+    currentVersionNumber: issue.agent.currentVersion?.versionNumber ?? null,
+    currentVersionId: issue.agent.currentVersionId,
     tools: issue.agent.toolBindings.map((b) => ({
       bindingId: b.id,
       toolId: b.tool.id,
@@ -448,7 +453,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
       threadId: issue.threadId,
       label: sessionLabel,
       userEmail,
-      anthropicSessionIds: sessionIds,
+      backendSessionIds: sessionIds,
     },
     messages,
     runs,
@@ -459,11 +464,13 @@ type RunWithEvents = {
   id: string;
   surface: string;
   sessionId: string;
+  agentVersionId: string | null;
   status: string;
   error: string | null;
   output: string | null;
   startedAt: Date;
   completedAt: Date | null;
+  agentVersion: { versionNumber: number; payload: unknown } | null;
   events: Array<{ seq: number; type: string; payload: unknown; createdAt: Date }>;
 };
 
@@ -494,6 +501,9 @@ function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
     id: r.id,
     surface: r.surface as "chat" | "email",
     sessionId: r.sessionId === "" ? null : r.sessionId,
+    agentVersionId: r.agentVersionId,
+    versionNumber: r.agentVersion?.versionNumber ?? null,
+    versionPayload: r.agentVersion?.payload ?? null,
     status: r.status,
     error: r.error,
     output: r.output,

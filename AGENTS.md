@@ -123,9 +123,10 @@ There is no longer a code path. Agents are created through the SPA:
    web/email surfaces, tick whatever **Tools** the agent needs (managed +
    platform live in the same picker, grouped by runtime), attach skill
    bundles, paste any third-party MCP server URLs.
-3. Click **Publish to Anthropic** — the backend builds the payload from
-   the bindings and calls `POST /v1/agents/{id}` (or `update`), then
-   stores the returned `anthropicAgentVersion` in `AgentVersion`.
+3. Click **Publish new version** — the backend freezes the current draft
+   config into an `AgentVersion` snapshot (system prompt, model, tools,
+   skills, MCP servers, runtime settings). Runs pin the version they
+   started with for later audit.
 4. The agent is immediately reachable at `/agents/<slug>/chat` (if web
    enabled) and at `<localPart>@<MAILGUN_DOMAIN>` (if email enabled).
 

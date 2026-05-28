@@ -73,37 +73,19 @@ for deployment-wide presets.
 
 ### Publish/version semantics
 
-Current state:
+Implemented:
 
-- The old `publishAgent()` pushed config to Anthropic and stored an
-  `AgentVersion` snapshot.
-- Daytona MVP can run without an Anthropic publish, but that means the
-  old "published version" mental model is partially bypassed.
+- **Publish new version** freezes local runtime config into
+  `AgentVersion.payload` (provider-neutral snapshot).
+- Each `AgentRun` pins `agentVersionId` at enqueue time.
+- Daytona runs against published snapshots; no Anthropic publish required.
+- Legacy Anthropic sync lives in `syncAgentToAnthropic()` (deprecated, not
+  exposed in the UI).
 
-What is needed:
+Remaining (future):
 
-- Replace "publish to Anthropic" with "publish/freeze local runtime
-  config".
-- Store a provider-neutral `AgentVersion.payload` containing:
-  - system prompt
-  - model/provider
-  - managed tools
-  - platform tools
-  - third-party MCP servers
-  - skill version pins
-  - sandbox/runtime settings
-- Link each `AgentRun` to the version/config it used, or otherwise make
-  this derivable in issue/debug bundles.
-- Update UI copy so admins understand that publish freezes local runtime
-  config instead of provisioning Anthropic resources.
-
-Acceptance criteria:
-
-- A run can be audited later against the exact agent config it used.
-- Daytona does not require `anthropicAgentId`, `environmentId`, or
-  Anthropic agent versions.
-- The old Anthropic backend can remain available during migration without
-  confusing the version model.
+- Model-provider abstraction beyond Anthropic model ids.
+- Full removal of Anthropic Managed Agents backend.
 
 ### Model-provider abstraction
 

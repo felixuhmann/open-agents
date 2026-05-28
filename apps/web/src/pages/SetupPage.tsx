@@ -176,8 +176,8 @@ export default function SetupPage({ productName }: { productName: string }) {
                     onChange={update("anthropicApiKey")}
                   />
                   <FieldDescription>
-                    The deployment vault is auto-provisioned the first time you publish an
-                    agent with attached capabilities.
+                    The deployment vault is auto-provisioned when syncing to Anthropic
+                    (legacy backend).
                   </FieldDescription>
                 </Field>
               </FieldSet>

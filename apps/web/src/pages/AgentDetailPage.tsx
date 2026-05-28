@@ -138,20 +138,22 @@ export default function AgentDetailPage() {
               )}
             </Row>
             <Separator />
-            <Row label="Anthropic agent">
+            <Row label="Published version">
               <span className="font-mono text-xs">
-                {a.anthropicAgentId ?? (
-                  <span className="text-muted-foreground">(not provisioned)</span>
+                {a.currentVersionNumber != null ? (
+                  `v${a.currentVersionNumber}`
+                ) : (
+                  <span className="text-muted-foreground">(not published)</span>
                 )}
               </span>
             </Row>
-            <Row label="Version">
-              <span className="font-mono text-xs">
-                {a.anthropicAgentVersion ?? (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </span>
-            </Row>
+            {a.publishedAt ? (
+              <Row label="Last published">
+                <span className="text-xs text-muted-foreground">
+                  {new Date(a.publishedAt).toLocaleString()}
+                </span>
+              </Row>
+            ) : null}
             <Row label="Model">
               <code className="font-mono text-xs">{a.model}</code>
             </Row>

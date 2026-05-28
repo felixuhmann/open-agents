@@ -250,13 +250,12 @@ function AgentContextCard({
         <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
           <KeyValue label="Model" value={agent.model} mono />
           <KeyValue
-            label="Anthropic agent id"
-            value={agent.anthropicAgentId}
+            label="Published version"
+            value={
+              agent.currentVersionNumber != null ? `v${agent.currentVersionNumber}` : null
+            }
             mono
-            copyable
           />
-          <KeyValue label="Environment id" value={agent.environmentId} mono copyable />
-          <KeyValue label="Published version" value={agent.anthropicAgentVersion} mono />
           <KeyValue label="Web chat" value={agent.webEnabled ? "enabled" : "disabled"} />
           <KeyValue
             label="Email"
@@ -270,15 +269,15 @@ function AgentContextCard({
 
         <div className="flex flex-col gap-2">
           <SectionLabel>
-            Anthropic session ids ({session.anthropicSessionIds.length})
+            Backend session ids ({session.backendSessionIds.length})
           </SectionLabel>
-          {session.anthropicSessionIds.length === 0 ? (
+          {session.backendSessionIds.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
               No sessions recorded for this conversation.
             </p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {session.anthropicSessionIds.map((sid) => (
+              {session.backendSessionIds.map((sid) => (
                 <CopyableMono key={sid} value={sid} />
               ))}
             </div>
@@ -396,7 +395,7 @@ function AgentContextCard({
         </CollapsibleBlock>
 
         <CollapsibleBlock
-          title="Last published payload"
+          title="Latest published config snapshot"
           subtitle={
             agent.publishedAt
               ? `published ${new Date(agent.publishedAt).toLocaleString()}`
@@ -418,7 +417,7 @@ function AgentContextCard({
             </pre>
           ) : (
             <p className="px-3 py-3 text-xs text-muted-foreground italic">
-              The agent has not been published to Anthropic yet.
+              The agent has no published version yet.
             </p>
           )}
         </CollapsibleBlock>
@@ -719,6 +718,7 @@ type UnifiedItem =
       runId: string;
       runStatus: string;
       runStartedAt: string;
+      runVersionNumber: number | null;
       sessionId: string | null;
       event: IssueDetailRunEvent;
     };
@@ -750,6 +750,7 @@ function buildUnifiedTimeline(data: IssueDetail): UnifiedItem[] {
         runId: r.id,
         runStatus: r.status,
         runStartedAt: r.startedAt,
+        runVersionNumber: r.versionNumber,
         sessionId: r.sessionId,
         event: ev,
       });
@@ -958,6 +959,7 @@ function EventEntry({ item }: { item: Extract<UnifiedItem, { kind: "event" }> })
             <div className="flex items-center justify-between gap-2 pb-1.5 text-[10px] text-muted-foreground">
               <span className="truncate">
                 run {item.runId} · status {item.runStatus}
+                {item.runVersionNumber != null ? ` · v${item.runVersionNumber}` : ""}
                 {item.sessionId ? ` · session ${item.sessionId}` : ""}
               </span>
               <CopyButton label="Copy event" value={JSON.stringify(ev, null, 2)} />
