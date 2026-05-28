@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import { getBoss } from "../jobs/queue.js";
 import { JOB_RUN_AGENT, type RunAgentJobData } from "../jobs/types.js";
+import { requirePublishedVersionId } from "../agents/snapshot.js";
 
 export type EnqueueChatTurnArgs = {
   conversationId: string;
@@ -20,9 +21,12 @@ export async function enqueueChatTurn(args: EnqueueChatTurnArgs): Promise<string
     throw new Error(`Conversation not found: ${args.conversationId}`);
   }
 
+  const agentVersionId = await requirePublishedVersionId(conversation.agentId);
+
   const run = await prisma.agentRun.create({
     data: {
       agentId: conversation.agentId,
+      agentVersionId,
       conversationId: conversation.id,
       surface: "chat",
       sessionId: conversation.anthropicSessionId ?? "",

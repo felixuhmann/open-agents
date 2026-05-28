@@ -1,4 +1,5 @@
 import { prisma } from "../db.js";
+import { requirePublishedVersionId } from "../agents/snapshot.js";
 import { getBoss } from "../jobs/queue.js";
 import { JOB_RUN_AGENT, type RunAgentJobData } from "../jobs/types.js";
 import { log } from "../log.js";
@@ -74,9 +75,12 @@ export async function ingestInboundEmail(args: {
     },
   });
 
+  const agentVersionId = await requirePublishedVersionId(agentId);
+
   const run = await prisma.agentRun.create({
     data: {
       agentId,
+      agentVersionId,
       threadId: thread.id,
       surface: "email",
       sessionId: thread.sessionId ?? "",

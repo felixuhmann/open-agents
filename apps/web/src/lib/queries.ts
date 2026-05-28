@@ -208,7 +208,9 @@ export type FullAgentDto = {
   mailgunDomain: string | null;
   anthropicAgentId: string | null;
   environmentId: string | null;
-  anthropicAgentVersion: string | null;
+  currentVersionId: string | null;
+  currentVersionNumber: number | null;
+  publishedAt: string | null;
   toolBindings: Array<{
     id: string;
     toolId: string;
@@ -492,6 +494,9 @@ export type IssueDetailRun = {
   id: string;
   surface: IssueSurface;
   sessionId: string | null;
+  agentVersionId: string | null;
+  versionNumber: number | null;
+  versionPayload: unknown;
   status: string;
   error: string | null;
   output: string | null;
@@ -555,9 +560,8 @@ export type IssueDetailAgent = {
   emailEnabled: boolean;
   webEnabled: boolean;
   inboundLocalPart: string;
-  anthropicAgentId: string | null;
-  environmentId: string | null;
-  anthropicAgentVersion: string | null;
+  currentVersionNumber: number | null;
+  currentVersionId: string | null;
   tools: IssueDetailToolBinding[];
   skills: IssueDetailSkillBinding[];
   thirdPartyMcp: IssueDetailThirdPartyMcp[];
@@ -584,7 +588,7 @@ export type IssueDetail = {
     threadId: string | null;
     label: string;
     userEmail: string | null;
-    anthropicSessionIds: string[];
+    backendSessionIds: string[];
   };
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];

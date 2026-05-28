@@ -20,6 +20,7 @@ import { Daytona, type Sandbox } from "@daytona/sdk";
 import { wrapDaytonaError } from "./daytonaErrors.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
+import { loadVersionedAgent } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
@@ -179,10 +180,14 @@ export class DaytonaAgentBackend implements AgentBackend {
 
       let skillsManifest;
       const agent = await getAgentById(input.agentId);
-      if (agent?.skillBindings.length) {
+      const skillBindings =
+        input.agentVersionId && agent
+          ? (await loadVersionedAgent(agent, input.agentVersionId)).skillBindings
+          : agent?.skillBindings;
+      if (skillBindings?.length) {
         skillsManifest = await materializeAgentSkills(
           sandbox,
-          agent.skillBindings,
+          skillBindings,
           workspaceDir,
         );
       }
@@ -232,8 +237,12 @@ export class DaytonaAgentBackend implements AgentBackend {
     try {
       const session = parseDaytonaSessionId(sessionId);
       const agentId = context?.agentId ?? session.agentId;
-      const agent = await getAgentById(agentId);
-      if (!agent) throw new AgentBackendError(`Agent not found: ${agentId}`);
+      const baseAgent = await getAgentById(agentId);
+      if (!baseAgent) throw new AgentBackendError(`Agent not found: ${agentId}`);
+
+      const agent = context?.agentVersionId
+        ? await loadVersionedAgent(baseAgent, context.agentVersionId)
+        : baseAgent;
 
       return await this.withSandbox(sessionId, async (sandbox) => {
         const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);

@@ -84,7 +84,7 @@ export default function AgentsListPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Agents"
-        description="One row per agent. Editing happens here; publish pushes the definition to Anthropic."
+        description="One row per agent. Save edits as draft; publish freezes the runtime config for new runs."
         actions={
           canManageAgents ? (
             <Dialog open={open} onOpenChange={setOpen}>

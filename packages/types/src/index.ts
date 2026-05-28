@@ -1,3 +1,4 @@
+export * from "./agentVersion.js";
 export * from "./agents.js";
 export * from "./runEvents.js";
 export * from "./skills.js";

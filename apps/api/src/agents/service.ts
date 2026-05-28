@@ -1,11 +1,9 @@
 import type { Agent, Prisma } from "@open-agents/db";
 import type { AgentModel } from "@open-agents/types";
-import { upsertAnthropicAgent } from "../anthropic/provisioning.js";
-import { ensureMcpCredential } from "../anthropic/vault.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { sealThirdPartyBearer } from "../mcp/thirdPartySecrets.js";
-import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
+import { buildAgentConfigSnapshot } from "./snapshot.js";
 
 /**
  * Hydrated Agent shape used by route handlers, the run-agent worker, and
@@ -16,6 +14,7 @@ import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
  * bindings live here, discriminated by `tool.runtime`.
  */
 export type HydratedAgent = Agent & {
+  currentVersion: Prisma.AgentVersionGetPayload<true> | null;
   toolBindings: (Prisma.AgentToolBindingGetPayload<true> & {
     tool: Prisma.ToolGetPayload<true>;
   })[];
@@ -32,6 +31,7 @@ const HYDRATED_INCLUDE = {
   skillBindings: { include: { skill: true, skillVersion: true } },
   thirdPartyMcp: true,
   access: true,
+  currentVersion: true,
 } as const satisfies Prisma.AgentInclude;
 
 const cache = new Map<string, HydratedAgent>();
@@ -82,19 +82,6 @@ export function invalidateAgent(slug?: string): void {
   else cache.clear();
 }
 
-/**
- * Anthropic stores the agent version as a positive integer. We persist
- * it as a string in `Agent.anthropicAgentVersion` (because that's what
- * the SDK exposes loosely on the response). Convert back for the
- * `agents.update` precondition; null when we have nothing on file.
- */
-function parseAnthropicVersion(raw: string | null): number | null {
-  if (!raw) return null;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 1) return null;
-  return n;
-}
-
 export async function listAgents(): Promise<HydratedAgent[]> {
   return prisma.agent.findMany({
     include: HYDRATED_INCLUDE,
@@ -111,10 +98,8 @@ export type CreateAgentArgs = {
 };
 
 /**
- * Create a new agent row. The Anthropic agent + environment are not
- * provisioned yet — the admin clicks "Publish" on the edit page to bind
- * the local row to a real Anthropic agent. This separation lets the admin
- * edit / preview before paying the latency of an Anthropic round-trip.
+ * Create a new agent row. Runtime config is draft until the admin publishes
+ * a version from the edit page.
  */
 export async function createAgent(args: CreateAgentArgs): Promise<HydratedAgent> {
   const inboundLocalPart = args.slug;
@@ -174,7 +159,7 @@ export type UpdateAgentArgs = {
  * recreate the join rows in one transaction.
  *
  * Anthropic provisioning is NOT triggered here — call `publishAgent(id)`
- * separately so the UI can batch many edits before paying the round-trip.
+ * separately so the UI can batch many edits before freezing a version.
  */
 export async function updateAgent(
   id: string,
@@ -357,92 +342,46 @@ export async function updateAgent(
 }
 
 /**
- * Materialize the current agent definition into a payload and push it to
- * Anthropic (creating or updating the agent + environment as needed).
- * Records the snapshot in `AgentVersion`.
+ * Freeze the agent's current draft config as a new published version.
+ * Runs pin this snapshot; editing bindings afterward does not affect live
+ * runs until the admin publishes again.
  */
 export async function publishAgent(id: string): Promise<HydratedAgent> {
   const agent = await getAgentById(id);
   if (!agent) throw new Error(`Agent not found: ${id}`);
 
-  const tools = agent.toolBindings.map((b) => ({
-    key: b.tool.key,
-    runtime: b.tool.runtime as "managed" | "platform",
-  }));
-  const skillIds = agent.skillBindings
-    .map((b) => b.skillVersion.anthropicSkillId)
-    .filter((v): v is string => Boolean(v));
-  const thirdPartyMcp = agent.thirdPartyMcp.map((tp) => ({
-    name: tp.label,
-    url: tp.serverUrl,
-  }));
+  const snapshot = await buildAgentConfigSnapshot(agent);
 
-  // Verify Anthropic credentials are reachable before attempting provisioning.
-  const apiKey = await getServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY);
-  if (!apiKey) {
-    throw new Error("Cannot publish: Anthropic API key not configured (visit /setup).");
-  }
-
-  const result = await upsertAnthropicAgent({
-    existingAgentId: agent.anthropicAgentId,
-    existingAgentVersion: parseAnthropicVersion(agent.anthropicAgentVersion),
-    existingEnvironmentId: agent.environmentId,
-    slug: agent.slug,
-    displayName: agent.displayName,
-    model: agent.model,
-    systemPrompt: agent.systemPrompt,
-    tools,
-    thirdPartyMcp,
-    skillIds,
+  const latest = await prisma.agentVersion.findFirst({
+    where: { agentId: agent.id },
+    orderBy: { versionNumber: "desc" },
+    select: { versionNumber: true },
   });
+  const versionNumber = (latest?.versionNumber ?? 0) + 1;
 
-  // If this agent advertises any platform tool, Anthropic's sandbox needs
-  // a `static_bearer` vault credential bound to `${PUBLIC_BASE_URL}/mcp/<slug>`
-  // before it can `initialize` the MCP handshake. Provisioning the
-  // deployment vault (first-publish ever) and the per-agent credential
-  // happens here so the publish UX is "click button, done" — no manual
-  // curl required.
-  let credential: { id: string; url: string } | null = null;
-  const hasPlatformTools = tools.some((t) => t.runtime === "platform");
-  if (hasPlatformTools) {
-    credential = await ensureMcpCredential({
-      slug: agent.slug,
-      existingId: agent.anthropicMcpCredentialId,
-      existingUrl: agent.anthropicMcpCredentialUrl,
-    });
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.agent.update({
-      where: { id: agent.id },
-      data: {
-        anthropicAgentId: result.agentId,
-        environmentId: result.environmentId,
-        anthropicAgentVersion: result.version,
-        ...(credential
-          ? {
-              anthropicMcpCredentialId: credential.id,
-              anthropicMcpCredentialUrl: credential.url,
-            }
-          : {}),
-      },
-    });
-    await tx.agentVersion.create({
+  const version = await prisma.$transaction(async (tx) => {
+    const created = await tx.agentVersion.create({
       data: {
         agentId: agent.id,
-        anthropicVersion: result.version,
-        payload: result.payload as Prisma.InputJsonValue,
+        versionNumber,
+        payload: snapshot as Prisma.InputJsonValue,
       },
     });
+    await tx.agent.update({
+      where: { id: agent.id },
+      data: { currentVersionId: created.id },
+    });
+    return created;
   });
 
   invalidateAgent(agent.slug);
   const refreshed = await getAgentById(id);
   if (!refreshed) throw new Error("Agent disappeared during publish");
-  log.info("agents: published", {
+  log.info("agents: published version", {
     id: refreshed.id,
     slug: refreshed.slug,
-    version: result.version,
+    versionId: version.id,
+    versionNumber,
   });
   return refreshed;
 }

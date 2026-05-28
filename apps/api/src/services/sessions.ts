@@ -33,10 +33,14 @@ function effectiveForceNewSession(
  * receive new resources via `mountSessionResources`.
  */
 export async function resolveEmailSessionId(
-  agent: Pick<Agent, "id" | "slug" | "anthropicAgentId" | "environmentId">,
+  agent: Pick<
+    Agent,
+    "id" | "slug" | "anthropicAgentId" | "environmentId" | "currentVersionId"
+  >,
   thread: EmailThreadSessionInput,
   resources: SessionResource[],
   forceNewSession: boolean,
+  agentVersionId?: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
   const forceNew = effectiveForceNewSession(backend.runtime, forceNewSession);
@@ -53,12 +57,19 @@ export async function resolveEmailSessionId(
     return { sessionId: thread.sessionId };
   }
 
+  if (!agent.currentVersionId) {
+    throw new Error(
+      `Agent "${agent.slug}" has no published version. Publish before running.`,
+    );
+  }
+
   if (
     backend.runtime === "anthropic" &&
     (!agent.anthropicAgentId || !agent.environmentId)
   ) {
     throw new Error(
-      `Agent is not provisioned with Anthropic yet (missing agentId or environmentId)`,
+      `Agent "${agent.slug}" is not synced with Anthropic (missing agentId or environmentId). ` +
+        `The Anthropic backend requires a legacy sync; publish a version for Daytona or contact an admin.`,
     );
   }
   const session = await backend.createSession(
@@ -74,6 +85,7 @@ export async function resolveEmailSessionId(
           agentSlug: agent.slug,
           title: thread.subject.slice(0, 120),
           resources: resources.length > 0 ? resources : undefined,
+          agentVersionId: agentVersionId ?? agent.currentVersionId,
         },
   );
   await prisma.emailThread.update({
@@ -101,10 +113,14 @@ export type ChatConversationSessionInput = {
  * there's no prior session OR `forceNewSession` is true (Anthropic only).
  */
 export async function resolveChatSessionId(
-  agent: Pick<Agent, "id" | "slug" | "anthropicAgentId" | "environmentId">,
+  agent: Pick<
+    Agent,
+    "id" | "slug" | "anthropicAgentId" | "environmentId" | "currentVersionId"
+  >,
   conversation: ChatConversationSessionInput,
   resources: SessionResource[],
   forceNewSession: boolean,
+  agentVersionId?: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
   const forceNew = effectiveForceNewSession(backend.runtime, forceNewSession);
@@ -121,12 +137,19 @@ export async function resolveChatSessionId(
     return { sessionId: conversation.anthropicSessionId };
   }
 
+  if (!agent.currentVersionId) {
+    throw new Error(
+      `Agent "${agent.slug}" has no published version. Publish before running.`,
+    );
+  }
+
   if (
     backend.runtime === "anthropic" &&
     (!agent.anthropicAgentId || !agent.environmentId)
   ) {
     throw new Error(
-      `Agent is not provisioned with Anthropic yet (missing agentId or environmentId)`,
+      `Agent "${agent.slug}" is not synced with Anthropic (missing agentId or environmentId). ` +
+        `The Anthropic backend requires a legacy sync; publish a version for Daytona or contact an admin.`,
     );
   }
   const session = await backend.createSession(
@@ -142,6 +165,7 @@ export async function resolveChatSessionId(
           agentSlug: agent.slug,
           title: conversation.title.slice(0, 120),
           resources: resources.length > 0 ? resources : undefined,
+          agentVersionId: agentVersionId ?? agent.currentVersionId,
         },
   );
   await prisma.chatConversation.update({

@@ -69,7 +69,9 @@ function toDto(
     mailgunDomain: mailgunDomain ?? null,
     anthropicAgentId: agent.anthropicAgentId,
     environmentId: agent.environmentId,
-    anthropicAgentVersion: agent.anthropicAgentVersion,
+    currentVersionId: agent.currentVersionId,
+    currentVersionNumber: agent.currentVersion?.versionNumber ?? null,
+    publishedAt: agent.currentVersion?.createdAt.toISOString() ?? null,
     toolBindings: agent.toolBindings.map((b) => ({
       id: b.id,
       toolId: b.toolId,

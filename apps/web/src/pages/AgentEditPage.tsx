@@ -233,8 +233,8 @@ export default function AgentEditPage() {
     mutationFn: () =>
       api<FullAgentDto>(`/api/agents/${slug}/publish`, { method: "POST" }),
     onSuccess: async () => {
-      toast.success("Published to Anthropic", {
-        description: "The new version is now live.",
+      toast.success("Version published", {
+        description: "The frozen config is now live for new runs.",
       });
       await qc.invalidateQueries({ queryKey: ["agents", slug] });
     },
@@ -303,7 +303,7 @@ export default function AgentEditPage() {
               ) : (
                 <CloudArrowUpIcon data-icon="inline-start" />
               )}
-              {publishMutation.isPending ? "Publishing…" : "Publish to Anthropic"}
+              {publishMutation.isPending ? "Publishing…" : "Publish new version"}
             </Button>
             <Button
               disabled={saveMutation.isPending}
@@ -554,7 +554,8 @@ export default function AgentEditPage() {
             Model
           </CardTitle>
           <CardDescription>
-            Which Anthropic model powers the agent. Re-publish to apply.
+            Which model powers the agent at runtime. Publish a new version to apply
+            changes to live runs.
           </CardDescription>
         </CardHeader>
         <CardContent>

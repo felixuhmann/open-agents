@@ -189,12 +189,17 @@ model Agent {
   /// Defaults to the slug; admin can override.
   inboundLocalPart String  @unique
 
+  /// Latest published (frozen) runtime config. Runs pin `AgentVersion` rows;
+  /// this pointer is the admin-facing "live" version for new runs.
+  currentVersionId String?       @unique
+  currentVersion   AgentVersion? @relation("AgentCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
   createdById String?
   createdBy   User?    @relation("AgentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  versions      AgentVersion[]
+  versions      AgentVersion[] @relation("AgentVersions")
   access        AgentAccess[]
   toolBindings  AgentToolBinding[]
   skillBindings AgentSkillBinding[]
@@ -208,18 +213,26 @@ model Agent {
   @@index([createdById])
 }
 
-/// Snapshot of every payload we sent to Anthropic for this agent.
-/// Used to correlate runs with the version of the agent that ran them.
+/// Immutable snapshot of agent runtime config at publish time. Provider-neutral
+/// `payload` is the source of truth for auditing runs; optional `providerRefs`
+/// holds backend-specific sync metadata (e.g. legacy Anthropic agent ids).
 model AgentVersion {
   id               String   @id @default(cuid())
   agentId          String
-  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  /// The version string Anthropic returned (their internal version).
-  anthropicVersion String?
-  /// JSON snapshot of system + tools + skills + mcp_servers payload we sent.
+  agent            Agent    @relation("AgentVersions", fields: [agentId], references: [id], onDelete: Cascade)
+  currentForAgent  Agent?   @relation("AgentCurrentVersion")
+  /// Monotonic per-agent publish counter (1, 2, 3, …).
+  versionNumber    Int
+  /// Provider-neutral frozen config (system prompt, tools, skills, runtime).
   payload          Json
+  /// Backend-specific refs from optional sync (Anthropic agent id/version, …).
+  providerRefs     Json?
+  /// @deprecated Legacy field from Anthropic-only publish. Prefer `providerRefs`.
+  anthropicVersion String?
   createdAt        DateTime @default(now())
+  runs             AgentRun[]
 
+  @@unique([agentId, versionNumber])
   @@index([agentId])
 }
 
@@ -443,6 +456,9 @@ model ChatAttachment {
 model AgentRun {
   id             String            @id @default(cuid())
   agentId        String
+  /// Frozen config this run executed against (`Agent.currentVersionId` at enqueue).
+  agentVersionId String?
+  agentVersion   AgentVersion?     @relation(fields: [agentVersionId], references: [id], onDelete: SetNull)
   /// `email` | `chat`.
   surface        String
   /// Set when surface = `email`.
@@ -465,6 +481,7 @@ model AgentRun {
   attachments    AgentAttachment[]
 
   @@index([agentId])
+  @@index([agentVersionId])
   @@index([threadId])
   @@index([conversationId])
   @@index([status])
