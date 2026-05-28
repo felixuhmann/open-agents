@@ -608,19 +608,9 @@ export type IssueDetailAgent = {
   publishedAt: string | null;
 };
 
-export type IssueDetail = {
-  id: string;
+/** Agent trace payload (chat/email session) without issue metadata. */
+export type SessionTrace = {
   surface: IssueSurface;
-  status: IssueStatus;
-  description: string;
-  reporterEmail: string;
-  reporterUserId: string | null;
-  reporterName: string | null;
-  resolvedAt: string | null;
-  resolvedByName: string | null;
-  resolvedByEmail: string | null;
-  createdAt: string;
-  updatedAt: string;
   agent: IssueDetailAgent;
   session: {
     conversationId: string | null;
@@ -633,6 +623,28 @@ export type IssueDetail = {
   messages: IssueDetailMessage[];
   runs: IssueDetailRun[];
 };
+
+export type IssueDetail = SessionTrace & {
+  id: string;
+  status: IssueStatus;
+  description: string;
+  reporterEmail: string;
+  reporterUserId: string | null;
+  reporterName: string | null;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
+  resolvedByEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function useConversationTrace(conversationId: string | undefined) {
+  return useQuery({
+    enabled: Boolean(conversationId),
+    queryKey: ["conversations", conversationId, "trace"],
+    queryFn: () => api<SessionTrace>(`/api/conversations/${conversationId}/trace`),
+  });
+}
 
 export function useIssue(id: string | undefined) {
   return useQuery({
