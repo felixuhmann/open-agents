@@ -1,15 +1,14 @@
 import type { Sandbox } from "@daytona/sdk";
+import type { SandboxCommandPolicy, SandboxNetworkPolicy } from "@open-agents/types";
 import { log } from "../log.js";
 import { shellQuote } from "./daytonaShell.js";
 import {
   DEFAULT_BASH_TIMEOUT_SECONDS,
-  MAX_BASH_TIMEOUT_SECONDS,
-  MAX_TOOL_OUTPUT_CHARS,
   TOOL_OUTPUT_EMIT_INTERVAL_MS,
   TOOL_OUTPUT_EMIT_MIN_CHARS,
   truncateText,
 } from "./daytonaLimits.js";
-import { checkShellCommand } from "./shellPolicy.js";
+import { checkShellCommand, type ShellPolicyContext } from "./shellPolicy.js";
 
 const SHELL_SESSION_ID = "open-agents-shell";
 
@@ -34,6 +33,10 @@ export type RunSandboxCommandInput = {
   workspaceDir: string;
   timeoutSeconds?: number;
   onOutput?: (chunk: CommandOutputChunk) => void;
+  policy?: {
+    network?: SandboxNetworkPolicy;
+    command?: SandboxCommandPolicy;
+  };
 };
 
 export type RunSandboxCommandResult = {
@@ -45,9 +48,33 @@ export type RunSandboxCommandResult = {
   policyBlocked?: string;
 };
 
-function clampTimeout(seconds: number | undefined): number {
-  const value = seconds ?? DEFAULT_BASH_TIMEOUT_SECONDS;
-  return Math.max(1, Math.min(value, MAX_BASH_TIMEOUT_SECONDS));
+function resolveCommandPolicy(
+  policy?: SandboxCommandPolicy,
+): Required<
+  Pick<
+    SandboxCommandPolicy,
+    "maxRuntimeSeconds" | "maxOutputChars" | "maxBackgroundProcessLifetimeSeconds"
+  >
+> {
+  return {
+    maxRuntimeSeconds: policy?.maxRuntimeSeconds ?? DEFAULT_BASH_TIMEOUT_SECONDS,
+    maxOutputChars: policy?.maxOutputChars ?? 20_000,
+    maxBackgroundProcessLifetimeSeconds:
+      policy?.maxBackgroundProcessLifetimeSeconds ?? 600,
+  };
+}
+
+function clampTimeout(
+  seconds: number | undefined,
+  policy?: SandboxCommandPolicy,
+): number {
+  const limits = resolveCommandPolicy(policy);
+  const ceiling = Math.min(
+    limits.maxRuntimeSeconds,
+    limits.maxBackgroundProcessLifetimeSeconds,
+  );
+  const value = seconds ?? limits.maxRuntimeSeconds;
+  return Math.max(1, Math.min(value, ceiling));
 }
 
 function createOutputBatcher(onOutput?: (chunk: CommandOutputChunk) => void) {
@@ -160,19 +187,24 @@ async function maybeChangeDirectory(
 export async function runSandboxCommand(
   input: RunSandboxCommandInput,
 ): Promise<RunSandboxCommandResult> {
-  const policy = checkShellCommand(input.command);
-  if (!policy.allowed) {
+  const shellCtx: ShellPolicyContext = {
+    network: input.policy?.network,
+    command: input.policy?.command,
+  };
+  const policyVerdict = checkShellCommand(input.command, shellCtx);
+  if (!policyVerdict.allowed) {
     return {
       exitCode: 1,
       stdout: "",
-      stderr: `policy blocked: ${policy.reason}`,
-      combined: `policy blocked: ${policy.reason}`,
+      stderr: `policy blocked: ${policyVerdict.reason}`,
+      combined: `policy blocked: ${policyVerdict.reason}`,
       truncated: false,
-      policyBlocked: policy.reason,
+      policyBlocked: policyVerdict.reason,
     };
   }
 
-  const timeoutSeconds = clampTimeout(input.timeoutSeconds);
+  const commandLimits = resolveCommandPolicy(input.policy?.command);
+  const timeoutSeconds = clampTimeout(input.timeoutSeconds, input.policy?.command);
   const timeoutMs = timeoutSeconds * 1000;
   const targetCwd = input.cwd || input.workspaceDir;
 
@@ -233,11 +265,12 @@ export async function runSandboxCommand(
 
   const { stdout, stderr } = batcher.finish();
   const combined = [stdout, stderr].filter(Boolean).join(stderr && stdout ? "\n" : "");
-  const truncatedStdout = truncateText(stdout, MAX_TOOL_OUTPUT_CHARS, "stdout");
-  const truncatedStderr = truncateText(stderr, MAX_TOOL_OUTPUT_CHARS, "stderr");
+  const maxOut = commandLimits.maxOutputChars;
+  const truncatedStdout = truncateText(stdout, maxOut, "stdout");
+  const truncatedStderr = truncateText(stderr, maxOut, "stderr");
   const truncatedCombined = truncateText(
     combined || `(exit ${exitCode})`,
-    MAX_TOOL_OUTPUT_CHARS,
+    maxOut,
     "output",
   );
 

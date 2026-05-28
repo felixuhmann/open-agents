@@ -222,6 +222,18 @@ export type FullAgentDto = {
   skills: Array<{ id: string; name: string; versionId: string; versionNumber: number }>;
   thirdPartyMcp: Array<{ id: string; label: string; serverUrl: string }>;
   accessUserIds: string[];
+  sandboxNetworkPolicy: {
+    internetEnabled: boolean;
+    allowList: string;
+    protectInternalNetwork: boolean;
+  };
+  sandboxCommandPolicy: {
+    denyRules: string[];
+    approvalGatePatterns: string[];
+    maxRuntimeSeconds: number;
+    maxOutputChars: number;
+    maxBackgroundProcessLifetimeSeconds: number;
+  };
   createdAt: string;
   updatedAt: string;
 };

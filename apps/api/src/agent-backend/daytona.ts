@@ -17,7 +17,7 @@ import {
   type TSchema,
 } from "@earendil-works/pi-ai";
 import { Daytona, type Sandbox } from "@daytona/sdk";
-import type { SandboxResourceMounted } from "@open-agents/types";
+import type { SandboxPolicyBundle, SandboxResourceMounted } from "@open-agents/types";
 import {
   buildDaytonaSessionId,
   ensureDaytonaSandboxReady,
@@ -28,12 +28,18 @@ import {
   sandboxContextFromSession,
   summarizeToolResultForRunLog,
 } from "../services/runObservability.js";
+import { applySandboxNetworkPolicy } from "../services/applySandboxNetworkPolicy.js";
 import { DEFAULT_DAYTONA_LIFECYCLE } from "../services/sandboxLifecyclePolicy.js";
+import {
+  resolveDraftSandboxPolicy,
+  resolvePublishedSandboxPolicy,
+  toDaytonaNetworkOptions,
+} from "../services/sandboxPolicy.js";
 import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
 import { wrapDaytonaError } from "./daytonaErrors.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
-import { loadVersionedAgent } from "../agents/snapshot.js";
+import { loadVersionedAgent, type VersionedAgent } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
@@ -71,7 +77,7 @@ import {
   type UploadFileInput,
 } from "./types.js";
 
-function truncate(text: string, maxChars = MAX_TOOL_OUTPUT_CHARS): string {
+function truncate(text: string, maxChars: number = MAX_TOOL_OUTPUT_CHARS): string {
   return truncateText(text, maxChars).text;
 }
 
@@ -132,6 +138,29 @@ export class DaytonaAgentBackend implements AgentBackend {
     try {
       const daytona = new Daytona({ apiKey: this.apiKey });
       const lifecycle = DEFAULT_DAYTONA_LIFECYCLE;
+      const baseAgent = await getAgentById(input.agentId);
+      let sandboxPolicy: SandboxPolicyBundle = baseAgent
+        ? resolveDraftSandboxPolicy(baseAgent)
+        : {
+            network: {
+              internetEnabled: true,
+              allowList: "",
+              protectInternalNetwork: true,
+            },
+            command: {
+              denyRules: [],
+              approvalGatePatterns: [],
+              maxRuntimeSeconds: 60,
+              maxOutputChars: 20_000,
+              maxBackgroundProcessLifetimeSeconds: 600,
+            },
+          };
+      if (baseAgent && input.agentVersionId) {
+        const versioned = await loadVersionedAgent(baseAgent, input.agentVersionId);
+        sandboxPolicy = resolvePublishedSandboxPolicy(versioned.configSnapshot);
+      }
+
+      const networkCreate = toDaytonaNetworkOptions(sandboxPolicy.network);
       const sandbox = await daytona.create(
         {
           name: `oa-${(input.agentSlug ?? input.agentId).replace(/[^a-z0-9-]/gi, "-").slice(0, 32)}-${randomUUID().slice(0, 8)}`,
@@ -143,9 +172,11 @@ export class DaytonaAgentBackend implements AgentBackend {
             "open-agents-agent-id": input.agentId,
             "open-agents-agent-slug": input.agentSlug ?? "",
           },
+          ...networkCreate,
         },
         { timeout: 90 },
       );
+      await applySandboxNetworkPolicy(sandbox, sandboxPolicy.network);
 
       const workspaceDir = await resolveSandboxWorkspaceDir(sandbox);
       const sessionId = buildDaytonaSessionId(input.agentId, sandbox.id);
@@ -158,7 +189,7 @@ export class DaytonaAgentBackend implements AgentBackend {
       );
 
       let skillsManifest;
-      const agent = await getAgentById(input.agentId);
+      const agent = baseAgent;
       const skillBindings =
         input.agentVersionId && agent
           ? (await loadVersionedAgent(agent, input.agentVersionId)).skillBindings
@@ -255,6 +286,9 @@ export class DaytonaAgentBackend implements AgentBackend {
       const agent = context?.agentVersionId
         ? await loadVersionedAgent(baseAgent, context.agentVersionId)
         : baseAgent;
+      const sandboxPolicy = context?.agentVersionId
+        ? resolvePublishedSandboxPolicy((agent as VersionedAgent).configSnapshot)
+        : resolveDraftSandboxPolicy(agent);
 
       return await this.withSandbox(
         sessionId,
@@ -268,7 +302,7 @@ export class DaytonaAgentBackend implements AgentBackend {
             thirdPartyBearer,
           );
           const tools = [
-            ...buildTools(agent, sandbox, workspaceDir, onEvent),
+            ...buildTools(agent, sandbox, workspaceDir, sandboxPolicy, onEvent),
             ...mcpTools,
           ];
           const model = normalizeModelId(agent.model);
@@ -604,18 +638,23 @@ function buildTools(
   agent: HydratedAgent,
   sandbox: Sandbox,
   workspaceDir: string,
+  sandboxPolicy: SandboxPolicyBundle,
   onEvent?: AgentEventHandler,
 ): AgentTool[] {
   const bound = boundManagedTools(agent);
   const tools: AgentTool[] = [];
+  const maxOutput = sandboxPolicy.command.maxOutputChars;
 
-  if (bound.has("bash")) tools.push(bashTool(sandbox, workspaceDir, onEvent));
+  if (bound.has("bash"))
+    tools.push(bashTool(sandbox, workspaceDir, sandboxPolicy, maxOutput, onEvent));
   if (bound.has("read")) tools.push(readTool(sandbox));
   if (bound.has("write")) tools.push(writeTool(sandbox));
   if (bound.has("edit")) tools.push(editTool(sandbox));
-  if (bound.has("glob")) tools.push(globTool(sandbox, workspaceDir));
-  if (bound.has("grep")) tools.push(grepTool(sandbox, workspaceDir, onEvent));
-  if (bound.has("web_fetch")) tools.push(webFetchTool(sandbox, workspaceDir));
+  if (bound.has("glob")) tools.push(globTool(sandbox, workspaceDir, maxOutput));
+  if (bound.has("grep"))
+    tools.push(grepTool(sandbox, workspaceDir, sandboxPolicy, maxOutput, onEvent));
+  if (bound.has("web_fetch"))
+    tools.push(webFetchTool(sandbox, workspaceDir, sandboxPolicy, maxOutput));
 
   return tools;
 }
@@ -641,6 +680,8 @@ function emitToolOutput(
 function bashTool(
   sandbox: Sandbox,
   workspaceDir: string,
+  sandboxPolicy: SandboxPolicyBundle,
+  maxOutput: number,
   onEvent?: AgentEventHandler,
 ): AgentTool {
   return makeTool({
@@ -666,10 +707,11 @@ function bashTool(
         cwd: p.cwd ?? workspaceDir,
         workspaceDir,
         timeoutSeconds: p.timeoutSeconds,
+        policy: sandboxPolicy,
         onOutput: (chunk) =>
           emitToolOutput(onEvent, "bash", toolCallId, chunk.stream, chunk.text),
       });
-      const text = truncate(formatCommandResult(result));
+      const text = truncate(formatCommandResult(result), maxOutput);
       return {
         content: [{ type: "text", text }],
         details: result,
@@ -756,7 +798,7 @@ function editTool(sandbox: Sandbox): AgentTool {
   });
 }
 
-function globTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
+function globTool(sandbox: Sandbox, workspaceDir: string, maxOutput: number): AgentTool {
   return makeTool({
     name: "glob",
     label: "Glob",
@@ -774,7 +816,7 @@ function globTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
         content: [
           {
             type: "text",
-            text: truncate(JSON.stringify(result.files ?? result, null, 2)),
+            text: truncate(JSON.stringify(result.files ?? result, null, 2), maxOutput),
           },
         ],
         details: result,
@@ -786,6 +828,8 @@ function globTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
 function grepTool(
   sandbox: Sandbox,
   workspaceDir: string,
+  sandboxPolicy: SandboxPolicyBundle,
+  maxOutput: number,
   onEvent?: AgentEventHandler,
 ): AgentTool {
   return makeTool({
@@ -807,10 +851,11 @@ function grepTool(
         cwd: workspaceDir,
         workspaceDir,
         timeoutSeconds: DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
+        policy: sandboxPolicy,
         onOutput: (chunk) =>
           emitToolOutput(onEvent, "grep", toolCallId, chunk.stream, chunk.text),
       });
-      const text = truncate(formatCommandResult(result));
+      const text = truncate(formatCommandResult(result), maxOutput);
       return {
         content: [{ type: "text", text }],
         details: result,
@@ -819,7 +864,12 @@ function grepTool(
   });
 }
 
-function webFetchTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
+function webFetchTool(
+  sandbox: Sandbox,
+  workspaceDir: string,
+  sandboxPolicy: SandboxPolicyBundle,
+  maxOutput: number,
+): AgentTool {
   return makeTool({
     name: "web_fetch",
     label: "Web fetch",
@@ -829,16 +879,21 @@ function webFetchTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { url: string };
-      const result = await sandbox.process.executeCommand(
-        bashCommand(
-          `python3 - <<'PY'\nimport urllib.request\nurl = ${JSON.stringify(p.url)}\nwith urllib.request.urlopen(url, timeout=20) as r:\n    print(r.read().decode('utf-8', 'replace'))\nPY`,
-        ),
-        workspaceDir,
-        undefined,
-        30,
+      const command = bashCommand(
+        `python3 - <<'PY'\nimport urllib.request\nurl = ${JSON.stringify(p.url)}\nwith urllib.request.urlopen(url, timeout=20) as r:\n    print(r.read().decode('utf-8', 'replace'))\nPY`,
       );
+      const result = await runSandboxCommand({
+        sandbox,
+        command,
+        cwd: workspaceDir,
+        workspaceDir,
+        timeoutSeconds: DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
+        policy: sandboxPolicy,
+      });
       return {
-        content: [{ type: "text", text: truncate(result.result) }],
+        content: [
+          { type: "text", text: truncate(formatCommandResult(result), maxOutput) },
+        ],
         details: result,
       };
     },
