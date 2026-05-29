@@ -221,7 +221,8 @@ export type FullAgentDto = {
   skillIds: string[];
   skillBindings: Array<{ skillId: string; skillVersionId: string }>;
   skills: Array<{ id: string; name: string; versionId: string; versionNumber: number }>;
-  thirdPartyMcp: Array<{ id: string; label: string; serverUrl: string }>;
+  mcpServers: Array<{ id: string; name: string; label: string; serverUrl: string }>;
+  mcpServerIds: string[];
   accessUserIds: string[];
   sandboxNetworkPolicy: {
     internetEnabled: boolean;
@@ -318,6 +319,26 @@ export function useSkills() {
   return useQuery({
     queryKey: ["skills"],
     queryFn: () => api<{ skills: SkillDto[] }>("/api/skills").then((r) => r.skills),
+  });
+}
+
+export type McpServerDto = {
+  id: string;
+  name: string;
+  label: string;
+  description: string | null;
+  serverUrl: string;
+  hasBearer: boolean;
+  agentCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function useMcpServers() {
+  return useQuery({
+    queryKey: ["mcp-servers"],
+    queryFn: () =>
+      api<{ servers: McpServerDto[] }>("/api/mcp-servers").then((r) => r.servers),
   });
 }
 
@@ -603,7 +624,7 @@ export type IssueDetailAgent = {
   currentVersionId: string | null;
   tools: IssueDetailToolBinding[];
   skills: IssueDetailSkillBinding[];
-  thirdPartyMcp: IssueDetailThirdPartyMcp[];
+  mcpServers: IssueDetailThirdPartyMcp[];
   publishedPayload: unknown;
   publishedAt: string | null;
 };

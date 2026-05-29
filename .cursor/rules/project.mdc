@@ -43,7 +43,7 @@ at publish time in
 Don't reach into the binding payload from elsewhere — the `runtime`
 discriminator is the only thing application code should care about.
 
-External (user-supplied) MCP servers stay on `AgentThirdPartyMcp`. They
+External MCP servers live in `McpServer` and attach via `AgentMcpBinding`. They
 are per-agent endpoints, not catalog rows.
 
 ### Defining a platform tool

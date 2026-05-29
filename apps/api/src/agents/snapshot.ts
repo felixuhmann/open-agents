@@ -44,10 +44,10 @@ export async function buildAgentConfigSnapshot(
     modelId: agent.modelId,
     managedTools,
     platformTools,
-    thirdPartyMcp: agent.thirdPartyMcp.map((m) => ({
-      id: m.id,
-      label: m.label,
-      serverUrl: m.serverUrl,
+    thirdPartyMcp: agent.mcpBindings.map((b) => ({
+      mcpServerId: b.mcpServer.id,
+      label: b.mcpServer.label,
+      serverUrl: b.mcpServer.serverUrl,
     })),
     skillBindings: agent.skillBindings.map((b) => ({
       skillId: b.skillId,
@@ -157,8 +157,8 @@ export async function loadVersionedAgent(
     });
   }
 
-  const mcpIds = new Set(snapshot.thirdPartyMcp.map((m) => m.id));
-  const thirdPartyMcp = agent.thirdPartyMcp.filter((m) => mcpIds.has(m.id));
+  const mcpServerIds = new Set(snapshot.thirdPartyMcp.map((m) => m.mcpServerId));
+  const mcpBindings = agent.mcpBindings.filter((b) => mcpServerIds.has(b.mcpServerId));
 
   return {
     ...agent,
@@ -167,7 +167,7 @@ export async function loadVersionedAgent(
     modelId: snapshot.modelId,
     toolBindings,
     skillBindings,
-    thirdPartyMcp,
+    mcpBindings,
     agentVersionId: version.id,
     versionNumber: version.versionNumber,
     configSnapshot: snapshot,

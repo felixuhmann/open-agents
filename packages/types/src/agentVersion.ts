@@ -24,12 +24,15 @@ export const AgentConfigSkillBinding = z.object({
 });
 export type AgentConfigSkillBinding = z.infer<typeof AgentConfigSkillBinding>;
 
-export const AgentConfigThirdPartyMcp = z.object({
-  id: z.string(),
+export const AgentConfigMcpServer = z.object({
+  mcpServerId: z.string(),
   label: z.string(),
   serverUrl: z.string(),
 });
-export type AgentConfigThirdPartyMcp = z.infer<typeof AgentConfigThirdPartyMcp>;
+export type AgentConfigMcpServer = z.infer<typeof AgentConfigMcpServer>;
+
+/** @deprecated Alias for `AgentConfigMcpServer`. */
+export type AgentConfigThirdPartyMcp = AgentConfigMcpServer;
 
 export const AgentConfigRuntime = z.object({
   backend: z.enum(["anthropic", "daytona"]),
@@ -54,7 +57,16 @@ export const AgentConfigSnapshot = z.object({
   modelId: z.string().min(1),
   managedTools: z.array(AgentConfigToolBinding),
   platformTools: z.array(AgentConfigToolBinding),
-  thirdPartyMcp: z.array(AgentConfigThirdPartyMcp),
+  thirdPartyMcp: z.preprocess((val: unknown) => {
+    if (!Array.isArray(val)) return val;
+    return val.map((row: unknown) => {
+      if (!row || typeof row !== "object") return row;
+      const r = row as Record<string, unknown>;
+      if (typeof r.mcpServerId === "string") return row;
+      if (typeof r.id === "string") return { ...r, mcpServerId: r.id };
+      return row;
+    });
+  }, z.array(AgentConfigMcpServer)),
   skillBindings: z.array(AgentConfigSkillBinding),
   runtime: AgentConfigRuntime,
 });

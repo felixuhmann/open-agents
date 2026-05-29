@@ -97,11 +97,13 @@ function toDto(
       versionId: s.skillVersion.id,
       versionNumber: s.skillVersion.versionNumber,
     })),
-    thirdPartyMcp: agent.thirdPartyMcp.map((m) => ({
-      id: m.id,
-      label: m.label,
-      serverUrl: m.serverUrl,
+    mcpServers: agent.mcpBindings.map((b) => ({
+      id: b.mcpServer.id,
+      name: b.mcpServer.name,
+      label: b.mcpServer.label,
+      serverUrl: b.mcpServer.serverUrl,
     })),
+    mcpServerIds: agent.mcpBindings.map((b) => b.mcpServerId),
     accessUserIds: agent.access.map((a) => a.userId),
     sandboxNetworkPolicy: sandboxPolicy.network,
     sandboxCommandPolicy: sandboxPolicy.command,

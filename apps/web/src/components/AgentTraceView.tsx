@@ -273,14 +273,12 @@ function AgentContextCard({
         <Separator />
 
         <div className="flex flex-col gap-2">
-          <SectionLabel>
-            Third-party MCP servers ({agent.thirdPartyMcp.length})
-          </SectionLabel>
-          {agent.thirdPartyMcp.length === 0 ? (
+          <SectionLabel>Third-party MCP servers ({agent.mcpServers.length})</SectionLabel>
+          {agent.mcpServers.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">None configured.</p>
           ) : (
             <ul className="flex flex-col gap-1">
-              {agent.thirdPartyMcp.map((m) => (
+              {agent.mcpServers.map((m) => (
                 <li
                   key={m.id}
                   className="flex flex-wrap items-center gap-2 border bg-card px-2 py-1 text-xs"

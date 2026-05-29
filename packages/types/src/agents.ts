@@ -119,16 +119,8 @@ export const UpdateAgentInput = z.object({
       }),
     )
     .optional(),
-  thirdPartyMcp: z
-    .array(
-      z.object({
-        id: z.string().optional(),
-        label: z.string().min(1),
-        serverUrl: z.string().url(),
-        bearer: z.string().optional(),
-      }),
-    )
-    .optional(),
+  /** Replace-semantics: MCP servers from the library attached to this agent. */
+  mcpServerIds: z.array(z.string()).optional(),
   accessUserIds: z.array(z.string()).optional(),
   sandboxNetworkPolicy: SandboxNetworkPolicySchema.optional(),
   sandboxCommandPolicy: SandboxCommandPolicySchema.optional(),

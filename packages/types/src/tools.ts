@@ -6,7 +6,7 @@ import { z } from "zod";
  * is our backend, served from the per-agent `/mcp/<slug>` endpoint.
  *
  * External (user-supplied) MCP servers are tracked separately on
- * `AgentThirdPartyMcp` — they are per-agent endpoints, not catalog rows.
+ * `McpServer` library entries — attached per agent via `AgentMcpBinding`, not tool catalog rows.
  */
 export const ToolRuntime = z.enum(["managed", "platform"]);
 export type ToolRuntime = z.infer<typeof ToolRuntime>;

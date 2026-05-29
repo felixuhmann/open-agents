@@ -209,7 +209,7 @@ model Agent {
   access        AgentAccess[]
   toolBindings  AgentToolBinding[]
   skillBindings AgentSkillBinding[]
-  thirdPartyMcp AgentThirdPartyMcp[]
+  mcpBindings   AgentMcpBinding[]
   memoryDocs    MemoryDoc[]
   conversations ChatConversation[]
   emailThreads  EmailThread[]
@@ -270,8 +270,32 @@ model AgentAccess {
 ///   server. `key` is the `handlerKey` registered in
 ///   `apps/api/src/mcp/platform/index.ts`.
 ///
-/// External (user-supplied) MCP servers stay in `AgentThirdPartyMcp` as
-/// per-agent endpoints; they are not catalog entries.
+/// Deployment-wide third-party MCP server registry.
+model McpServer {
+  id           String            @id @default(cuid())
+  name         String            @unique
+  label        String
+  description  String?
+  serverUrl    String
+  bearerCipher Bytes?
+  bearerIv     Bytes?
+  bearerTag    Bytes?
+  bindings     AgentMcpBinding[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model AgentMcpBinding {
+  agentId     String
+  mcpServerId String
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  mcpServer   McpServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([agentId, mcpServerId])
+  @@index([mcpServerId])
+}
+
 model Tool {
   id              String             @id @default(cuid())
   /// Stable identifier. For `managed`: the toolset member name (`bash`,
@@ -311,26 +335,6 @@ model AgentToolBinding {
 
   @@unique([agentId, toolId])
   @@index([toolId])
-}
-
-/// User-provided third-party MCP server URL (e.g. an external Notion MCP).
-/// Sent to Anthropic on the agent's `mcp_servers` list; Anthropic's sandbox
-/// hits it directly — this backend does not proxy traffic.
-model AgentThirdPartyMcp {
-  id           String   @id @default(cuid())
-  agentId      String
-  /// Human-friendly label shown in the UI.
-  label        String
-  serverUrl    String
-  /// Optional bearer token stored in Secret (FK by toolBindingId is awkward
-  /// here — we just store it inline encrypted for v1).
-  bearerCipher Bytes?
-  bearerIv     Bytes?
-  bearerTag    Bytes?
-  agent        Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
-
-  @@index([agentId])
 }
 
 /// Stable skill family shown in the library. Bundle uploads are immutable

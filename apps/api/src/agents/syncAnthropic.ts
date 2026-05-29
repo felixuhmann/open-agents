@@ -5,6 +5,7 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
 import type { HydratedAgent } from "./service.js";
+import { listAgentMcpServers } from "./service.js";
 import { parseAgentConfigSnapshot } from "./snapshot.js";
 
 function parseAnthropicVersion(raw: string | null): number | null {
@@ -33,7 +34,7 @@ export async function syncAgentToAnthropic(agent: HydratedAgent): Promise<void> 
   const skillIds = agent.skillBindings
     .map((b) => b.skillVersion.anthropicSkillId)
     .filter((v): v is string => Boolean(v));
-  const thirdPartyMcp = agent.thirdPartyMcp.map((tp) => ({
+  const thirdPartyMcp = listAgentMcpServers(agent).map((tp) => ({
     name: tp.label,
     url: tp.serverUrl,
   }));

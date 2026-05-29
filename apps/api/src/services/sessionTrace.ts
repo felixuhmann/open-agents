@@ -109,7 +109,7 @@ export type IssueDetailAgent = {
   currentVersionId: string | null;
   tools: IssueDetailToolBinding[];
   skills: IssueDetailSkillBinding[];
-  thirdPartyMcp: IssueDetailThirdPartyMcp[];
+  mcpServers: IssueDetailThirdPartyMcp[];
   publishedPayload: unknown;
   publishedAt: string | null;
 };
@@ -132,7 +132,7 @@ export type SessionTrace = {
 const agentInclude = {
   toolBindings: { include: { tool: true } },
   skillBindings: { include: { skill: true, skillVersion: true } },
-  thirdPartyMcp: true,
+  mcpBindings: { include: { mcpServer: true } },
   versions: { orderBy: { createdAt: "desc" as const }, take: 1 },
   currentVersion: true,
 } as const;
@@ -173,7 +173,9 @@ type AgentWithBindings = {
       anthropicSkillVersion: string | null;
     };
   }>;
-  thirdPartyMcp: Array<{ id: string; label: string; serverUrl: string }>;
+  mcpBindings: Array<{
+    mcpServer: { id: string; name: string; label: string; serverUrl: string };
+  }>;
 };
 
 type RunWithEvents = {
@@ -223,10 +225,10 @@ function toIssueDetailAgent(agent: AgentWithBindings): IssueDetailAgent {
       anthropicSkillId: b.skillVersion.anthropicSkillId,
       anthropicSkillVersion: b.skillVersion.anthropicSkillVersion,
     })),
-    thirdPartyMcp: agent.thirdPartyMcp.map((m) => ({
-      id: m.id,
-      label: m.label,
-      serverUrl: m.serverUrl,
+    mcpServers: agent.mcpBindings.map((b) => ({
+      id: b.mcpServer.id,
+      label: b.mcpServer.label,
+      serverUrl: b.mcpServer.serverUrl,
     })),
     publishedPayload: latestVersion?.payload ?? null,
     publishedAt: latestVersion?.createdAt.toISOString() ?? null,
