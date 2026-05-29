@@ -9,7 +9,6 @@ import {
 } from "../services/sandboxPolicy.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
-import { sealThirdPartyBearer } from "../mcp/thirdPartySecrets.js";
 import { buildAgentConfigSnapshot } from "./snapshot.js";
 
 /**
@@ -29,17 +28,25 @@ export type HydratedAgent = Agent & {
     skill: Prisma.SkillGetPayload<true>;
     skillVersion: Prisma.SkillVersionGetPayload<true>;
   })[];
-  thirdPartyMcp: Prisma.AgentThirdPartyMcpGetPayload<true>[];
+  mcpBindings: (Prisma.AgentMcpBindingGetPayload<true> & {
+    mcpServer: Prisma.McpServerGetPayload<true>;
+  })[];
   access: Prisma.AgentAccessGetPayload<true>[];
 };
 
 const HYDRATED_INCLUDE = {
   toolBindings: { include: { tool: true } },
   skillBindings: { include: { skill: true, skillVersion: true } },
-  thirdPartyMcp: true,
+  mcpBindings: { include: { mcpServer: true } },
   access: true,
   currentVersion: true,
 } as const satisfies Prisma.AgentInclude;
+
+export function listAgentMcpServers(
+  agent: Pick<HydratedAgent, "mcpBindings">,
+): Prisma.McpServerGetPayload<true>[] {
+  return agent.mcpBindings.map((b) => b.mcpServer);
+}
 
 const cache = new Map<string, HydratedAgent>();
 
@@ -157,7 +164,7 @@ export type UpdateAgentArgs = {
   toolBindings?: { toolId: string; configJson?: Record<string, unknown> }[];
   skillIds?: string[];
   skillBindings?: { skillId: string; skillVersionId: string }[];
-  thirdPartyMcp?: { id?: string; label: string; serverUrl: string; bearer?: string }[];
+  mcpServerIds?: string[];
   accessUserIds?: string[];
   sandboxNetworkPolicy?: SandboxNetworkPolicy;
   sandboxCommandPolicy?: SandboxCommandPolicy;
@@ -165,7 +172,7 @@ export type UpdateAgentArgs = {
 
 /**
  * Patch a hydrated agent. Bindings (`toolBindings`, `skillIds`,
- * `thirdPartyMcp`, `accessUserIds`) are replace-semantics: we delete +
+ * `mcpServerIds`, `accessUserIds`) are replace-semantics: we delete +
  * recreate the join rows in one transaction.
  *
  * Anthropic provisioning is NOT triggered here — call `publishAgent(id)`
@@ -281,6 +288,23 @@ export async function updateAgent(
       .filter((v): v is { skillId: string; skillVersionId: string } => Boolean(v));
   }
 
+  let resolvedMcpServerIds: string[] | undefined = args.mcpServerIds;
+  if (args.mcpServerIds && args.mcpServerIds.length > 0) {
+    const existing = await prisma.mcpServer.findMany({
+      where: { id: { in: args.mcpServerIds } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((m) => m.id));
+    const missing = args.mcpServerIds.filter((mid) => !existingIds.has(mid));
+    if (missing.length > 0) {
+      log.warn("agents: dropping unknown MCP server ids on update", {
+        agentId: id,
+        missing,
+      });
+      resolvedMcpServerIds = args.mcpServerIds.filter((mid) => existingIds.has(mid));
+    }
+  }
+
   let resolvedAccessUserIds: string[] | undefined = args.accessUserIds;
   if (args.accessUserIds && args.accessUserIds.length > 0) {
     const existing = await prisma.user.findMany({
@@ -331,38 +355,12 @@ export async function updateAgent(
       }
     }
 
-    if (args.thirdPartyMcp) {
-      const existingByLabel = await tx.agentThirdPartyMcp.findMany({
-        where: { agentId: id },
-      });
-      const incomingIds = new Set(args.thirdPartyMcp.map((m) => m.id).filter(Boolean));
-      for (const old of existingByLabel) {
-        if (!incomingIds.has(old.id)) {
-          await tx.agentThirdPartyMcp.delete({ where: { id: old.id } });
-        }
-      }
-      for (const m of args.thirdPartyMcp) {
-        const bearerData =
-          m.bearer !== undefined
-            ? m.bearer.trim()
-              ? sealThirdPartyBearer(m.bearer.trim())
-              : {
-                  bearerCipher: null,
-                  bearerIv: null,
-                  bearerTag: null,
-                }
-            : {};
-
-        if (m.id) {
-          await tx.agentThirdPartyMcp.update({
-            where: { id: m.id },
-            data: { label: m.label, serverUrl: m.serverUrl, ...bearerData },
-          });
-        } else {
-          await tx.agentThirdPartyMcp.create({
-            data: { agentId: id, label: m.label, serverUrl: m.serverUrl, ...bearerData },
-          });
-        }
+    if (resolvedMcpServerIds) {
+      await tx.agentMcpBinding.deleteMany({ where: { agentId: id } });
+      if (resolvedMcpServerIds.length > 0) {
+        await tx.agentMcpBinding.createMany({
+          data: resolvedMcpServerIds.map((mcpServerId) => ({ agentId: id, mcpServerId })),
+        });
       }
     }
   });

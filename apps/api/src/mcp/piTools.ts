@@ -40,7 +40,7 @@ function platformToolLabel(handlerName: string, toolName: string): string {
  * Build Pi `AgentTool` definitions for platform bindings (host-side) and
  * third-party MCP servers (orchestrator-side MCP client).
  *
- * `thirdPartyBearer` maps `AgentThirdPartyMcp.id` → decrypted bearer token.
+ * `thirdPartyBearer` maps `McpServer.id` → decrypted bearer token.
  */
 export function buildPlatformPiTools(agent: HydratedAgent): AgentTool[] {
   const tools: AgentTool[] = [];
@@ -95,10 +95,10 @@ export async function buildThirdPartyPiTools(
   agent: HydratedAgent,
   thirdPartyBearer: ReadonlyMap<string, string>,
 ): Promise<{ tools: AgentTool[]; connections: ThirdPartyMcpConnection[] }> {
-  const servers = agent.thirdPartyMcp.map((row) => ({
-    label: row.label,
-    serverUrl: row.serverUrl,
-    bearer: thirdPartyBearer.get(row.id) ?? null,
+  const servers = agent.mcpBindings.map((binding) => ({
+    label: binding.mcpServer.label,
+    serverUrl: binding.mcpServer.serverUrl,
+    bearer: thirdPartyBearer.get(binding.mcpServer.id) ?? null,
   }));
 
   if (!servers.length) {

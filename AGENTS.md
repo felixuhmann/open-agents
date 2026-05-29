@@ -156,7 +156,7 @@ picker. The Anthropic-specific layout (`agent_toolset_20260401` block,
 a future non-Anthropic backend means writing one new translator there.
 
 External (user-supplied) MCP servers stay separate as
-`AgentThirdPartyMcp` — they are per-agent endpoints, not catalog entries.
+`McpServer` + `AgentMcpBinding` — deployment-wide MCP library entries attached per agent.
 
 #### Defining a platform tool
 

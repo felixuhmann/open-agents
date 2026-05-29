@@ -10,7 +10,7 @@ import {
   IdentificationCardIcon,
   ImageIcon,
   MagnifyingGlassIcon,
-  PlusIcon,
+  PlugsConnectedIcon,
   PuzzlePieceIcon,
   ShieldCheckIcon,
   TrashIcon,
@@ -23,6 +23,7 @@ import {
   type FullAgentDto,
   useAgent,
   useAgentAccess,
+  useMcpServers,
   useSkills,
   useTools,
 } from "@/lib/queries";
@@ -83,13 +84,7 @@ type EditState = {
   inboundLocalPart: string;
   toolIds: string[];
   skillBindings: Array<{ skillId: string; skillVersionId: string }>;
-  thirdPartyMcp: Array<{
-    id?: string;
-    label: string;
-    serverUrl: string;
-    /** Set only when the operator enters or clears a bearer token. */
-    bearer?: string;
-  }>;
+  mcpServerIds: string[];
   sandboxInternetEnabled: boolean;
   sandboxAllowList: string;
   sandboxProtectInternalNetwork: boolean;
@@ -116,11 +111,7 @@ function fromDto(a: FullAgentDto): EditState {
     skillBindings:
       a.skillBindings ??
       a.skills.map((s) => ({ skillId: s.id, skillVersionId: s.versionId })),
-    thirdPartyMcp: a.thirdPartyMcp.map((m) => ({
-      id: m.id,
-      label: m.label,
-      serverUrl: m.serverUrl,
-    })),
+    mcpServerIds: a.mcpServerIds ?? a.mcpServers.map((m) => m.id),
     sandboxInternetEnabled: a.sandboxNetworkPolicy.internetEnabled,
     sandboxAllowList: a.sandboxNetworkPolicy.allowList,
     sandboxProtectInternalNetwork: a.sandboxNetworkPolicy.protectInternalNetwork,
@@ -145,6 +136,7 @@ export default function AgentEditPage() {
   const agent = useAgent(slug);
   const tools = useTools();
   const skills = useSkills();
+  const mcpServers = useMcpServers();
   const access = useAgentAccess(slug);
   const qc = useQueryClient();
   const [state, setState] = useState<EditState | null>(null);
@@ -171,12 +163,7 @@ export default function AgentEditPage() {
           inboundLocalPart: s.inboundLocalPart,
           toolBindings: s.toolIds.map((id) => ({ toolId: id })),
           skillBindings: s.skillBindings,
-          thirdPartyMcp: s.thirdPartyMcp.map((m) => ({
-            id: m.id,
-            label: m.label,
-            serverUrl: m.serverUrl,
-            ...(m.bearer !== undefined ? { bearer: m.bearer } : {}),
-          })),
+          mcpServerIds: s.mcpServerIds,
           sandboxNetworkPolicy: {
             internetEnabled: s.sandboxInternetEnabled,
             allowList: s.sandboxAllowList.trim(),
@@ -889,93 +876,55 @@ export default function AgentEditPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CloudArrowUpIcon className="size-4" weight="duotone" />
-            Third-party MCP servers
+            <PlugsConnectedIcon className="size-4" weight="duotone" />
+            MCP servers
           </CardTitle>
           <CardDescription>
-            Remote MCP servers for this agent. With Daytona, the orchestrator connects on
-            each run; with Anthropic Managed Agents, the hosted sandbox connects directly.
+            Attach servers from the{" "}
+            <Link
+              to="/library/mcp"
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              MCP library
+            </Link>
+            . Credentials are managed centrally; publish after changing attachments.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <FieldGroup>
-            {state.thirdPartyMcp.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No servers configured.</p>
-            ) : (
-              state.thirdPartyMcp.map((m, idx) => (
-                <Field key={m.id ?? idx} orientation="responsive" className="items-end">
-                  <FieldContent>
-                    <FieldLabel htmlFor={`mcp-label-${idx}`}>Label</FieldLabel>
-                    <Input
-                      id={`mcp-label-${idx}`}
-                      placeholder="my-server"
-                      value={m.label}
-                      onChange={(e) => {
-                        const next = [...state.thirdPartyMcp];
-                        next[idx] = { ...m, label: e.target.value };
-                        setS({ thirdPartyMcp: next });
-                      }}
-                    />
-                  </FieldContent>
-                  <FieldContent>
-                    <FieldLabel htmlFor={`mcp-url-${idx}`}>Server URL</FieldLabel>
-                    <Input
-                      id={`mcp-url-${idx}`}
-                      placeholder="https://…"
-                      className="font-mono"
-                      value={m.serverUrl}
-                      onChange={(e) => {
-                        const next = [...state.thirdPartyMcp];
-                        next[idx] = { ...m, serverUrl: e.target.value };
-                        setS({ thirdPartyMcp: next });
-                      }}
-                    />
-                  </FieldContent>
-                  <FieldContent>
-                    <FieldLabel htmlFor={`mcp-bearer-${idx}`}>Bearer token</FieldLabel>
-                    <Input
-                      id={`mcp-bearer-${idx}`}
-                      type="password"
-                      autoComplete="off"
-                      placeholder={m.id ? "Leave blank to keep stored token" : "Optional"}
-                      value={m.bearer ?? ""}
-                      onChange={(e) => {
-                        const next = [...state.thirdPartyMcp];
-                        next[idx] = { ...m, bearer: e.target.value };
-                        setS({ thirdPartyMcp: next });
-                      }}
-                    />
-                  </FieldContent>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    aria-label="Remove MCP server"
-                    onClick={() =>
-                      setS({
-                        thirdPartyMcp: state.thirdPartyMcp.filter((_, i) => i !== idx),
-                      })
-                    }
+          {mcpServers.data?.length ? (
+            <CheckboxGrid
+              items={mcpServers.data.map((m) => ({
+                id: m.id,
+                title: m.label,
+                description: `${m.name} · ${m.serverUrl}`,
+              }))}
+              selected={state.mcpServerIds}
+              onToggle={(id, on) => {
+                const next = new Set(state.mcpServerIds);
+                if (on) next.add(id);
+                else next.delete(id);
+                setS({ mcpServerIds: [...next] });
+              }}
+            />
+          ) : (
+            <Empty className="py-6">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <PlugsConnectedIcon />
+                </EmptyMedia>
+                <EmptyTitle>No MCP servers in the library</EmptyTitle>
+                <EmptyDescription>
+                  <Link
+                    to="/library/mcp"
+                    className="text-primary underline-offset-4 hover:underline"
                   >
-                    <TrashIcon />
-                  </Button>
-                </Field>
-              ))
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              className="w-fit"
-              onClick={() =>
-                setS({
-                  thirdPartyMcp: [...state.thirdPartyMcp, { label: "", serverUrl: "" }],
-                })
-              }
-            >
-              <PlusIcon data-icon="inline-start" />
-              Add MCP server
-            </Button>
-          </FieldGroup>
+                    Add an MCP server
+                  </Link>{" "}
+                  before attaching it here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
         </CardContent>
       </Card>
     </div>

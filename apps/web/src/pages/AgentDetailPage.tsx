@@ -187,7 +187,7 @@ export default function AgentDetailPage() {
               <ChipList values={a.toolBindings.map((b) => b.tool.name)} />
             </Row>
             <Row label="Third-party MCP">
-              <ChipList values={a.thirdPartyMcp.map((m) => m.label)} />
+              <ChipList values={a.mcpServers.map((m) => m.label)} />
             </Row>
           </CardContent>
         </Card>

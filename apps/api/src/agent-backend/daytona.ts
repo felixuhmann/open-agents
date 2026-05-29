@@ -40,7 +40,8 @@ import { loadVersionedAgent, type VersionedAgent } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
-import { loadThirdPartyBearerMap } from "../mcp/thirdPartySecrets.js";
+import { loadMcpServerBearerMap } from "../mcp/mcpServerSecrets.js";
+import { listAgentMcpServers } from "../agents/service.js";
 import {
   materializeAgentSkills,
   skillSandboxRootFor,
@@ -283,7 +284,7 @@ export class DaytonaAgentBackend implements AgentBackend {
           const priorMessages = context
             ? await loadPriorMessages(context, model)
             : ([] satisfies Message[]);
-          const thirdPartyBearer = loadThirdPartyBearerMap(agent.thirdPartyMcp);
+          const thirdPartyBearer = loadMcpServerBearerMap(listAgentMcpServers(agent));
           const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
             agent,
             thirdPartyBearer,

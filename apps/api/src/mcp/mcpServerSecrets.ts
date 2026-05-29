@@ -1,4 +1,4 @@
-import type { AgentThirdPartyMcp } from "@open-agents/db";
+import type { McpServer } from "@open-agents/db";
 import { seal, unseal } from "../secrets/crypto.js";
 
 function bytes(b: Buffer): Uint8Array<ArrayBuffer> {
@@ -13,7 +13,7 @@ export type SealedInlineSecret = {
   bearerTag: Uint8Array<ArrayBuffer>;
 };
 
-export function sealThirdPartyBearer(bearer: string): SealedInlineSecret {
+export function sealMcpServerBearer(bearer: string): SealedInlineSecret {
   const sealed = seal(bearer);
   return {
     bearerCipher: bytes(sealed.ciphertext),
@@ -22,7 +22,7 @@ export function sealThirdPartyBearer(bearer: string): SealedInlineSecret {
   };
 }
 
-export function decryptThirdPartyBearer(row: AgentThirdPartyMcp): string | null {
+export function decryptMcpServerBearer(row: McpServer): string | null {
   if (!row.bearerCipher || !row.bearerIv || !row.bearerTag) return null;
   return unseal({
     ciphertext: Buffer.from(row.bearerCipher),
@@ -31,10 +31,10 @@ export function decryptThirdPartyBearer(row: AgentThirdPartyMcp): string | null 
   });
 }
 
-export function loadThirdPartyBearerMap(rows: AgentThirdPartyMcp[]): Map<string, string> {
+export function loadMcpServerBearerMap(rows: McpServer[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const row of rows) {
-    const bearer = decryptThirdPartyBearer(row);
+    const bearer = decryptMcpServerBearer(row);
     if (bearer) map.set(row.id, bearer);
   }
   return map;
