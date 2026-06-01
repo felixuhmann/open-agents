@@ -13,6 +13,7 @@ import {
   type ThirdPartyMcpConnection,
 } from "./thirdPartyClient.js";
 import { getPlatformHandler } from "./platform/index.js";
+import { serializeToolResultForModel } from "./toolResultSerialization.js";
 
 const MAX_TOOL_OUTPUT_CHARS = 20_000;
 
@@ -76,8 +77,7 @@ export function buildPlatformPiTools(agent: HydratedAgent): AgentTool[] {
               params as Record<string, unknown>,
               configJson,
             );
-            const text =
-              typeof result === "string" ? result : JSON.stringify(result, null, 2);
+            const text = serializeToolResultForModel(result);
             return {
               content: [{ type: "text", text: truncate(text) }],
               details: { isError, result },
