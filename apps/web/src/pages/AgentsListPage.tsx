@@ -10,7 +10,9 @@ import {
   PencilSimpleIcon,
   PlusIcon,
   RobotIcon,
+  TrashIcon,
 } from "@phosphor-icons/react";
+import { DeleteAgentDialog } from "@/components/DeleteAgentDialog";
 import { ApiError, api } from "@/lib/api";
 import { avatarSrc, canOperateAgents, useAgents, useCurrentUser } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
@@ -59,6 +61,7 @@ export default function AgentsListPage() {
   const user = useCurrentUser();
   const canManageAgents = canOperateAgents(user.data?.role);
   const [open, setOpen] = useState(false);
+  const [deleteSlug, setDeleteSlug] = useState<string | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -213,6 +216,15 @@ export default function AgentsListPage() {
                             </Link>
                           </DropdownMenuItem>
                         ) : null}
+                        {canManageAgents ? (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setDeleteSlug(a.slug)}
+                          >
+                            <TrashIcon data-icon="inline-start" />
+                            Delete agent
+                          </DropdownMenuItem>
+                        ) : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -222,6 +234,19 @@ export default function AgentsListPage() {
           </Table>
         </div>
       )}
+
+      {deleteSlug && agents.data ? (
+        <DeleteAgentDialog
+          slug={deleteSlug}
+          displayName={
+            agents.data.find((a) => a.slug === deleteSlug)?.displayName ?? deleteSlug
+          }
+          open
+          onOpenChange={(next) => {
+            if (!next) setDeleteSlug(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
