@@ -3,7 +3,6 @@ import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
 import { getAgentById } from "../agents/service.js";
 import { loadAgentForRun } from "../agents/snapshot.js";
-import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
@@ -18,7 +17,7 @@ import {
   resolveEmailSessionId,
   type ResolvedSession,
 } from "../services/sessions.js";
-import { signRunUploadUrl } from "../services/uploadSigning.js";
+import { buildRunUserMessage } from "../services/runUserMessage.js";
 import { getBoss } from "./queue.js";
 import {
   JOB_RUN_AGENT,
@@ -134,9 +133,8 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
   });
   await appendRunStarted(runId, resolved);
 
-  const uploadSig = signRunUploadUrl(runId);
-  const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
-  const userMessage = `${incoming.body}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
+  const backend = await getAgentBackend();
+  const userMessage = buildRunUserMessage(backend, runId, incoming.body);
 
   const output = await streamRunWithEvents(runId, resolved.sessionId, userMessage, {
     runId,
@@ -218,13 +216,8 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
   });
   await appendRunStarted(runId, resolved);
 
-  // Mirror the email-surface attachment-return flow: inject a signed,
-  // run-scoped upload URL that the agent's bash tool can `curl -F file=@…`
-  // to. The bytes land in `AgentAttachment` and the SPA chat renders them
-  // attached to the assistant's message via `GET /api/runs/:runId/attachments`.
-  const uploadSig = signRunUploadUrl(runId);
-  const uploadUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, "")}/runs/${runId}/attachments?sig=${uploadSig}`;
-  const userMessage = `${message.content}\n\nREPLY_ATTACHMENT_UPLOAD_URL: ${uploadUrl}`;
+  const backend = await getAgentBackend();
+  const userMessage = buildRunUserMessage(backend, runId, message.content);
 
   const output = await streamRunWithEvents(runId, resolved.sessionId, userMessage, {
     runId,

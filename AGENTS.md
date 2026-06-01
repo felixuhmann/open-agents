@@ -295,6 +295,10 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   MCP servers are wired into the Pi loop via
   [`apps/api/src/mcp/piTools.ts`](apps/api/src/mcp/piTools.ts) (host-side).
   The `/mcp/<slug>` HTTP route is for Anthropic Managed Agents only.
+- **Daytona run attachments use `attach_run_file`**: Do not inject
+  `REPLY_ATTACHMENT_UPLOAD_URL` for Daytona runs — sandboxes often cannot
+  reach `PUBLIC_BASE_URL`. The Pi loop exposes `attach_run_file`, which pulls
+  bytes from the sandbox on the orchestrator and stores `AgentAttachment` rows.
 - **Daytona sandbox lifecycle**: First-class metadata lives in the
   `AgentSandbox` table (`provider`, `providerSandboxId`, `state`,
   `lastActivityAt`, lifecycle policy JSON, links to agent + conversation/thread).

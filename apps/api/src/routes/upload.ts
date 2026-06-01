@@ -4,6 +4,7 @@ import { canOperateAgents, requireUser } from "../auth/middleware.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import type { AppVariables } from "../server/types.js";
+import { storeRunAttachment } from "../services/runAttachments.js";
 import { safeEqualHex, signRunUploadUrl } from "../services/uploadSigning.js";
 
 /**
@@ -38,12 +39,6 @@ uploadRoutes.post("/runs/:runId/attachments", async (c) => {
     return c.text("invalid signature", 401);
   }
 
-  const run = await prisma.agentRun.findUnique({ where: { id: runId } });
-  if (!run) {
-    log.warn("upload: unknown run", { reqId, runId });
-    return c.text("unknown run", 404);
-  }
-
   let form: Awaited<ReturnType<typeof c.req.parseBody>>;
   try {
     form = await c.req.parseBody({ all: false });
@@ -66,34 +61,26 @@ uploadRoutes.post("/runs/:runId/attachments", async (c) => {
     return c.text("missing 'file' field", 400);
   }
 
-  if (file.size === 0) return c.text("empty file", 400);
-  if (file.size > MAX_BYTES) {
-    log.warn("upload: file too large", { reqId, runId, size: file.size });
-    return c.text(`file too large (>${MAX_BYTES} bytes)`, 413);
-  }
-
   const buf = Buffer.from(await file.arrayBuffer());
   const filename = file.name || "attachment";
   const contentType = file.type || "application/octet-stream";
 
-  const row = await prisma.agentAttachment.create({
-    data: {
-      runId,
-      filename,
-      contentType,
-      sizeBytes: buf.byteLength,
-      bytes: buf,
-    },
-  });
-
-  log.info("upload: stored", {
-    reqId,
-    runId,
-    attachmentId: row.id,
-    filename,
-    contentType,
-    sizeBytes: buf.byteLength,
-  });
+  let row;
+  try {
+    row = await storeRunAttachment(runId, filename, contentType, buf, { reqId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message === "empty file") return c.text("empty file", 400);
+    if (message.startsWith("file too large")) {
+      log.warn("upload: file too large", { reqId, runId, size: file.size });
+      return c.text(message, 413);
+    }
+    if (message.startsWith("unknown run")) {
+      log.warn("upload: unknown run", { reqId, runId });
+      return c.text("unknown run", 404);
+    }
+    throw err;
+  }
 
   return c.json({
     id: row.id,
