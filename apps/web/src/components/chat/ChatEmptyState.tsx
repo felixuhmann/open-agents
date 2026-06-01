@@ -35,7 +35,7 @@ export function ChatEmptyState({
       <div className="space-y-1.5">
         <h2 className="font-heading text-lg font-semibold">{agentDisplayName}</h2>
         <p className="max-w-md text-sm text-muted-foreground">
-          Ask a question, paste some context, or attach a file to get started.
+          Ask a question, paste some context, or drag and drop a file to get started.
         </p>
       </div>
       <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
