@@ -1,6 +1,8 @@
+import { posix as path } from "node:path";
 import type { Prisma } from "@open-agents/db";
 import { z } from "zod";
 import { prisma } from "../../db.js";
+import { ensureSandboxDir, remapWorkspacePath } from "../../services/daytonaShell.js";
 import { defineTool, type PlatformHandler } from "../types.js";
 
 /**
@@ -40,6 +42,12 @@ const ListInput = z.object({
   cursor: z.string().optional(),
 });
 
+const ExportInput = z.object({
+  collection: z.string().min(1).max(MAX_COLLECTION),
+  filter: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  path: z.string().min(1),
+});
+
 const UpdateInput = z.object({
   id: z.string().min(1),
   doc: z.record(z.string(), z.unknown()),
@@ -48,6 +56,20 @@ const UpdateInput = z.object({
 const DeleteInput = z.object({
   id: z.string().min(1),
 });
+
+function filterClauses(
+  filter: Record<string, string | number | boolean> | undefined,
+): Record<string, unknown>[] {
+  if (!filter) return [];
+  return Object.entries(filter).map(([key, value]) => ({
+    doc: { path: [key], equals: value },
+  }));
+}
+
+function resolveSandboxPath(input: string, workspaceDir: string): string {
+  const absolutePath = input.startsWith("/") ? input : path.join(workspaceDir, input);
+  return remapWorkspacePath(absolutePath, workspaceDir);
+}
 
 export const memoryHandler: PlatformHandler = {
   key: "memory",
@@ -119,17 +141,12 @@ export const memoryHandler: PlatformHandler = {
         "List documents in a collection with optional flat equality filter on top-level fields. Returns documents and an opaque next cursor. An empty `items` array means the named collection has no matching documents — it does NOT mean memory is broken; if you expected results, call `memory_collections` to confirm the collection name.",
       input: ListInput,
       handler: async (input, ctx) => {
-        const filterClauses: Record<string, unknown>[] = [];
-        if (input.filter) {
-          for (const [key, value] of Object.entries(input.filter)) {
-            filterClauses.push({ doc: { path: [key], equals: value } });
-          }
-        }
+        const filters = filterClauses(input.filter);
         const rows = await prisma.memoryDoc.findMany({
           where: {
             agentId: ctx.agentId,
             collection: input.collection,
-            AND: filterClauses,
+            AND: filters,
             ...(input.cursor ? { id: { gt: input.cursor } } : {}),
           },
           orderBy: { id: "asc" },
@@ -145,6 +162,45 @@ export const memoryHandler: PlatformHandler = {
             updatedAt: r.updatedAt,
           })),
           nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+        };
+      },
+    }),
+
+    defineTool({
+      name: "memory_export",
+      description:
+        "Export every matching document in a collection directly to a JSON file in the active sandbox. The file shape is `{ items: [{ doc: ... }] }`, so downstream scripts can consume it without the documents flowing through the model. Returns only metadata about the file written.",
+      input: ExportInput,
+      handler: async (input, ctx) => {
+        if (!ctx.sandbox) {
+          throw new Error("memory_export requires an active Daytona sandbox");
+        }
+
+        const rows = await prisma.memoryDoc.findMany({
+          where: {
+            agentId: ctx.agentId,
+            collection: input.collection,
+            AND: filterClauses(input.filter),
+          },
+          orderBy: { id: "asc" },
+          select: { doc: true },
+        });
+
+        const content = JSON.stringify(
+          { items: rows.map((row) => ({ doc: row.doc })) },
+          null,
+          2,
+        );
+        const remotePath = resolveSandboxPath(input.path, ctx.sandbox.workspaceDir);
+        await ensureSandboxDir(ctx.sandbox.fs, path.dirname(remotePath));
+        await ctx.sandbox.fs.uploadFile(Buffer.from(content, "utf8"), remotePath);
+
+        return {
+          path: remotePath,
+          requestedPath: input.path,
+          collection: input.collection,
+          count: rows.length,
+          bytes: Buffer.byteLength(content, "utf8"),
         };
       },
     }),

@@ -14,6 +14,7 @@ import {
 } from "./thirdPartyClient.js";
 import { getPlatformHandler } from "./platform/index.js";
 import { serializeToolResultForModel } from "./toolResultSerialization.js";
+import type { PlatformSandboxCtx } from "./types.js";
 
 const MAX_TOOL_OUTPUT_CHARS = 20_000;
 
@@ -43,7 +44,10 @@ function platformToolLabel(handlerName: string, toolName: string): string {
  *
  * `thirdPartyBearer` maps `McpServer.id` → decrypted bearer token.
  */
-export function buildPlatformPiTools(agent: HydratedAgent): AgentTool[] {
+export function buildPlatformPiTools(
+  agent: HydratedAgent,
+  runtime?: { sandbox?: PlatformSandboxCtx },
+): AgentTool[] {
   const tools: AgentTool[] = [];
 
   for (const binding of agent.toolBindings) {
@@ -76,6 +80,7 @@ export function buildPlatformPiTools(agent: HydratedAgent): AgentTool[] {
               descriptor.name,
               params as Record<string, unknown>,
               configJson,
+              runtime,
             );
             const text = serializeToolResultForModel(result);
             return {
@@ -149,8 +154,9 @@ export async function buildThirdPartyPiTools(
 export async function buildMcpPiTools(
   agent: HydratedAgent,
   thirdPartyBearer: ReadonlyMap<string, string>,
+  runtime?: { sandbox?: PlatformSandboxCtx },
 ): Promise<{ tools: AgentTool[]; connections: ThirdPartyMcpConnection[] }> {
-  const platform = buildPlatformPiTools(agent);
+  const platform = buildPlatformPiTools(agent, runtime);
   const third = await buildThirdPartyPiTools(agent, thirdPartyBearer);
   return { tools: [...platform, ...third.tools], connections: third.connections };
 }
