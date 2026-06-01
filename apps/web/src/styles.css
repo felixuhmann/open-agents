@@ -106,6 +106,35 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+:root {
+  /* Code block surface + syntax token palette (light theme). */
+  --code-bg: oklch(0.96 0 0);
+  --hl-comment: oklch(0.55 0 0);
+  --hl-keyword: oklch(0.5 0.2 350);
+  --hl-string: oklch(0.5 0.14 150);
+  --hl-number: oklch(0.55 0.15 50);
+  --hl-function: oklch(0.5 0.16 255);
+  --hl-attr: oklch(0.52 0.13 90);
+  --hl-type: oklch(0.5 0.1 215);
+  --hl-tag: oklch(0.5 0.2 25);
+  --hl-meta: oklch(0.5 0.1 285);
+  --hl-variable: oklch(0.25 0 0);
+}
+
+.dark {
+  --code-bg: oklch(0.17 0 0);
+  --hl-comment: oklch(0.58 0 0);
+  --hl-keyword: oklch(0.76 0.14 350);
+  --hl-string: oklch(0.8 0.13 150);
+  --hl-number: oklch(0.82 0.12 60);
+  --hl-function: oklch(0.76 0.12 245);
+  --hl-attr: oklch(0.86 0.13 95);
+  --hl-type: oklch(0.8 0.1 205);
+  --hl-tag: oklch(0.74 0.15 22);
+  --hl-meta: oklch(0.72 0.08 285);
+  --hl-variable: oklch(0.88 0 0);
+}
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -138,4 +167,88 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* ── Syntax highlighting (rehype-highlight / highlight.js) ───────────────── */
+.hljs {
+  color: var(--foreground);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-formula {
+  color: var(--hl-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-meta .hljs-string {
+  color: var(--hl-string);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: var(--hl-number);
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section {
+  color: var(--hl-function);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-template-variable {
+  color: var(--hl-attr);
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-class .hljs-title,
+.hljs-params {
+  color: var(--hl-type);
+}
+.hljs-tag,
+.hljs-name,
+.hljs-deletion {
+  color: var(--hl-tag);
+}
+.hljs-meta,
+.hljs-meta .hljs-keyword {
+  color: var(--hl-meta);
+}
+.hljs-variable,
+.hljs-property {
+  color: var(--hl-variable);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* ── Streaming caret on the live assistant reply ─────────────────────────── */
+.streaming-markdown > div > *:last-child::after {
+  content: "▋";
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--muted-foreground);
+  animation: chat-caret-blink 1.1s steps(1) infinite;
+  vertical-align: baseline;
+}
+@keyframes chat-caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
