@@ -76,11 +76,7 @@ export function ChatMessage({
         <span className="text-xs font-medium text-muted-foreground">
           {agentDisplayName}
         </span>
-        {content ? (
-          <Markdown>{content}</Markdown>
-        ) : pending ? (
-          <TypingIndicator />
-        ) : null}
+        {content ? <Markdown>{content}</Markdown> : pending ? <TypingIndicator /> : null}
         {footer}
         {!pending && content ? (
           <MessageMeta

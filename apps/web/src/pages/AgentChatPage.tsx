@@ -469,11 +469,7 @@ export default function AgentChatPage() {
       </header>
 
       <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="h-full overflow-y-auto"
-        >
+        <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
           {empty ? (
             <ChatEmptyState
               agentDisplayName={agent.data.displayName}

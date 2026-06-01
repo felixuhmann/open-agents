@@ -163,15 +163,15 @@ const COMPONENTS: Components = {
   ),
   th: ({ className, ...props }) => (
     <th
-      className={cn(
-        "border border-border px-2 py-1 text-left font-semibold",
-        className,
-      )}
+      className={cn("border border-border px-2 py-1 text-left font-semibold", className)}
       {...props}
     />
   ),
   td: ({ className, ...props }) => (
-    <td className={cn("border border-border px-2 py-1 align-top", className)} {...props} />
+    <td
+      className={cn("border border-border px-2 py-1 align-top", className)}
+      {...props}
+    />
   ),
 };
 

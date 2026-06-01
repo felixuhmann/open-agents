@@ -1,9 +1,5 @@
 import { useRef } from "react";
-import {
-  ArrowUpIcon,
-  PaperclipIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { ArrowUpIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
@@ -43,7 +39,9 @@ export function Composer({
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canSend =
-    !sending && uploadingCount === 0 && (value.trim().length > 0 || pendingUploads.length > 0);
+    !sending &&
+    uploadingCount === 0 &&
+    (value.trim().length > 0 || pendingUploads.length > 0);
 
   const submit = () => {
     if (!canSend) return;
