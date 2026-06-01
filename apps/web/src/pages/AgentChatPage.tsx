@@ -1,27 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ChatCircleDotsIcon,
+  ArrowDownIcon,
   ClockCounterClockwiseIcon,
   DownloadSimpleIcon,
   FileIcon,
-  PaperclipIcon,
-  PaperPlaneTiltIcon,
-  RobotIcon,
   TerminalWindowIcon,
-  UserIcon,
   WarningCircleIcon,
-  WrenchIcon,
-  XIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import {
   avatarSrc,
   canOperateAgents,
   type ChatAttachmentSummary,
-  type ChatMessage,
+  type ChatMessage as ChatMessageData,
   runAttachmentDownloadUrl,
   useAgent,
   useConversation,
@@ -29,15 +23,7 @@ import {
   useRunAttachments,
 } from "@/lib/queries";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import {
   Dialog,
   DialogContent,
@@ -48,12 +34,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/Markdown";
-import { cn } from "@/lib/utils";
+import { ChatMessage } from "@/components/chat/ChatMessage";
+import { Composer, type PendingUpload } from "@/components/chat/Composer";
+import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ToolCallCard } from "@/components/chat/ToolCallCard";
+import { TypingIndicator } from "@/components/chat/TypingIndicator";
+import { formatBytes } from "@/components/chat/utils";
 
 type StreamEvent = {
   seq: number;
@@ -62,17 +52,14 @@ type StreamEvent = {
   payload: Record<string, unknown>;
 };
 
-type PendingUpload = {
-  chatAttachmentId: string;
-  chatMessageId: string;
-  filename: string;
-  contentType: string;
-  sizeBytes: number;
-};
-
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-type LiveToolCall = { callId: string; toolName: string; output: string };
+type LiveToolCall = { callId: string; toolName: string; output: string; done: boolean };
+
+type OptimisticMessage = {
+  text: string;
+  attachments: ChatAttachmentSummary[];
+};
 
 function appendToolOutput(
   prev: LiveToolCall[],
@@ -82,7 +69,7 @@ function appendToolOutput(
 ): LiveToolCall[] {
   const idx = prev.findIndex((tc) => tc.callId === callId);
   if (idx < 0) {
-    return [...prev, { callId, toolName, output: chunk }];
+    return [...prev, { callId, toolName, output: chunk, done: false }];
   }
   const next = [...prev];
   const row = next[idx];
@@ -104,26 +91,53 @@ export default function AgentChatPage() {
   const isOperator = canOperateAgents(me.data?.role);
   const [draft, setDraft] = useState("");
   const [streamingText, setStreamingText] = useState("");
-  const [toolCalls, setToolCalls] = useState<
-    Array<{ callId: string; toolName: string; output: string }>
-  >([]);
+  const [toolCalls, setToolCalls] = useState<LiveToolCall[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const atBottomRef = useRef(true);
+  const [showScrollDown, setShowScrollDown] = useState(false);
 
+  const messages: ChatMessageData[] = useMemo(
+    () => conversation.data?.messages ?? [],
+    [conversation.data],
+  );
+
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  };
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = distance < 80;
+    atBottomRef.current = near;
+    setShowScrollDown(!near);
+  };
+
+  // Auto-follow new content only when the reader is already pinned to the
+  // bottom, so scrolling up to read history isn't yanked back down.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation.data, streamingText]);
+    if (atBottomRef.current) scrollToBottom("smooth");
+  }, [messages, streamingText, toolCalls, optimistic]);
+
+  // Clear the optimistic user echo once the persisted message lands.
+  useEffect(() => {
+    if (!optimistic) return;
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser && lastUser.content === optimistic.text) {
+      setOptimistic(null);
+    }
+  }, [messages, optimistic]);
 
   // A pending upload requires a conversationId because the upload route
-  // is `/conversations/:id/attachments`. If the page is on the "new chat"
-  // route (no conversationId yet) we'd have to provision the conversation
-  // up front before the user can attach a file. Doing that here keeps the
-  // flow uniform: first upload click creates the conversation, subsequent
-  // uploads reuse it. The initial send then just posts the message into
-  // the already-existing conversation.
+  // is `/conversations/:id/attachments`. The first upload provisions the
+  // conversation so subsequent uploads + the initial send reuse it.
   const ensureConversationId = async (): Promise<string> => {
     if (conversationId) return conversationId;
     if (!slug) throw new Error("missing agent slug");
@@ -149,10 +163,12 @@ export default function AgentChatPage() {
       void navigate(`/agents/${slug}/chat/${cid}`);
       setActiveRunId(runId);
     },
-    onError: (e) =>
+    onError: (e) => {
+      setOptimistic(null);
       toast.error("Couldn't start conversation", {
         description: e instanceof ApiError ? e.message : String(e),
-      }),
+      });
+    },
   });
 
   const sendMessage = useMutation({
@@ -166,10 +182,12 @@ export default function AgentChatPage() {
       setPendingUploads([]);
       await qc.invalidateQueries({ queryKey: ["conversations", conversationId] });
     },
-    onError: (e) =>
+    onError: (e) => {
+      setOptimistic(null);
       toast.error("Couldn't send message", {
         description: e instanceof ApiError ? e.message : String(e),
-      }),
+      });
+    },
   });
 
   const handleFilePick = async (files: FileList | null) => {
@@ -231,9 +249,6 @@ export default function AgentChatPage() {
     }
   };
 
-  // The placeholder ChatMessage row stays on the server until the next
-  // `POST /:id/messages` reparents+deletes it; that's fine because
-  // pending_user_upload rows are filtered out of the conversations GET.
   const removePendingUpload = (item: PendingUpload) => {
     setPendingUploads((prev) =>
       prev.filter((p) => p.chatAttachmentId !== item.chatAttachmentId),
@@ -278,6 +293,7 @@ export default function AgentChatPage() {
                     ? data.payload.toolName
                     : "tool",
                 output: "",
+                done: false,
               },
             ];
           });
@@ -298,29 +314,23 @@ export default function AgentChatPage() {
                 : data.payload.isError
                   ? "[tool error]"
                   : "";
-          if (resultText) {
-            setToolCalls((prev) => {
-              const idx = prev.findIndex((tc) => tc.callId === callId);
-              if (idx < 0) {
-                return [
-                  ...prev,
-                  {
-                    callId,
-                    toolName,
-                    output: resultText.endsWith("\n") ? resultText : `${resultText}\n`,
-                  },
-                ];
-              }
-              const next = [...prev];
-              const row = next[idx];
-              if (!row) return prev;
-              next[idx] = {
-                ...row,
-                output: resultText.endsWith("\n") ? resultText : `${resultText}\n`,
-              };
-              return next;
-            });
-          }
+          setToolCalls((prev) => {
+            const idx = prev.findIndex((tc) => tc.callId === callId);
+            const normalized =
+              resultText && !resultText.endsWith("\n") ? `${resultText}\n` : resultText;
+            if (idx < 0) {
+              return [...prev, { callId, toolName, output: normalized, done: true }];
+            }
+            const next = [...prev];
+            const row = next[idx];
+            if (!row) return prev;
+            next[idx] = {
+              ...row,
+              output: normalized || row.output,
+              done: true,
+            };
+            return next;
+          });
         } else if (
           data.type === "tool.output" &&
           typeof data.payload.toolName === "string" &&
@@ -378,16 +388,21 @@ export default function AgentChatPage() {
     return () => source.close();
   }, [activeRunId, conversationId, qc]);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     const trimmed = draft.trim();
-    // Allow attachment-only sends while still giving the agent a non-empty
-    // user message to respond to.
     const text = trimmed || (pendingUploads.length > 0 ? "(see attached files)" : "");
     if (!text || !slug) return;
+    setOptimistic({
+      text,
+      attachments: pendingUploads.map((u) => ({
+        id: u.chatAttachmentId,
+        filename: u.filename,
+        contentType: u.contentType,
+        sizeBytes: u.sizeBytes,
+      })),
+    });
+    atBottomRef.current = true;
     if (!conversationId) {
-      // With pending uploads we must already have a conversationId because
-      // ensureConversationId() created one before the first upload.
       createConversation.mutate({ agentSlug: slug, firstMessage: text });
     } else {
       sendMessage.mutate(text);
@@ -404,16 +419,18 @@ export default function AgentChatPage() {
     );
   }
 
-  const messages: ChatMessage[] = conversation.data?.messages ?? [];
   const sending =
     createConversation.isPending || sendMessage.isPending || Boolean(activeRunId);
-  const empty = messages.length === 0 && !streamingText;
   const initials = agent.data.displayName.slice(0, 2).toUpperCase();
+  const showOptimistic = optimistic !== null;
+  const empty = messages.length === 0 && !streamingText && !showOptimistic && !sending;
+  const waitingFirstToken =
+    Boolean(activeRunId) && !streamingText && toolCalls.length === 0;
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
-      <header className="flex items-center gap-3">
-        <Avatar className="size-9">
+    <div className="flex h-[calc(100vh-7rem)] flex-col gap-3">
+      <header className="flex items-center gap-3 border-b pb-3">
+        <Avatar className="size-9 border border-border">
           {agent.data.avatar ? (
             <AvatarImage
               src={avatarSrc(agent.data.avatar)}
@@ -425,7 +442,7 @@ export default function AgentChatPage() {
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <h1 className="font-heading text-xl font-semibold leading-tight">
+          <h1 className="font-heading text-base font-semibold leading-tight">
             {agent.data.displayName}
           </h1>
           <p className="truncate text-xs text-muted-foreground">
@@ -451,260 +468,129 @@ export default function AgentChatPage() {
         </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col border bg-card">
-        <ScrollArea className="min-h-0 flex-1 px-4 py-4">
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="h-full overflow-y-auto"
+        >
           {empty ? (
-            <Empty className="h-full">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <ChatCircleDotsIcon />
-                </EmptyMedia>
-                <EmptyTitle>Start the conversation</EmptyTitle>
-                <EmptyDescription>
-                  Send a message below and {agent.data.displayName} will respond.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <ChatEmptyState
+              agentDisplayName={agent.data.displayName}
+              agentAvatar={agent.data.avatar}
+              agentInitials={initials}
+              onPick={(text) => setDraft(text)}
+            />
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-1 py-4">
               {messages.map((m) => (
-                <Bubble
+                <ChatMessage
                   key={m.id}
                   role={m.role}
                   content={m.content}
-                  runId={m.runId}
+                  createdAt={m.createdAt}
                   attachments={m.attachments}
-                  agentInitials={initials}
                   agentDisplayName={agent.data.displayName}
                   agentAvatar={agent.data.avatar}
+                  footer={
+                    m.role === "assistant" && m.runId ? (
+                      <AssistantRunAttachments runId={m.runId} />
+                    ) : null
+                  }
                 />
               ))}
-              {toolCalls.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {toolCalls.map((tc) => (
-                    <div
-                      key={tc.callId}
-                      className="rounded-md border bg-muted/40 px-3 py-2 text-xs"
-                    >
-                      <div className="mb-1 flex items-center gap-1.5 font-mono text-muted-foreground">
-                        <WrenchIcon className="size-3.5 shrink-0" />
-                        {tc.toolName}
-                      </div>
-                      {tc.output ? (
-                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
-                          {tc.output}
-                        </pre>
-                      ) : (
-                        <p className="text-muted-foreground">Running…</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {streamingText ? (
-                <Bubble
-                  role="assistant"
-                  content={streamingText}
-                  agentInitials={initials}
+
+              {showOptimistic ? (
+                <ChatMessage
+                  role="user"
+                  content={optimistic.text}
+                  attachments={optimistic.attachments}
                   agentDisplayName={agent.data.displayName}
                   agentAvatar={agent.data.avatar}
-                  pending
                 />
               ) : null}
-              <div ref={messagesEndRef} />
+
+              {streamingText || toolCalls.length > 0 || waitingFirstToken ? (
+                <div className="group/msg flex w-full items-start gap-3">
+                  <Avatar className="mt-0.5 size-7 shrink-0 border border-border">
+                    {agent.data.avatar ? (
+                      <AvatarImage
+                        src={avatarSrc(agent.data.avatar)}
+                        alt={agent.data.displayName}
+                      />
+                    ) : null}
+                    <AvatarFallback className="bg-muted text-foreground">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {agent.data.displayName}
+                    </span>
+                    {toolCalls.length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {toolCalls.map((tc) => (
+                          <ToolCallCard
+                            key={tc.callId}
+                            toolName={tc.toolName}
+                            output={tc.output}
+                            running={!tc.done}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    {streamingText ? (
+                      <StreamingMarkdown text={streamingText} />
+                    ) : waitingFirstToken ? (
+                      <TypingIndicator />
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              <div className="h-2" />
             </div>
           )}
-        </ScrollArea>
-      </div>
+        </div>
 
-      <form onSubmit={submit} className="flex shrink-0 flex-col gap-2">
-        {pendingUploads.length > 0 || uploadingCount > 0 ? (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {pendingUploads.map((u) => (
-              <Badge
-                key={u.chatAttachmentId}
-                variant="secondary"
-                className="gap-1.5 pr-1 font-mono"
-              >
-                <PaperclipIcon data-icon="inline-start" />
-                <span className="max-w-[18rem] truncate" title={u.filename}>
-                  {u.filename}
-                </span>
-                <span className="text-muted-foreground">{formatBytes(u.sizeBytes)}</span>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  className="size-5"
-                  aria-label={`Remove ${u.filename}`}
-                  onClick={() => removePendingUpload(u)}
-                  disabled={sending}
-                >
-                  <XIcon className="size-3" />
-                </Button>
-              </Badge>
-            ))}
-            {uploadingCount > 0 ? (
-              <Badge variant="outline" className="gap-1.5 font-mono">
-                <Spinner className="size-3" />
-                Uploading {uploadingCount}…
-              </Badge>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="flex items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="sr-only"
-            onChange={(e) => {
-              const files = e.target.files;
-              void handleFilePick(files);
-              if (e.target) e.target.value = "";
-            }}
-          />
+        {showScrollDown ? (
           <Button
             type="button"
-            size="lg"
+            size="icon"
             variant="outline"
-            disabled={sending || uploadingCount > 0}
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach files"
+            onClick={() => scrollToBottom("smooth")}
+            aria-label="Scroll to latest"
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
           >
-            <PaperclipIcon />
+            <ArrowDownIcon className="size-4" />
           </Button>
-          <Textarea
-            rows={2}
-            className="flex-1 resize-none"
-            placeholder="Type a message…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit(e);
-              }
-            }}
-            disabled={sending}
-          />
-          <Button
-            type="submit"
-            size="lg"
-            disabled={
-              sending ||
-              uploadingCount > 0 ||
-              (!draft.trim() && pendingUploads.length === 0)
-            }
-          >
-            {sending ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <PaperPlaneTiltIcon data-icon="inline-start" />
-            )}
-            {sending ? "Sending" : "Send"}
-          </Button>
-        </div>
-      </form>
+        ) : null}
+      </div>
+
+      <div className="mx-auto w-full max-w-3xl">
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSubmit={submit}
+          onFiles={(files) => void handleFilePick(files)}
+          pendingUploads={pendingUploads}
+          onRemoveUpload={removePendingUpload}
+          uploadingCount={uploadingCount}
+          sending={sending}
+          placeholder={`Message ${agent.data.displayName}…`}
+        />
+      </div>
     </div>
   );
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function Bubble({
-  role,
-  content,
-  runId,
-  attachments,
-  agentInitials,
-  agentDisplayName,
-  agentAvatar,
-  pending,
-}: {
-  role: string;
-  content: string;
-  runId?: string | null;
-  attachments?: ChatAttachmentSummary[];
-  agentInitials: string;
-  agentDisplayName: string;
-  agentAvatar: string | null;
-  pending?: boolean;
-}) {
-  const mine = role === "user";
-  const isSystem = role === "system";
-  const showAgentImage = !mine && !isSystem && Boolean(agentAvatar);
-  const userAttachments = attachments ?? [];
+/**
+ * Renders streaming markdown with a blinking caret appended so the reply
+ * reads as "live" while tokens arrive.
+ */
+function StreamingMarkdown({ text }: { text: string }) {
   return (
-    <div
-      className={cn(
-        "flex w-full items-start gap-3",
-        mine ? "flex-row-reverse" : "flex-row",
-      )}
-    >
-      <Avatar className="size-7 shrink-0">
-        {showAgentImage ? (
-          <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
-        ) : null}
-        <AvatarFallback
-          className={cn(
-            "text-[10px]",
-            mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-          )}
-        >
-          {mine ? <UserIcon className="size-3.5" /> : <RobotIcon className="size-3.5" />}
-          {!mine && !isSystem ? <span className="sr-only">{agentInitials}</span> : null}
-        </AvatarFallback>
-      </Avatar>
-      <div
-        className={cn(
-          "flex max-w-[80%] flex-col gap-2",
-          mine ? "items-end" : "items-start",
-        )}
-      >
-        {content ? (
-          <div
-            className={cn(
-              "px-3 py-2 text-sm leading-relaxed",
-              mine || isSystem ? "whitespace-pre-wrap" : null,
-              mine
-                ? "bg-primary text-primary-foreground"
-                : isSystem
-                  ? "bg-muted/50 text-muted-foreground italic"
-                  : "bg-muted text-foreground",
-              pending && "opacity-80",
-            )}
-          >
-            {mine || isSystem ? content : <Markdown>{content}</Markdown>}
-          </div>
-        ) : null}
-        {userAttachments.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {userAttachments.map((a) => (
-              <span
-                key={a.id}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2 py-1 text-xs",
-                  mine
-                    ? "bg-primary/15 text-primary-foreground"
-                    : "bg-muted text-foreground",
-                )}
-              >
-                <PaperclipIcon className="size-3" />
-                <span className="max-w-[18rem] truncate" title={a.filename}>
-                  {a.filename}
-                </span>
-                <span className="text-muted-foreground">{formatBytes(a.sizeBytes)}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {!mine && !isSystem && runId ? <AssistantRunAttachments runId={runId} /> : null}
-      </div>
+    <div className="streaming-markdown">
+      <Markdown>{text}</Markdown>
     </div>
   );
 }
@@ -809,7 +695,7 @@ function AssistantRunAttachments({ runId }: { runId: string }) {
           key={a.id}
           href={runAttachmentDownloadUrl(runId, a.id)}
           download={a.filename}
-          className="inline-flex items-center gap-1.5 border bg-card px-2 py-1 text-xs hover:bg-muted"
+          className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
         >
           <FileIcon className="size-3.5" />
           <span className="max-w-[18rem] truncate" title={a.filename}>
