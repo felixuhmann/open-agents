@@ -41,6 +41,7 @@ import { Markdown } from "@/components/Markdown";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Composer, type PendingUpload } from "@/components/chat/Composer";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
 import { ToolCallCard } from "@/components/chat/ToolCallCard";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { formatBytes } from "@/components/chat/utils";
@@ -468,113 +469,119 @@ export default function AgentChatPage() {
         </Button>
       </header>
 
-      <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
-          {empty ? (
-            <ChatEmptyState
-              agentDisplayName={agent.data.displayName}
-              agentAvatar={agent.data.avatar}
-              agentInitials={initials}
-              onPick={(text) => setDraft(text)}
-            />
-          ) : (
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-1 py-4">
-              {messages.map((m) => (
-                <ChatMessage
-                  key={m.id}
-                  role={m.role}
-                  content={m.content}
-                  createdAt={m.createdAt}
-                  attachments={m.attachments}
-                  agentDisplayName={agent.data.displayName}
-                  agentAvatar={agent.data.avatar}
-                  footer={
-                    m.role === "assistant" && m.runId ? (
-                      <AssistantRunAttachments runId={m.runId} />
-                    ) : null
-                  }
-                />
-              ))}
+      <ChatFileDropZone
+        className="flex min-h-0 flex-1 flex-col gap-3"
+        disabled={sending || uploadingCount > 0}
+        onFiles={(files) => void handleFilePick(files)}
+      >
+        <div className="relative min-h-0 flex-1">
+          <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
+            {empty ? (
+              <ChatEmptyState
+                agentDisplayName={agent.data.displayName}
+                agentAvatar={agent.data.avatar}
+                agentInitials={initials}
+                onPick={(text) => setDraft(text)}
+              />
+            ) : (
+              <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-1 py-4">
+                {messages.map((m) => (
+                  <ChatMessage
+                    key={m.id}
+                    role={m.role}
+                    content={m.content}
+                    createdAt={m.createdAt}
+                    attachments={m.attachments}
+                    agentDisplayName={agent.data.displayName}
+                    agentAvatar={agent.data.avatar}
+                    footer={
+                      m.role === "assistant" && m.runId ? (
+                        <AssistantRunAttachments runId={m.runId} />
+                      ) : null
+                    }
+                  />
+                ))}
 
-              {showOptimistic ? (
-                <ChatMessage
-                  role="user"
-                  content={optimistic.text}
-                  attachments={optimistic.attachments}
-                  agentDisplayName={agent.data.displayName}
-                  agentAvatar={agent.data.avatar}
-                />
-              ) : null}
+                {showOptimistic ? (
+                  <ChatMessage
+                    role="user"
+                    content={optimistic.text}
+                    attachments={optimistic.attachments}
+                    agentDisplayName={agent.data.displayName}
+                    agentAvatar={agent.data.avatar}
+                  />
+                ) : null}
 
-              {streamingText || toolCalls.length > 0 || waitingFirstToken ? (
-                <div className="group/msg flex w-full items-start gap-3">
-                  <Avatar className="mt-0.5 size-7 shrink-0 border border-border">
-                    {agent.data.avatar ? (
-                      <AvatarImage
-                        src={avatarSrc(agent.data.avatar)}
-                        alt={agent.data.displayName}
-                      />
-                    ) : null}
-                    <AvatarFallback className="bg-muted text-foreground">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {agent.data.displayName}
-                    </span>
-                    {toolCalls.length > 0 ? (
-                      <div className="flex flex-col gap-2">
-                        {toolCalls.map((tc) => (
-                          <ToolCallCard
-                            key={tc.callId}
-                            toolName={tc.toolName}
-                            output={tc.output}
-                            running={!tc.done}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                    {streamingText ? (
-                      <StreamingMarkdown text={streamingText} />
-                    ) : waitingFirstToken ? (
-                      <TypingIndicator />
-                    ) : null}
+                {streamingText || toolCalls.length > 0 || waitingFirstToken ? (
+                  <div className="group/msg flex w-full items-start gap-3">
+                    <Avatar className="mt-0.5 size-7 shrink-0 border border-border">
+                      {agent.data.avatar ? (
+                        <AvatarImage
+                          src={avatarSrc(agent.data.avatar)}
+                          alt={agent.data.displayName}
+                        />
+                      ) : null}
+                      <AvatarFallback className="bg-muted text-foreground">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {agent.data.displayName}
+                      </span>
+                      {toolCalls.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          {toolCalls.map((tc) => (
+                            <ToolCallCard
+                              key={tc.callId}
+                              toolName={tc.toolName}
+                              output={tc.output}
+                              running={!tc.done}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                      {streamingText ? (
+                        <StreamingMarkdown text={streamingText} />
+                      ) : waitingFirstToken ? (
+                        <TypingIndicator />
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ) : null}
-              <div className="h-2" />
-            </div>
-          )}
+                ) : null}
+                <div className="h-2" />
+              </div>
+            )}
+          </div>
+
+          {showScrollDown ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={() => scrollToBottom("smooth")}
+              aria-label="Scroll to latest"
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
+            >
+              <ArrowDownIcon className="size-4" />
+            </Button>
+          ) : null}
         </div>
 
-        {showScrollDown ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            onClick={() => scrollToBottom("smooth")}
-            aria-label="Scroll to latest"
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
-          >
-            <ArrowDownIcon className="size-4" />
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="mx-auto w-full max-w-3xl">
-        <Composer
-          value={draft}
-          onChange={setDraft}
-          onSubmit={submit}
-          onFiles={(files) => void handleFilePick(files)}
-          pendingUploads={pendingUploads}
-          onRemoveUpload={removePendingUpload}
-          uploadingCount={uploadingCount}
-          sending={sending}
-          placeholder={`Message ${agent.data.displayName}…`}
-        />
-      </div>
+        <div className="mx-auto w-full max-w-3xl">
+          <Composer
+            value={draft}
+            onChange={setDraft}
+            onSubmit={submit}
+            onFiles={(files) => void handleFilePick(files)}
+            pendingUploads={pendingUploads}
+            onRemoveUpload={removePendingUpload}
+            uploadingCount={uploadingCount}
+            sending={sending}
+            placeholder={`Message ${agent.data.displayName}…`}
+          />
+        </div>
+      </ChatFileDropZone>
     </div>
   );
 }
