@@ -7,9 +7,10 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useState } from "react";
-import { AgentTracePanel, buildSessionTraceExport } from "@/components/AgentTraceView";
+import { AgentTracePanel } from "@/components/AgentTraceView";
 import { PageHeader } from "@/components/PageHeader";
 import { canOperateAgents, useConversationTrace, useCurrentUser } from "@/lib/queries";
+import { buildSessionTraceExport } from "@/lib/sessionTraceExport";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -57,7 +58,7 @@ export default function ConversationDebugPage() {
           description={`${data.agent.displayName} · ${data.session.label}`}
           actions={
             <CopyButton
-              label="Copy trace (JSON)"
+              label="Copy compact trace (JSON)"
               value={JSON.stringify(buildSessionTraceExport(data), null, 2)}
             />
           }

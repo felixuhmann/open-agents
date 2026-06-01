@@ -8,13 +8,14 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
-import { AgentTracePanel, buildSessionTraceExport } from "@/components/AgentTraceView";
+import { AgentTracePanel } from "@/components/AgentTraceView";
 import {
   canOperateAgents,
   useCurrentUser,
   useIssue,
   type IssueDetail,
 } from "@/lib/queries";
+import { buildSessionTraceExport } from "@/lib/sessionTraceExport";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge, SurfaceBadge } from "./IssuesListPage";
 import { Button } from "@/components/ui/button";
@@ -86,7 +87,7 @@ export default function IssueDetailPage() {
               <StatusBadge status={data.status} />
               <SurfaceBadge surface={data.surface} />
               <CopyButton
-                label="Copy everything"
+                label="Copy compact report"
                 value={JSON.stringify(buildFullExport(data), null, 2)}
               />
               {data.status === "open" ? (
