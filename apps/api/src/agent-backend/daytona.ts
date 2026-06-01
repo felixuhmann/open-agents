@@ -80,6 +80,11 @@ function truncate(text: string, maxChars: number = MAX_TOOL_OUTPUT_CHARS): strin
   return truncateText(text, maxChars).text;
 }
 
+function resolveSandboxPath(input: string, workspaceDir: string): string {
+  const absolutePath = input.startsWith("/") ? input : path.join(workspaceDir, input);
+  return remapWorkspacePath(absolutePath, workspaceDir);
+}
+
 function readTextBlocks(message: AssistantMessage): string {
   return message.content
     .filter((block): block is { type: "text"; text: string } => block.type === "text")
@@ -595,6 +600,7 @@ function buildRuntimePrompt(
   const toolInstructions = hasTools
     ? [
         `You have a Daytona Linux sandbox workspace. Treat ${workspaceDir} as the working directory.`,
+        `Uploaded files are available under ${workspaceDir}/inbox. If older prompts or skills mention /workspace, interpret that prefix as ${workspaceDir}.`,
         "Use tools to inspect files, write artifacts, and run commands when useful.",
         "Bash uses a persistent shell session in the sandbox (cwd and env persist between calls).",
         "For web pages or search, use curl/wget in bash or bind a third-party MCP search tool — there is no built-in web_search.",
@@ -642,9 +648,9 @@ function buildTools(
 
   if (bound.has("bash"))
     tools.push(bashTool(sandbox, workspaceDir, sandboxPolicy, maxOutput, onEvent));
-  if (bound.has("read")) tools.push(readTool(sandbox));
-  if (bound.has("write")) tools.push(writeTool(sandbox));
-  if (bound.has("edit")) tools.push(editTool(sandbox));
+  if (bound.has("read")) tools.push(readTool(sandbox, workspaceDir));
+  if (bound.has("write")) tools.push(writeTool(sandbox, workspaceDir));
+  if (bound.has("edit")) tools.push(editTool(sandbox, workspaceDir));
   if (bound.has("glob")) tools.push(globTool(sandbox, workspaceDir, maxOutput));
   if (bound.has("grep"))
     tools.push(grepTool(sandbox, workspaceDir, sandboxPolicy, maxOutput, onEvent));
@@ -696,9 +702,7 @@ function attachRunFileTool(
     executionMode: "sequential",
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; filename?: string; contentType?: string };
-      const remotePath = p.path.startsWith("/")
-        ? p.path
-        : path.join(workspaceDir, p.path);
+      const remotePath = resolveSandboxPath(p.path, workspaceDir);
       const bytes = await sandbox.fs.downloadFile(remotePath);
       const buf = Buffer.from(bytes);
       const filename = p.filename?.trim() ?? path.basename(remotePath) ?? "attachment";
@@ -744,7 +748,7 @@ function bashTool(
       const result = await runSandboxCommand({
         sandbox,
         command: p.command,
-        cwd: p.cwd ?? workspaceDir,
+        cwd: p.cwd ? resolveSandboxPath(p.cwd, workspaceDir) : workspaceDir,
         workspaceDir,
         timeoutSeconds: p.timeoutSeconds,
         policy: sandboxPolicy,
@@ -762,7 +766,7 @@ function bashTool(
   });
 }
 
-function readTool(sandbox: Sandbox): AgentTool {
+function readTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "read",
     label: "Read file",
@@ -773,18 +777,24 @@ function readTool(sandbox: Sandbox): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string };
-      const bytes = await sandbox.fs.downloadFile(p.path);
+      const remotePath = resolveSandboxPath(p.path, workspaceDir);
+      const bytes = await sandbox.fs.downloadFile(remotePath);
       const raw = bytes.toString("utf8");
       const { text, truncated } = truncateText(raw, MAX_READ_FILE_CHARS, "file");
       return {
         content: [{ type: "text", text }],
-        details: { path: p.path, bytes: bytes.byteLength, truncated },
+        details: {
+          path: remotePath,
+          requestedPath: p.path,
+          bytes: bytes.byteLength,
+          truncated,
+        },
       };
     },
   });
 }
 
-function writeTool(sandbox: Sandbox): AgentTool {
+function writeTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "write",
     label: "Write file",
@@ -795,17 +805,20 @@ function writeTool(sandbox: Sandbox): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; content: string };
-      await ensureSandboxDir(sandbox.fs, path.dirname(p.path));
-      await sandbox.fs.uploadFile(Buffer.from(p.content, "utf8"), p.path);
+      const remotePath = resolveSandboxPath(p.path, workspaceDir);
+      await ensureSandboxDir(sandbox.fs, path.dirname(remotePath));
+      await sandbox.fs.uploadFile(Buffer.from(p.content, "utf8"), remotePath);
       return {
-        content: [{ type: "text", text: `Wrote ${p.content.length} chars to ${p.path}` }],
-        details: { path: p.path, chars: p.content.length },
+        content: [
+          { type: "text", text: `Wrote ${p.content.length} chars to ${remotePath}` },
+        ],
+        details: { path: remotePath, requestedPath: p.path, chars: p.content.length },
       };
     },
   });
 }
 
-function editTool(sandbox: Sandbox): AgentTool {
+function editTool(sandbox: Sandbox, workspaceDir: string): AgentTool {
   return makeTool({
     name: "edit",
     label: "Edit file",
@@ -817,24 +830,25 @@ function editTool(sandbox: Sandbox): AgentTool {
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { path: string; oldString: string; newString: string };
-      const original = (await sandbox.fs.downloadFile(p.path)).toString("utf8");
+      const remotePath = resolveSandboxPath(p.path, workspaceDir);
+      const original = (await sandbox.fs.downloadFile(remotePath)).toString("utf8");
       const index = original.indexOf(p.oldString);
       if (index === -1) {
-        throw new Error(`oldString was not found in ${p.path}`);
+        throw new Error(`oldString was not found in ${remotePath}`);
       }
       if (original.slice(index + p.oldString.length).includes(p.oldString)) {
         throw new Error(
-          `oldString occurs more than once in ${p.path}; provide more context`,
+          `oldString occurs more than once in ${remotePath}; provide more context`,
         );
       }
       const updated =
         original.slice(0, index) +
         p.newString +
         original.slice(index + p.oldString.length);
-      await sandbox.fs.uploadFile(Buffer.from(updated, "utf8"), p.path);
+      await sandbox.fs.uploadFile(Buffer.from(updated, "utf8"), remotePath);
       return {
-        content: [{ type: "text", text: `Edited ${p.path}` }],
-        details: { path: p.path },
+        content: [{ type: "text", text: `Edited ${remotePath}` }],
+        details: { path: remotePath, requestedPath: p.path },
       };
     },
   });
@@ -853,7 +867,8 @@ function globTool(sandbox: Sandbox, workspaceDir: string, maxOutput: number): Ag
     }),
     execute: async (_id, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
-      const result = await sandbox.fs.searchFiles(p.root ?? workspaceDir, p.pattern);
+      const root = p.root ? resolveSandboxPath(p.root, workspaceDir) : workspaceDir;
+      const result = await sandbox.fs.searchFiles(root, p.pattern);
       return {
         content: [
           {
@@ -886,7 +901,8 @@ function grepTool(
     }),
     execute: async (toolCallId, params: Static<TSchema>) => {
       const p = params as { pattern: string; root?: string };
-      const command = `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(p.root ?? workspaceDir)} || true`;
+      const root = p.root ? resolveSandboxPath(p.root, workspaceDir) : workspaceDir;
+      const command = `grep -RIn --exclude-dir=.git -e ${shellQuote(p.pattern)} ${shellQuote(root)} || true`;
       const result = await runSandboxCommand({
         sandbox,
         command,

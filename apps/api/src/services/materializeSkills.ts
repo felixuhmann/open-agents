@@ -48,6 +48,33 @@ function normalizeZipEntryPath(fileName: string): string | null {
 
 type UnzippedFile = { path: string; content: Buffer };
 
+function isJunkZipEntry(file: UnzippedFile): boolean {
+  return (
+    file.path === ".DS_Store" ||
+    file.path.endsWith("/.DS_Store") ||
+    file.path.startsWith("__MACOSX/")
+  );
+}
+
+function stripSingleRootDirectory(files: UnzippedFile[]): UnzippedFile[] {
+  const contentFiles = files.filter((file) => !isJunkZipEntry(file));
+  if (contentFiles.some((file) => file.path === "SKILL.md")) return files;
+
+  const roots = new Set(
+    contentFiles.map((file) => file.path.split("/")[0]).filter(Boolean),
+  );
+  if (roots.size !== 1) return files;
+
+  const [root] = [...roots];
+  const prefix = `${root}/`;
+  if (!contentFiles.some((file) => file.path === `${prefix}SKILL.md`)) return files;
+
+  return contentFiles.map((file) => ({
+    ...file,
+    path: file.path.slice(prefix.length),
+  }));
+}
+
 async function unzipSkillBundle(
   bytes: Buffer,
 ): Promise<{ ok: true; files: UnzippedFile[] } | { ok: false; reason: string }> {
@@ -62,7 +89,9 @@ async function unzipSkillBundle(
       let ended = false;
 
       const finish = () => {
-        if (ended && pending === 0) resolve({ ok: true, files });
+        if (ended && pending === 0) {
+          resolve({ ok: true, files: stripSingleRootDirectory(files) });
+        }
       };
 
       zip.on("entry", (entry: yauzl.Entry) => {
