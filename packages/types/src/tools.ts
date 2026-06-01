@@ -2,8 +2,7 @@ import { z } from "zod";
 
 /**
  * Where the code that backs a tool actually executes. `managed` is the
- * agent backend's own compute (Anthropic's container today); `platform`
- * is our backend, served from the per-agent `/mcp/<slug>` endpoint.
+ * Daytona sandbox; `platform` is our backend through host-side Pi bindings.
  *
  * External (user-supplied) MCP servers are tracked separately on
  * `McpServer` library entries — attached per agent via `AgentMcpBinding`, not tool catalog rows.
@@ -35,15 +34,11 @@ export const SkillDto = z.object({
   description: z.string().nullable(),
   latestVersionId: z.string().nullable(),
   latestVersionNumber: z.number().nullable(),
-  anthropicSkillId: z.string().nullable(),
-  anthropicSkillVersion: z.string().nullable(),
   versions: z.array(
     z.object({
       id: z.string(),
       versionNumber: z.number(),
       filename: z.string(),
-      anthropicSkillId: z.string().nullable(),
-      anthropicSkillVersion: z.string().nullable(),
       createdAt: z.string(),
     }),
   ),

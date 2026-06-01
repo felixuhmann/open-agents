@@ -4,16 +4,12 @@ import { canOperateAgents, requireUser } from "../auth/middleware.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import type { AppVariables } from "../server/types.js";
-import { storeRunAttachment } from "../services/runAttachments.js";
-import { safeEqualHex, signRunUploadUrl } from "../services/uploadSigning.js";
 
 /**
- * Note: this router registers `/runs/:runId/attachments` and
- * `/conversations/:conversationId/attachments` (mounted at the root of the
- * app). The prefix below is only used by the request-log middleware to
- * recognize these paths as "interesting".
+ * Chat upload routes are mounted at the app root so the SPA can post
+ * conversation attachments without going through `/api`.
  */
-export const UPLOAD_PREFIX = "/runs";
+export const UPLOAD_PREFIX = "/conversations";
 
 export const uploadRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -24,79 +20,9 @@ export const uploadRoutes = new Hono<{ Variables: AppVariables }>();
 const MAX_BYTES = 25 * 1024 * 1024;
 
 /**
- * Sandbox-side upload: the agent's bash tool POSTs a file to the URL we
- * injected into its user message. Signed so a leaked URL only allows
- * adding attachments to a known runId (itself a CUID).
- */
-uploadRoutes.post("/runs/:runId/attachments", async (c) => {
-  const reqId = c.get("reqId");
-  const runId = c.req.param("runId");
-  const providedSig = c.req.query("sig") ?? "";
-
-  const expected = signRunUploadUrl(runId);
-  if (!safeEqualHex(providedSig, expected)) {
-    log.warn("upload: bad signature", { reqId, runId });
-    return c.text("invalid signature", 401);
-  }
-
-  let form: Awaited<ReturnType<typeof c.req.parseBody>>;
-  try {
-    form = await c.req.parseBody({ all: false });
-  } catch (err) {
-    log.warn("upload: failed to parse body", {
-      reqId,
-      runId,
-      err: err instanceof Error ? err.message : String(err),
-    });
-    return c.text("invalid multipart body", 400);
-  }
-
-  const file = form.file;
-  if (!(file instanceof File)) {
-    log.warn("upload: missing file field", {
-      reqId,
-      runId,
-      keys: Object.keys(form),
-    });
-    return c.text("missing 'file' field", 400);
-  }
-
-  const buf = Buffer.from(await file.arrayBuffer());
-  const filename = file.name || "attachment";
-  const contentType = file.type || "application/octet-stream";
-
-  let row;
-  try {
-    row = await storeRunAttachment(runId, filename, contentType, buf, { reqId });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message === "empty file") return c.text("empty file", 400);
-    if (message.startsWith("file too large")) {
-      log.warn("upload: file too large", { reqId, runId, size: file.size });
-      return c.text(message, 413);
-    }
-    if (message.startsWith("unknown run")) {
-      log.warn("upload: unknown run", { reqId, runId });
-      return c.text("unknown run", 404);
-    }
-    throw err;
-  }
-
-  return c.json({
-    id: row.id,
-    filename: row.filename,
-    contentType: row.contentType,
-    sizeBytes: row.sizeBytes,
-  });
-});
-
-/**
  * Chat user upload: SPA POSTs a file the user attached to the next message
  * they're about to send. Cookie-authenticated and conversation-bound — the
- * caller must own the conversation (or be an admin). No signature check
- * here because cookie auth already establishes the principal; the run-side
- * upload endpoint above keeps its HMAC because it's called from the
- * Anthropic sandbox without a browser session.
+ * caller must own the conversation (or be an admin).
  */
 uploadRoutes.post("/conversations/:conversationId/attachments", async (c) => {
   const reqId = c.get("reqId");

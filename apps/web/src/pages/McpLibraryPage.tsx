@@ -343,8 +343,7 @@ export default function McpLibraryPage() {
         <Link to="/agents" className="text-primary underline-offset-4 hover:underline">
           edit page
         </Link>
-        . With Daytona, the orchestrator connects on each run; with Anthropic Managed
-        Agents, the hosted sandbox connects directly.
+        . With Daytona, the orchestrator connects to external MCP servers on each run.
       </p>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

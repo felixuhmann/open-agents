@@ -275,8 +275,8 @@ async function clearSandboxSessionPointers(
 ): Promise<void> {
   if (row.conversationId) {
     await prisma.chatConversation.updateMany({
-      where: { id: row.conversationId, anthropicSessionId: row.sessionId },
-      data: { anthropicSessionId: null },
+      where: { id: row.conversationId, sessionId: row.sessionId },
+      data: { sessionId: null },
     });
   }
   if (row.threadId) {
@@ -352,12 +352,12 @@ export async function getSandboxForThread(
 export async function backfillSandboxesFromSessions(): Promise<number> {
   let created = 0;
   const conversations = await prisma.chatConversation.findMany({
-    where: { anthropicSessionId: { startsWith: `${DAYTONA_PROVIDER}:` } },
-    select: { id: true, agentId: true, anthropicSessionId: true },
+    where: { sessionId: { startsWith: `${DAYTONA_PROVIDER}:` } },
+    select: { id: true, agentId: true, sessionId: true },
   });
   for (const conv of conversations) {
-    if (!conv.anthropicSessionId) continue;
-    const ref = parseDaytonaSessionId(conv.anthropicSessionId);
+    if (!conv.sessionId) continue;
+    const ref = parseDaytonaSessionId(conv.sessionId);
     const existing = await prisma.agentSandbox.findUnique({
       where: {
         provider_providerSandboxId: {

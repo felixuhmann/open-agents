@@ -19,7 +19,10 @@ export const SETUP_PREFIX = "/api/setup";
 export const setupRoutes = new Hono<{ Variables: AppVariables }>();
 
 const SetupBody = z.object({
-  anthropicApiKey: z.string().min(1),
+  daytonaApiKey: z.string().min(1),
+  anthropicApiKey: z.string().optional(),
+  openaiApiKey: z.string().optional(),
+  openrouterApiKey: z.string().optional(),
   mailgunApiKey: z.string().optional(),
   mailgunDomain: z.string().optional(),
   mailgunSigningKey: z.string().optional(),
@@ -43,9 +46,9 @@ setupRoutes.get("/status", async (c) => {
 
 /**
  * One-shot deployment bootstrap. Creates the first admin user, persists
- * Anthropic and Mailgun service credentials encrypted in Postgres, and
- * resets the in-process Anthropic backend so subsequent calls pick up the
- * new key.
+ * Daytona, model-provider, and Mailgun service credentials encrypted in
+ * Postgres, and resets the in-process backend so subsequent calls pick up
+ * the new key.
  *
  * Refuses to run a second time once any user exists — rotate values via
  * the admin Settings UI (`/api/secrets`) instead.
@@ -65,7 +68,16 @@ setupRoutes.post("/", async (c) => {
     role: "admin",
   });
 
-  await setServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY, body.anthropicApiKey);
+  await setServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY, body.daytonaApiKey);
+  if (body.anthropicApiKey) {
+    await setServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY, body.anthropicApiKey);
+  }
+  if (body.openaiApiKey) {
+    await setServiceSecret(SERVICE_KEYS.OPENAI_API_KEY, body.openaiApiKey);
+  }
+  if (body.openrouterApiKey) {
+    await setServiceSecret(SERVICE_KEYS.OPENROUTER_API_KEY, body.openrouterApiKey);
+  }
   if (body.mailgunApiKey) {
     await setServiceSecret(SERVICE_KEYS.MAILGUN_API_KEY, body.mailgunApiKey);
   }

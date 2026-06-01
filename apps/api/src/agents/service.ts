@@ -13,11 +13,11 @@ import { buildAgentConfigSnapshot } from "./snapshot.js";
 
 /**
  * Hydrated Agent shape used by route handlers, the run-agent worker, and
- * the MCP route. Includes everything needed to resolve a run end-to-end.
+ * jobs. Includes everything needed to resolve a run end-to-end.
  *
  * `toolBindings` is the only binding table after the unified-catalog
- * change — both managed (Anthropic-executed) and platform (our MCP)
- * bindings live here, discriminated by `tool.runtime`.
+ * change — both managed (Daytona sandbox) and platform bindings live here,
+ * discriminated by `tool.runtime`.
  */
 export type HydratedAgent = Agent & {
   currentVersion: Prisma.AgentVersionGetPayload<true> | null;
@@ -175,8 +175,8 @@ export type UpdateAgentArgs = {
  * `mcpServerIds`, `accessUserIds`) are replace-semantics: we delete +
  * recreate the join rows in one transaction.
  *
- * Anthropic provisioning is NOT triggered here — call `publishAgent(id)`
- * separately so the UI can batch many edits before freezing a version.
+ * Call `publishAgent(id)` separately so the UI can batch many edits before
+ * freezing a version.
  */
 export async function updateAgent(
   id: string,
@@ -380,7 +380,7 @@ export async function publishAgent(id: string): Promise<HydratedAgent> {
   const agent = await getAgentById(id);
   if (!agent) throw new Error(`Agent not found: ${id}`);
 
-  const snapshot = await buildAgentConfigSnapshot(agent);
+  const snapshot = buildAgentConfigSnapshot(agent);
 
   const latest = await prisma.agentVersion.findFirst({
     where: { agentId: agent.id },

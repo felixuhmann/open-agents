@@ -38,10 +38,6 @@ export const AgentDto = z.object({
   webEnabled: z.boolean(),
   accessMode: AgentAccessMode,
   inboundLocalPart: z.string(),
-  anthropicAgentId: z.string().nullable(),
-  environmentId: z.string().nullable(),
-  /** @deprecated Legacy Anthropic sync metadata. Prefer currentVersionNumber. */
-  anthropicAgentVersion: z.string().nullable().optional(),
   currentVersionNumber: z.number().int().positive().nullable().optional(),
   currentVersionId: z.string().nullable().optional(),
   publishedAt: z.string().nullable().optional(),

@@ -4,7 +4,6 @@ import {
   type AgentConfigSnapshot as AgentConfigSnapshotType,
 } from "@open-agents/types";
 import type { HydratedAgent } from "./service.js";
-import { getAgentBackend } from "../agent-backend/instance.js";
 import { resolveDraftSandboxPolicy } from "../services/sandboxPolicy.js";
 import { HttpError } from "../auth/middleware.js";
 import { prisma } from "../db.js";
@@ -18,13 +17,9 @@ export type VersionedAgent = HydratedAgent & {
 
 /**
  * Build a provider-neutral config snapshot from the agent's current draft
- * bindings. The active backend at publish time is recorded in `runtime`.
+ * bindings. Daytona is the only runtime backend.
  */
-export async function buildAgentConfigSnapshot(
-  agent: HydratedAgent,
-): Promise<AgentConfigSnapshotType> {
-  const backend = await getAgentBackend();
-
+export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnapshotType {
   const toolBindings = agent.toolBindings.map((b) => ({
     bindingId: b.id,
     toolId: b.toolId,
@@ -55,7 +50,7 @@ export async function buildAgentConfigSnapshot(
       skillName: b.skill.name,
       versionNumber: b.skillVersion.versionNumber,
     })),
-    runtime: { backend: backend.runtime, sandbox },
+    runtime: { backend: "daytona", sandbox },
   });
 }
 

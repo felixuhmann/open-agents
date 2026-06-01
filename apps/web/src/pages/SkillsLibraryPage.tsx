@@ -221,14 +221,10 @@ export default function SkillsLibraryPage() {
                     {s.name}
                   </CardTitle>
                   <CardDescription>
-                    {s.anthropicSkillId ? (
-                      <span className="font-mono">
-                        {s.anthropicSkillId}
-                        {s.latestVersionNumber ? ` · v${s.latestVersionNumber}` : ""}
-                      </span>
-                    ) : (
-                      <Badge variant="outline">local only</Badge>
-                    )}
+                    <Badge variant="outline">
+                      local bundle
+                      {s.latestVersionNumber ? ` · v${s.latestVersionNumber}` : ""}
+                    </Badge>
                   </CardDescription>
                   <CardAction>
                     <Button

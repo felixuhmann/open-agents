@@ -21,7 +21,7 @@ import { buildApp } from "./app.js";
  * 5. Install signal handlers so SIGINT / SIGTERM drain pg-boss, close the
  *    LISTEN connection, and disconnect Prisma cleanly.
  *
- * Anthropic / Mailgun credentials are NOT validated here — they live in
+ * Model-provider / Mailgun credentials are NOT validated here — they live in
  * the encrypted Secret store and may not be populated yet (the first-run
  * /setup wizard captures them). Workers fail fast with a clear error
  * message when the wizard hasn't been completed.

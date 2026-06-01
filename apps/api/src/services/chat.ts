@@ -29,7 +29,7 @@ export async function enqueueChatTurn(args: EnqueueChatTurnArgs): Promise<string
       agentVersionId,
       conversationId: conversation.id,
       surface: "chat",
-      sessionId: conversation.anthropicSessionId ?? "",
+      sessionId: conversation.sessionId ?? "",
       status: "pending",
     },
   });

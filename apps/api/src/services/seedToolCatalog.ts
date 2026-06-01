@@ -4,13 +4,12 @@ import { log } from "../log.js";
 import { PLATFORM_HANDLERS } from "../mcp/platform/index.js";
 
 /**
- * Members of Anthropic's `agent_toolset_20260401`. Each is a capability
- * the model executes inside its session container — we don't ship code
- * for them, the toggle is purely "advertise this capability to the
- * agent in its published config".
+ * Daytona sandbox capabilities exposed as first-class tool toggles. The
+ * runtime implements these inside `DaytonaAgentBackend`; the catalog row lets
+ * admins choose which capabilities each agent receives.
  *
- * Bumping toolset versions is a one-file change: extend or replace this
- * list and the seeder upserts the new rows. To retire a member, set its
+ * To add a sandbox capability, extend this list and the seeder upserts the
+ * new row. To retire a member, set its
  * `deprecated` flag — existing bindings keep working until an admin
  * re-picks, but the row is hidden from the picker.
  */
@@ -40,7 +39,7 @@ const MANAGED_TOOLS: ReadonlyArray<{
     key: "web_search",
     name: "Web search",
     description:
-      "Search the web (Anthropic managed runtime; not implemented on Daytona — use curl or a third-party MCP search server).",
+      "Search the web (not implemented on Daytona — use curl or a third-party MCP search server).",
   },
 ];
 
@@ -49,8 +48,8 @@ const MANAGED_TOOLS: ReadonlyArray<{
  *
  * - Upserts every code-shipped platform handler into `Tool` so the UI
  *   catalog matches `PLATFORM_HANDLERS`.
- * - Upserts the Anthropic-managed toolset members so the same UI
- *   catalog also covers backend-executed tools.
+ * - Upserts the Daytona-managed sandbox tools so the same UI catalog also
+ *   covers backend-executed tools.
  *
  * Keys are unique across runtimes (managed `bash` and a hypothetical
  * platform `bash` would collide — that's intentional, the catalog is one

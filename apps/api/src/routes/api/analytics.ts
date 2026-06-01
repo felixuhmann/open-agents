@@ -162,7 +162,7 @@ analyticsRoutes.get("/", async (c) => {
       .map((row) => ({ surface: row.surface, ...serializeAccumulator(row) }))
       .sort((a, b) => b.runs - a.runs),
     notes: [
-      "Token usage is aggregated from durable model.request RunEvents (Daytona/Pi and legacy Anthropic streams).",
+      "Token usage is aggregated from durable model.request RunEvents emitted by Daytona/Pi.",
       "Spend is estimated only when the model id matches the built-in price table; otherwise spendUsd is 0 and tokens still count.",
       "Provider is taken from the event payload when present, otherwise inferred from the model id prefix.",
     ],

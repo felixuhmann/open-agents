@@ -9,10 +9,9 @@ import { buildDaytonaSessionId, parseDaytonaSessionId } from "./daytonaSandbox.j
 
 const SENSITIVE_KEY =
   /secret|password|token|api[_-]?key|authorization|bearer|credential|private[_-]?key/i;
-const UPLOAD_URL_PATTERN = /REPLY_ATTACHMENT_UPLOAD_URL:\s*\S+/gi;
 
 export function redactStringForRunLog(text: string, maxLen = 8_000): string {
-  let s = text.replace(UPLOAD_URL_PATTERN, "REPLY_ATTACHMENT_UPLOAD_URL: [redacted]");
+  let s = text;
   if (s.length > maxLen) {
     s = `${s.slice(0, maxLen)}\n[truncated ${s.length - maxLen} chars]`;
   }

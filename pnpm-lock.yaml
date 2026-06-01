@@ -20,9 +20,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.91.1
-        version: 0.91.1(zod@4.4.3)
       '@daytona/sdk':
         specifier: ^0.182.0
         version: 0.182.0(ws@8.18.3)

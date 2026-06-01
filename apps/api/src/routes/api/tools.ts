@@ -8,7 +8,7 @@ export const toolsRoutes = new Hono<{ Variables: AppVariables }>();
 /**
  * Unified tool catalog. Read-only — entries are seeded from
  * `services/seedToolCatalog.ts` on bootstrap (both managed-runtime
- * Anthropic toolset members and platform-runtime MCP handlers).
+ * Daytona sandbox tools and platform-runtime MCP handlers).
  *
  * Deprecated rows are returned so old bindings still render in the
  * agent edit page; the UI hides them from the picker but keeps showing

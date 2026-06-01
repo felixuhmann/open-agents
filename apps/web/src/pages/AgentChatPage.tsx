@@ -381,9 +381,8 @@ export default function AgentChatPage() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = draft.trim();
-    // Allow attachment-only sends — but require some text so Anthropic has
-    // a non-empty user message to respond to. Default it if the user only
-    // attached files and pressed enter.
+    // Allow attachment-only sends while still giving the agent a non-empty
+    // user message to respond to.
     const text = trimmed || (pendingUploads.length > 0 ? "(see attached files)" : "");
     if (!text || !slug) return;
     if (!conversationId) {

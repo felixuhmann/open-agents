@@ -60,7 +60,7 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     type: z.literal("run.started"),
     runId: z.string(),
     sessionId: z.string(),
-    backend: z.enum(["daytona", "anthropic"]).optional(),
+    backend: z.literal("daytona").optional(),
     providerSandboxId: z.string().optional(),
     workspaceDir: z.string().optional(),
   }),
