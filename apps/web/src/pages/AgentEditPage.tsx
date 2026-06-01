@@ -70,6 +70,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import { ModelPicker, type ModelSelection } from "@/components/ModelPicker";
+import { DeleteAgentTriggerButton } from "@/components/DeleteAgentDialog";
 
 type EditState = {
   displayName: string;
@@ -925,6 +926,22 @@ export default function AgentEditPage() {
               </EmptyHeader>
             </Empty>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <TrashIcon className="size-4" weight="duotone" />
+            Danger zone
+          </CardTitle>
+          <CardDescription>
+            Permanently remove this agent and all of its conversations, runs, sandboxes,
+            and memory documents.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DeleteAgentTriggerButton slug={slug!} displayName={agent.data.displayName} />
         </CardContent>
       </Card>
     </div>
