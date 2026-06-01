@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes } from "@/components/chat/utils";
+import { useAutosizeTextarea } from "@/hooks/use-autosize-textarea";
 import { cn } from "@/lib/utils";
 
 export type PendingUpload = {
@@ -38,6 +39,8 @@ export function Composer({
   placeholder = "Send a message…",
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useAutosizeTextarea(textareaRef, value);
   const canSend =
     !sending &&
     uploadingCount === 0 &&
@@ -104,6 +107,7 @@ export function Composer({
         />
 
         <textarea
+          ref={textareaRef}
           rows={1}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -114,7 +118,7 @@ export function Composer({
             }
           }}
           placeholder={placeholder}
-          className="field-sizing-content max-h-56 min-h-9 w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          className="max-h-56 min-h-9 w-full resize-none overflow-hidden bg-transparent px-1 py-1 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
 
         <div className="flex items-center justify-between gap-2">
