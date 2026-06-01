@@ -41,18 +41,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  buildCompactRunEventsExport,
+  buildSessionTraceExport,
+} from "@/lib/sessionTraceExport";
 import { cn } from "@/lib/utils";
-
-export function buildSessionTraceExport(data: SessionTrace): unknown {
-  return {
-    surface: data.surface,
-    agent: data.agent,
-    session: data.session,
-    timeline: buildUnifiedTimeline(data),
-    runs: data.runs,
-    messages: data.messages,
-  };
-}
 
 export function AgentTracePanel({ data }: { data: SessionTrace }) {
   const totalEvents = data.runs.reduce((acc, r) => acc + r.events.length, 0);
@@ -720,25 +713,12 @@ function UnifiedTraceView({ data }: { data: SessionTrace }) {
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <CopyButton
-            label="Copy unified trace (JSON)"
-            value={JSON.stringify(timeline, null, 2)}
+            label="Copy compact trace (JSON)"
+            value={JSON.stringify(buildSessionTraceExport(data), null, 2)}
           />
           <CopyButton
             label="Copy events only"
-            value={JSON.stringify(
-              data.runs.map((r) => ({
-                runId: r.id,
-                sessionId: r.sessionId,
-                status: r.status,
-                error: r.error,
-                startedAt: r.startedAt,
-                completedAt: r.completedAt,
-                skillsAvailable: r.skillsAvailable,
-                events: r.events,
-              })),
-              null,
-              2,
-            )}
+            value={JSON.stringify(buildCompactRunEventsExport(data.runs), null, 2)}
           />
           <span className="text-xs text-muted-foreground">
             {userMessageCount} user message{userMessageCount === 1 ? "" : "s"} ·{" "}
