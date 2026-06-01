@@ -1,7 +1,7 @@
 import type { HydratedAgent } from "../agents/service.js";
 import { log } from "../log.js";
 import { getToolSecrets } from "../secrets/service.js";
-import type { PlatformHandlerCtx } from "./types.js";
+import type { PlatformHandlerCtx, PlatformSandboxCtx } from "./types.js";
 import { getPlatformHandler } from "./platform/index.js";
 
 export type PlatformToolInvokeResult = {
@@ -21,6 +21,7 @@ export async function invokePlatformTool(
   toolName: string,
   args: Record<string, unknown>,
   configJson: Record<string, unknown>,
+  runtime?: { sandbox?: PlatformSandboxCtx },
 ): Promise<PlatformToolInvokeResult> {
   const handler = getPlatformHandler(handlerKey);
   if (!handler) {
@@ -37,6 +38,7 @@ export async function invokePlatformTool(
     agentSlug: agent.slug,
     configJson,
     secrets: await getToolSecrets(bindingId),
+    sandbox: runtime?.sandbox,
   };
 
   try {

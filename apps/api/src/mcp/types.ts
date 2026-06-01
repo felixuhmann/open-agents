@@ -14,6 +14,19 @@ export type PlatformHandlerCtx = {
   configJson: Record<string, unknown>;
   /** Per-binding secrets (decrypted). Empty object if none. */
   secrets: Record<string, string>;
+  /**
+   * Active sandbox for run-scoped platform tools. Undefined for platform
+   * invocations outside a Daytona-backed agent run.
+   */
+  sandbox?: PlatformSandboxCtx;
+};
+
+export type PlatformSandboxCtx = {
+  workspaceDir: string;
+  fs: {
+    createFolder(path: string, mode: string): Promise<unknown>;
+    uploadFile(content: Buffer, path: string): Promise<unknown>;
+  };
 };
 
 /**
