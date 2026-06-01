@@ -48,6 +48,7 @@ import {
   skillSlugFromName,
 } from "../services/materializeSkills.js";
 import { formatCommandResult, runSandboxCommand } from "../services/daytonaExec.js";
+import { storeRunAttachment } from "../services/runAttachments.js";
 import {
   DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
   MAX_READ_FILE_CHARS,
@@ -290,7 +291,14 @@ export class DaytonaAgentBackend implements AgentBackend {
             thirdPartyBearer,
           );
           const tools = [
-            ...buildTools(agent, sandbox, workspaceDir, sandboxPolicy, onEvent),
+            ...buildTools(
+              agent,
+              sandbox,
+              workspaceDir,
+              sandboxPolicy,
+              onEvent,
+              context?.runId,
+            ),
             ...mcpTools,
           ];
           let finalText = "";
@@ -593,7 +601,7 @@ function buildRuntimePrompt(
         "Bash uses a persistent shell session in the sandbox (cwd and env persist between calls).",
         "For web pages or search, use curl/wget in bash or bind a third-party MCP search tool — there is no built-in web_search.",
         "Platform tools (for example memory_*) and third-party MCP tools (name prefix server:tool) run on the orchestrator host, not inside the sandbox.",
-        "If the user message contains REPLY_ATTACHMENT_UPLOAD_URL, upload final files there with curl when the user asks for downloadable artifacts.",
+        "When the user needs a downloadable file, call attach_run_file with the sandbox path. Do not curl REPLY_ATTACHMENT_UPLOAD_URL from bash.",
       ].join("\n")
     : "No sandbox tools are currently enabled for this agent.";
 
@@ -626,10 +634,13 @@ function buildTools(
   workspaceDir: string,
   sandboxPolicy: SandboxPolicyBundle,
   onEvent?: AgentEventHandler,
+  runId?: string,
 ): AgentTool[] {
   const bound = boundManagedTools(agent);
   const tools: AgentTool[] = [];
   const maxOutput = sandboxPolicy.command.maxOutputChars;
+
+  if (runId) tools.push(attachRunFileTool(sandbox, runId, workspaceDir));
 
   if (bound.has("bash"))
     tools.push(bashTool(sandbox, workspaceDir, sandboxPolicy, maxOutput, onEvent));
@@ -660,6 +671,51 @@ function emitToolOutput(
     stream,
     text,
     rawType: "daytona.command_output",
+  });
+}
+
+function attachRunFileTool(
+  sandbox: Sandbox,
+  runId: string,
+  workspaceDir: string,
+): AgentTool {
+  return makeTool({
+    name: "attach_run_file",
+    label: "Attach run file",
+    description:
+      "Upload a file from this sandbox to the current run as a downloadable attachment for chat or email. Prefer this over curl for returning artifacts.",
+    parameters: Type.Object({
+      path: Type.String({
+        description: `Path in the sandbox (absolute or relative to ${workspaceDir}).`,
+      }),
+      filename: Type.Optional(
+        Type.String({ description: "Download filename; defaults to the path basename." }),
+      ),
+      contentType: Type.Optional(
+        Type.String({ description: "MIME type; defaults to application/octet-stream." }),
+      ),
+    }),
+    executionMode: "sequential",
+    execute: async (_id, params: Static<TSchema>) => {
+      const p = params as { path: string; filename?: string; contentType?: string };
+      const remotePath = p.path.startsWith("/")
+        ? p.path
+        : path.join(workspaceDir, p.path);
+      const bytes = await sandbox.fs.downloadFile(remotePath);
+      const buf = Buffer.from(bytes);
+      const filename = p.filename?.trim() ?? path.basename(remotePath) ?? "attachment";
+      const contentType = p.contentType?.trim() ?? "application/octet-stream";
+      const stored = await storeRunAttachment(runId, filename, contentType, buf);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Attached ${stored.filename} (${stored.sizeBytes} bytes), id ${stored.id}`,
+          },
+        ],
+        details: stored,
+      };
+    },
   });
 }
 
@@ -698,9 +754,11 @@ function bashTool(
           emitToolOutput(onEvent, "bash", toolCallId, chunk.stream, chunk.text),
       });
       const text = truncate(formatCommandResult(result), maxOutput);
+      const failed = result.exitCode !== 0 || Boolean(result.policyBlocked);
       return {
         content: [{ type: "text", text }],
         details: result,
+        ...(failed ? { isError: true } : {}),
       };
     },
   });

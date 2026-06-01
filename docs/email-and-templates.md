@@ -207,15 +207,17 @@ The agent might _produce_ files (PDFs, spreadsheets, etc.) it wants
 attached to the reply. The flow is identical for email **and** chat
 runs:
 
-1. The run-agent worker signs an upload URL for the run id and injects
-   it into the user message:
-   ```
-   REPLY_ATTACHMENT_UPLOAD_URL: https://<deploy>/runs/<runId>/attachments?sig=<hmac>
-   ```
-   The "how/why/when to upload" instructions live in the agent's
-   system prompt or attached skill; we only inject the dynamic URL.
-2. The sandbox `POST`s `multipart/form-data` with a `file` field to
-   that URL.
+1. The run-agent worker tells the agent how to return files:
+   - **Anthropic managed agents:** a signed upload URL is injected:
+     `REPLY_ATTACHMENT_UPLOAD_URL: https://<deploy>/runs/<runId>/attachments?sig=<hmac>`
+     and the sandbox `POST`s `multipart/form-data` with a `file` field.
+   - **Daytona backend:** the user message instructs the agent to call
+     `attach_run_file` (orchestrator downloads from the sandbox via the
+     Daytona API). Do not rely on `curl` to `PUBLIC_BASE_URL` from Daytona —
+     sandboxes often cannot resolve that host.
+     The "how/why/when to upload" instructions live in the agent's system
+     prompt or attached skill; we only inject the dynamic hook.
+2. Bytes land in `AgentAttachment` (direct `POST` or `attach_run_file`).
 3. [`routes/upload.ts`](../apps/api/src/routes/upload.ts) verifies the
    HMAC, caps the size at 25 MB (Mailgun's per-message limit), and
    inserts an `AgentAttachment` row.
