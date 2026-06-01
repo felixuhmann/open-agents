@@ -130,9 +130,8 @@ runsRoutes.get("/:runId/events", async (c) => {
 });
 
 /**
- * List attachments the agent uploaded back during a run (via the signed
- * `REPLY_ATTACHMENT_UPLOAD_URL` we inject into the user message). Used by
- * the SPA chat to render assistant-message attachments alongside the text.
+ * List attachments the agent produced during a run via `attach_run_file`. Used
+ * by the SPA chat to render assistant-message attachments alongside the text.
  */
 runsRoutes.get("/:runId/attachments", async (c) => {
   const runId = c.req.param("runId");

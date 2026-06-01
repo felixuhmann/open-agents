@@ -13,7 +13,7 @@ function safeFilename(name: string): string {
 
 /**
  * Upload every `ChatAttachment` row for `chatMessageId` that doesn't yet
- * have an `anthropicFileId` to the agent backend's file store and persist
+ * have a `backendFileId` to the agent backend's file store and persist
  * the resulting file id + mount path back onto the row. Idempotent — pg-boss
  * retries don't re-upload.
  */
@@ -21,7 +21,7 @@ export async function uploadPendingChatAttachments(
   chatMessageId: string,
 ): Promise<UploadedAttachment[]> {
   const pending = await prisma.chatAttachment.findMany({
-    where: { chatMessageId, anthropicFileId: null },
+    where: { chatMessageId, backendFileId: null },
   });
   const uploaded: UploadedAttachment[] = [];
   if (pending.length === 0) return uploaded;
@@ -36,7 +36,7 @@ export async function uploadPendingChatAttachments(
     });
     await prisma.chatAttachment.update({
       where: { id: att.id },
-      data: { anthropicFileId: file.id, mountPath },
+      data: { backendFileId: file.id, mountPath },
     });
     uploaded.push({
       id: file.id,

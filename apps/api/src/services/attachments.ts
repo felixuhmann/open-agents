@@ -3,7 +3,7 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 
 export type UploadedAttachment = {
-  /** Backend file id (e.g. Anthropic Files API `file_…`). */
+  /** Backend file id used when mounting the attachment into the sandbox. */
   id: string;
   filename: string;
   mountPath: string;
@@ -21,17 +21,17 @@ function safeFilename(name: string): string {
 
 /**
  * Upload every `EmailAttachment` row for `incomingMessageId` that doesn't
- * yet have an `anthropicFileId` to the agent backend's file store and
+ * yet have a `backendFileId` to the agent backend's file store and
  * persist the resulting file id + mount path back onto the row.
  *
- * Idempotent: rows that already have an `anthropicFileId` are skipped, so
+ * Idempotent: rows that already have a `backendFileId` are skipped, so
  * pg-boss retries don't re-upload anything.
  */
 export async function uploadPendingAttachments(
   incomingMessageId: string,
 ): Promise<UploadedAttachment[]> {
   const pending = await prisma.emailAttachment.findMany({
-    where: { emailMessageId: incomingMessageId, anthropicFileId: null },
+    where: { emailMessageId: incomingMessageId, backendFileId: null },
   });
 
   const uploaded: UploadedAttachment[] = [];
@@ -47,7 +47,7 @@ export async function uploadPendingAttachments(
     });
     await prisma.emailAttachment.update({
       where: { id: att.id },
-      data: { anthropicFileId: file.id, mountPath },
+      data: { backendFileId: file.id, mountPath },
     });
     uploaded.push({
       id: file.id,

@@ -250,16 +250,9 @@ function AgentContextCard({
                         v{s.versionNumber}
                       </span>
                     </span>
-                    {s.anthropicSkillId ? (
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {s.anthropicSkillId}
-                        {s.anthropicSkillVersion ? `@${s.anthropicSkillVersion}` : ""}
-                      </span>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px]">
-                        local only
-                      </Badge>
-                    )}
+                    <Badge variant="outline" className="text-[10px]">
+                      local bundle
+                    </Badge>
                   </div>
                   <span className="font-mono text-[10px] text-muted-foreground">
                     {s.skillVersionId}

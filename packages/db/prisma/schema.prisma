@@ -137,8 +137,7 @@ model Secret {
 
 // ---------------------------------------------------------------------------
 // Agent definition.
-// One row per agent in this deployment. `anthropicAgentId` /
-// `environmentId` are reflected from Anthropic on create/update.
+// One row per agent in this deployment.
 // ---------------------------------------------------------------------------
 
 model Agent {
@@ -157,29 +156,12 @@ model Agent {
   /// `apps/api/src/services/renderEmail.ts#resolveAssetUrl` for how the
   /// value is normalised at render time.
   avatar       String?
-  /// Optional agent system prompt mirrored locally for the editor; the
-  /// canonical version lives on the Anthropic agent.
+  /// Optional agent system prompt used by Daytona runs and mirrored in the editor.
   systemPrompt String  @default("")
   /// Pi-ai provider id (e.g. `anthropic`, `openai`, `openrouter`).
   modelProvider String @default("anthropic")
   /// Model id within the provider catalog (e.g. `claude-opus-4-7`, `gpt-4o-mini`).
   modelId       String @default("claude-opus-4-7")
-
-  /// IDs returned by Anthropic. Nullable while the create call is in flight.
-  anthropicAgentId      String?
-  environmentId         String?
-  /// Pinned Anthropic agent version this deployment is currently using.
-  anthropicAgentVersion String?
-
-  /// Vault credential id (`vcrd_…`) Anthropic returned when we provisioned
-  /// the static_bearer mapping for this agent's MCP URL. Null until the
-  /// first publish that bound a platform tool. Used to PATCH the bearer
-  /// on subsequent publishes instead of creating a new credential each time.
-  anthropicMcpCredentialId  String?
-  /// MCP URL the credential above is bound to (Anthropic's vault treats
-  /// this as immutable). Stored so we can detect when `PUBLIC_BASE_URL` or
-  /// the slug changed and we need to recreate the credential.
-  anthropicMcpCredentialUrl String?
 
   emailEnabled     Boolean @default(false)
   webEnabled       Boolean @default(true)
@@ -220,9 +202,8 @@ model Agent {
   @@index([createdById])
 }
 
-/// Immutable snapshot of agent runtime config at publish time. Provider-neutral
-/// `payload` is the source of truth for auditing runs; optional `providerRefs`
-/// holds backend-specific sync metadata (e.g. legacy Anthropic agent ids).
+/// Immutable snapshot of agent runtime config at publish time. `payload` is the
+/// source of truth for auditing runs.
 model AgentVersion {
   id               String   @id @default(cuid())
   agentId          String
@@ -232,10 +213,6 @@ model AgentVersion {
   versionNumber    Int
   /// Provider-neutral frozen config (system prompt, tools, skills, runtime).
   payload          Json
-  /// Backend-specific refs from optional sync (Anthropic agent id/version, …).
-  providerRefs     Json?
-  /// @deprecated Legacy field from Anthropic-only publish. Prefer `providerRefs`.
-  anthropicVersion String?
   createdAt        DateTime @default(now())
   runs             AgentRun[]
 
@@ -258,17 +235,12 @@ model AgentAccess {
 // Tools and skills (org-wide library, attachable to any agent).
 // ---------------------------------------------------------------------------
 
-/// Unified tool catalog. Every agent capability — whether executed by the
-/// agent backend itself (Anthropic's container) or by our own MCP server —
-/// is a `Tool` row. The `runtime` discriminates who runs the code:
+/// Unified tool catalog. Every agent capability is a `Tool` row. The
+/// `runtime` discriminates who runs the code:
 ///
-/// - `managed` — runs on the agent backend's compute. For Anthropic this
-///   means a member of `agent_toolset_20260401` (`bash`, `read`, `write`,
-///   `edit`, `glob`, `grep`, `web_fetch`, `web_search`). `key` matches the
-///   tool name in the toolset; there is no handler in this codebase.
-/// - `platform` — runs on our backend via the per-agent `/mcp/<slug>`
-///   server. `key` is the `handlerKey` registered in
-///   `apps/api/src/mcp/platform/index.ts`.
+/// - `managed` — runs inside the Daytona sandbox (`bash`, `read`, `write`,
+///   `edit`, `glob`, `grep`, `web_fetch`, `web_search`).
+/// - `platform` — runs on our backend through Pi host-side tool bindings.
 ///
 /// Deployment-wide third-party MCP server registry.
 model McpServer {
@@ -312,9 +284,8 @@ model Tool {
   configSchema    Json               @default("{}")
   /// Whether this tool needs at least one Secret value per binding.
   requiresSecrets Boolean            @default(false)
-  /// Marks tools that no longer back a live capability (e.g. retired
-  /// Anthropic toolset member). Existing bindings keep working until an
-  /// admin migrates; the picker hides deprecated rows.
+  /// Marks tools that no longer back a live capability. Existing bindings keep
+  /// working until an admin migrates; the picker hides deprecated rows.
   deprecated      Boolean            @default(false)
   bindings        AgentToolBinding[]
   createdAt       DateTime           @default(now())
@@ -349,9 +320,8 @@ model Skill {
   updatedAt   DateTime            @updatedAt
 }
 
-/// Immutable uploaded bundle for a Skill. Reflected to Anthropic via the
-/// Skills API; the local `bundleStorageRef` points to the on-disk zip
-/// kept for re-uploading (e.g. when an agent is migrated).
+/// Immutable uploaded bundle for a Skill. The local `bundleStorageRef` points
+/// to the on-disk zip materialized into Daytona sandboxes.
 model SkillVersion {
   id                    String              @id @default(cuid())
   skillId               String
@@ -360,8 +330,6 @@ model SkillVersion {
   filename              String
   /// Local relative path inside `apps/api/data/skills/` of the bundle zip.
   bundleStorageRef      String
-  anthropicSkillId      String?
-  anthropicSkillVersion String?
   skill                 Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
   bindings              AgentSkillBinding[]
   createdAt             DateTime            @default(now())
@@ -450,8 +418,8 @@ model ChatConversation {
   id                 String        @id @default(cuid())
   agentId            String
   userId             String
-  /// Anthropic session id; rotated when attachments force a new session.
-  anthropicSessionId String?       @unique
+  /// Backend session id currently bound to this conversation.
+  sessionId String?       @unique
   title              String        @default("New chat")
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -483,8 +451,8 @@ model ChatMessage {
   @@index([conversationId])
 }
 
-/// Files uploaded by the user inside a chat conversation. Persisted as
-/// bytes; uploaded to Anthropic Files API on the next session create.
+/// Files uploaded by the user inside a chat conversation. Persisted as bytes
+/// and mounted into the Daytona sandbox on the next run.
 model ChatAttachment {
   id              String      @id @default(cuid())
   chatMessageId   String
@@ -492,7 +460,7 @@ model ChatAttachment {
   contentType     String
   sizeBytes       Int
   bytes           Bytes
-  anthropicFileId String?
+  backendFileId   String?
   mountPath       String?
   createdAt       DateTime    @default(now())
   chatMessage     ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
@@ -516,7 +484,7 @@ model AgentRun {
   threadId       String?
   /// Set when surface = `chat`.
   conversationId String?
-  /// Anthropic session this run executed against.
+  /// Backend session this run executed against.
   sessionId      String
   /// `pending` | `running` | `succeeded` | `failed`.
   status         String            @default("pending")
@@ -554,9 +522,8 @@ model RunEvent {
   @@index([runId, seq])
 }
 
-/// Files the agent produced during a run and uploaded back via the signed
-/// `POST /runs/:runId/attachments` endpoint. Attached to outbound email or
-/// surfaced in chat.
+/// Files the agent produced during a run via `attach_run_file`. Attached to
+/// outbound email or surfaced in chat.
 model AgentAttachment {
   id          String   @id @default(cuid())
   runId       String
@@ -581,7 +548,7 @@ model EmailThread {
   inboundAddress String?
   subject        String
   rootMessageId  String         @unique
-  /// Anthropic session id this thread is currently bound to.
+  /// Backend session id this thread is currently bound to.
   sessionId      String?        @unique
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -619,7 +586,7 @@ model EmailAttachment {
   contentType     String
   sizeBytes       Int
   bytes           Bytes
-  anthropicFileId String?
+  backendFileId   String?
   mountPath       String?
   createdAt       DateTime     @default(now())
   emailMessage    EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)

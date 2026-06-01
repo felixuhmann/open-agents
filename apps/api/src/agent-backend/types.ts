@@ -1,18 +1,9 @@
 import type { SkillMaterializationManifest } from "@open-agents/types";
 
-/**
- * Backend-agnostic interface for a Managed-Agent-style provider. The
- * application code in `services/` and `jobs/` depends only on this
- * interface; the concrete implementation (currently Anthropic) lives in a
- * sibling module and is wired into `instance.ts`.
- */
+/** Backend interface used by services/jobs to drive Daytona sandboxes. */
 export interface AgentBackend {
-  runtime: "anthropic" | "daytona";
+  runtime: "daytona";
   createSession(input: CreateSessionInput): Promise<AgentSession>;
-  /**
-   * Upload session resources into an existing backend session. Anthropic only
-   * mounts at creation time; Daytona can add files to a resumed sandbox.
-   */
   mountSessionResources(
     sessionId: string,
     resources: SessionResource[],
@@ -56,7 +47,6 @@ export type RunObservabilityContext = {
 
 export type CreateSessionInput = {
   agentId: string;
-  environmentId?: string;
   agentSlug?: string;
   title?: string;
   resources?: SessionResource[];

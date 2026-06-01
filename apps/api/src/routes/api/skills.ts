@@ -22,14 +22,10 @@ skillsRoutes.get("/", async (c) => {
         description: s.description,
         latestVersionId: latest?.id ?? null,
         latestVersionNumber: latest?.versionNumber ?? null,
-        anthropicSkillId: latest?.anthropicSkillId ?? null,
-        anthropicSkillVersion: latest?.anthropicSkillVersion ?? null,
         versions: s.versions.map((v) => ({
           id: v.id,
           versionNumber: v.versionNumber,
           filename: v.filename,
-          anthropicSkillId: v.anthropicSkillId,
-          anthropicSkillVersion: v.anthropicSkillVersion,
           createdAt: v.createdAt.toISOString(),
         })),
         createdAt: s.createdAt.toISOString(),
@@ -60,8 +56,6 @@ skillsRoutes.post("/", async (c) => {
     description: skill.description,
     latestVersionId: skill.versions[0]?.id ?? null,
     latestVersionNumber: skill.versions[0]?.versionNumber ?? null,
-    anthropicSkillId: skill.versions[0]?.anthropicSkillId ?? null,
-    anthropicSkillVersion: skill.versions[0]?.anthropicSkillVersion ?? null,
   });
 });
 
@@ -81,8 +75,6 @@ skillsRoutes.post("/:id/versions", async (c) => {
     id: version.id,
     versionNumber: version.versionNumber,
     filename: version.filename,
-    anthropicSkillId: version.anthropicSkillId,
-    anthropicSkillVersion: version.anthropicSkillVersion,
     createdAt: version.createdAt.toISOString(),
   });
 });

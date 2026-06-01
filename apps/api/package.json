@@ -17,7 +17,6 @@
     "email": "email dev --dir src/emails --port 3001"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
     "@daytona/sdk": "^0.182.0",
     "@earendil-works/pi-agent-core": "^0.76.0",
     "@earendil-works/pi-ai": "^0.76.0",

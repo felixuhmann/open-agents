@@ -1,8 +1,6 @@
 import { File } from "node:buffer";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
-import { toFile } from "@anthropic-ai/sdk";
 import yauzl from "yauzl";
-import { getAnthropicClient } from "../agent-backend/instance.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import {
@@ -14,8 +12,8 @@ import {
 
 /**
  * Quick-and-dirty zip validation: open the bundle in-memory, scan for a
- * top-level `SKILL.md`. Anthropic's Skills API requires the bundle to
- * conform to its skill schema; we do not re-validate that here.
+ * top-level `SKILL.md`. Daytona materializes the bundle directly into the
+ * sandbox, so this catches the minimum shape needed for an agent skill.
  */
 async function validateSkillBundle(
   bytes: Buffer,
@@ -50,44 +48,6 @@ export type CreateSkillArgs = {
   bytes: Buffer;
 };
 
-async function uploadSkillVersion(args: {
-  name: string;
-  filename: string;
-  bytes: Buffer;
-}): Promise<{ anthropicSkillId: string | null; anthropicSkillVersion: string | null }> {
-  let anthropicSkillId: string | null = null;
-  let anthropicSkillVersion: string | null = null;
-  try {
-    const client = await getAnthropicClient();
-    const beta = client.beta as unknown as {
-      skills?: {
-        create(body: { display_title?: string; files?: unknown[] }): Promise<unknown>;
-      };
-    };
-    if (beta.skills?.create) {
-      const file = await toFile(args.bytes, args.filename, { type: "application/zip" });
-      const res = await beta.skills.create({
-        display_title: args.name,
-        files: [file],
-      });
-      if (res && typeof res === "object") {
-        const r = res as { id?: unknown; latest_version?: unknown; version?: unknown };
-        if (typeof r.id === "string") anthropicSkillId = r.id;
-        if (typeof r.latest_version === "string")
-          anthropicSkillVersion = r.latest_version;
-        else if (typeof r.version === "string") anthropicSkillVersion = r.version;
-      }
-    } else {
-      log.warn("skills: SDK has no beta.skills.create — bundle stored locally only");
-    }
-  } catch (err) {
-    log.warn("skills: anthropic upload failed; bundle still stored locally", {
-      err: err instanceof Error ? err.message : String(err),
-    });
-  }
-  return { anthropicSkillId, anthropicSkillVersion };
-}
-
 async function persistBundle(args: {
   name: string;
   filename: string;
@@ -104,8 +64,7 @@ async function persistBundle(args: {
 }
 
 /**
- * Persist a new skill bundle locally and reflect it to Anthropic via the
- * Skills API. Returns the new Skill row.
+ * Persist a new skill bundle locally. Returns the new Skill row.
  */
 export async function createSkill(args: CreateSkillArgs) {
   const validation = await validateSkillBundle(args.bytes);
@@ -114,7 +73,6 @@ export async function createSkill(args: CreateSkillArgs) {
   }
 
   const localPath = await persistBundle({ ...args, versionNumber: 1 });
-  const { anthropicSkillId, anthropicSkillVersion } = await uploadSkillVersion(args);
 
   const skill = await prisma.skill.create({
     data: {
@@ -125,8 +83,6 @@ export async function createSkill(args: CreateSkillArgs) {
           versionNumber: 1,
           filename: args.filename,
           bundleStorageRef: localPath,
-          anthropicSkillId,
-          anthropicSkillVersion,
         },
       },
     },
@@ -136,7 +92,6 @@ export async function createSkill(args: CreateSkillArgs) {
     id: skill.id,
     name: skill.name,
     bytes: args.bytes.byteLength,
-    anthropicSkillId,
   });
   return skill;
 }
@@ -166,11 +121,6 @@ export async function createSkillVersion(args: CreateSkillVersionArgs) {
     bytes: args.bytes,
     versionNumber,
   });
-  const { anthropicSkillId, anthropicSkillVersion } = await uploadSkillVersion({
-    name: skill.name,
-    filename: args.filename,
-    bytes: args.bytes,
-  });
 
   const version = await prisma.skillVersion.create({
     data: {
@@ -178,8 +128,6 @@ export async function createSkillVersion(args: CreateSkillVersionArgs) {
       versionNumber,
       filename: args.filename,
       bundleStorageRef: localPath,
-      anthropicSkillId,
-      anthropicSkillVersion,
     },
   });
   await prisma.skill.update({
@@ -191,7 +139,6 @@ export async function createSkillVersion(args: CreateSkillVersionArgs) {
     versionId: version.id,
     versionNumber,
     bytes: args.bytes.byteLength,
-    anthropicSkillId,
   });
   return version;
 }

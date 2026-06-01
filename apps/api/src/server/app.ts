@@ -20,13 +20,11 @@ import { authRoutes } from "../routes/auth.js";
 import { healthRoutes } from "../routes/health.js";
 import { issueReportRoutes, ISSUE_REPORT_PREFIX } from "../routes/issueReport.js";
 import { mailgunRoutes } from "../routes/mailgun.js";
-import { mcpRoutes } from "../routes/mcp.js";
 import {
   APP_ROUTE_PREFIXES,
   AUTH_PREFIX,
   HEALTH_PREFIX,
   MAILGUN_PREFIX,
-  MCP_PREFIX,
   SETUP_PREFIX,
   STATIC_PREFIX,
 } from "../routes/prefixes.js";
@@ -46,9 +44,9 @@ import type { AppVariables } from "./types.js";
  * 4. Mount each sub-router at its prefix.
  * 5. Mount the SPA catch-all LAST so every prefixed router above wins.
  *
- * The Mailgun + MCP webhooks live alongside the API but are
- * machine-authenticated (HMAC + bearer respectively) and don't need
- * cookie-based auth — `attachUser` is harmless on those paths.
+ * The Mailgun webhook lives alongside the API but is machine-authenticated
+ * with HMAC and doesn't need cookie-based auth — `attachUser` is harmless
+ * on that path.
  */
 export function buildApp(): Hono<{ Variables: AppVariables }> {
   const app = new Hono<{ Variables: AppVariables }>();
@@ -89,7 +87,6 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route(SETUP_PREFIX, setupRoutes);
   app.route(HEALTH_PREFIX, healthRoutes);
   app.route(MAILGUN_PREFIX, mailgunRoutes);
-  app.route(MCP_PREFIX, mcpRoutes);
   app.route(STATIC_PREFIX, staticRoutes);
   app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
   app.route("/", uploadRoutes);

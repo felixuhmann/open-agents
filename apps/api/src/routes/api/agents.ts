@@ -70,8 +70,6 @@ function toDto(
     accessMode: agent.accessMode,
     inboundLocalPart: agent.inboundLocalPart,
     mailgunDomain: mailgunDomain ?? null,
-    anthropicAgentId: agent.anthropicAgentId,
-    environmentId: agent.environmentId,
     currentVersionId: agent.currentVersionId,
     currentVersionNumber: agent.currentVersion?.versionNumber ?? null,
     publishedAt: agent.currentVersion?.createdAt.toISOString() ?? null,

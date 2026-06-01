@@ -35,8 +35,8 @@ export type AgentConfigMcpServer = z.infer<typeof AgentConfigMcpServer>;
 export type AgentConfigThirdPartyMcp = AgentConfigMcpServer;
 
 export const AgentConfigRuntime = z.object({
-  backend: z.enum(["anthropic", "daytona"]),
-  /** Frozen sandbox security policy for Daytona runs. Omitted on legacy snapshots. */
+  backend: z.literal("daytona"),
+  /** Frozen sandbox security policy for Daytona runs. */
   sandbox: z
     .object({
       network: SandboxNetworkPolicySchema,
@@ -71,20 +71,6 @@ export const AgentConfigSnapshot = z.object({
   runtime: AgentConfigRuntime,
 });
 export type AgentConfigSnapshot = z.infer<typeof AgentConfigSnapshot>;
-
-/** Optional backend-specific sync metadata (legacy Anthropic provisioning). */
-export const AgentVersionProviderRefs = z.object({
-  anthropic: z
-    .object({
-      agentId: z.string(),
-      environmentId: z.string(),
-      version: z.string(),
-      mcpCredentialId: z.string().optional(),
-      mcpCredentialUrl: z.string().optional(),
-    })
-    .optional(),
-});
-export type AgentVersionProviderRefs = z.infer<typeof AgentVersionProviderRefs>;
 
 export const AgentVersionSummaryDto = z.object({
   id: z.string(),

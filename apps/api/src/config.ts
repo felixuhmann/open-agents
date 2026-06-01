@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Bootstrap-only environment. Per the v1 plan, every other secret
- * (Anthropic + Mailgun service credentials, per-tool secrets) is managed
+ * (model-provider + Mailgun service credentials, per-tool secrets) is managed
  * through the web UI and persisted encrypted in Postgres. The values here
  * are the minimum the process needs to come up and decrypt the rest.
  */
@@ -11,20 +11,13 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 
   /**
-   * Public origin of this backend (no trailing slash). Used to build the
-   * signed `POST /runs/:runId/attachments` URL we inject into the agent's
-   * user message and for outbound email links.
+   * Public origin of this backend (no trailing slash). Used for outbound
+   * email links and generated asset URLs.
    */
   PUBLIC_BASE_URL: z.string().url(),
 
   /**
-   * Shared bearer token for this backend's MCP endpoints. The Anthropic-side
-   * agent config stores the same value via a Vault.
-   */
-  MCP_AUTH_TOKEN: z.string().min(16),
-
-  /**
-   * HMAC secret for signing per-run / per-conversation attachment upload URLs.
+   * HMAC secret reserved for signed upload URLs.
    * `openssl rand -hex 32`.
    */
   UPLOAD_SIGNING_SECRET: z.string().min(32),
@@ -49,12 +42,6 @@ const schema = z.object({
    * PUBLIC_BASE_URL when the SPA is reverse-proxied behind the API.
    */
   WEB_BASE_URL: z.string().url(),
-
-  /**
-   * Optional override of Anthropic SDK base URL. The actual API key lives
-   * in the encrypted Secret store, not in env.
-   */
-  ANTHROPIC_BASE_URL: z.string().url().default("https://api.anthropic.com"),
 
   /**
    * Optional override of Mailgun SDK base URL.

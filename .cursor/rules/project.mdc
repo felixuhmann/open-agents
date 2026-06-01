@@ -5,7 +5,7 @@ alwaysApply: true
 
 # open-agents project conventions
 
-This is a Hono + Prisma + pg-boss orchestrator for Anthropic Managed Agents.
+This is a Hono + Prisma + pg-boss orchestrator for Daytona-backed agents.
 See [AGENTS.md](mdc:AGENTS.md) for the full project guide; this rule
 captures the rules every change must follow.
 
@@ -32,16 +32,12 @@ deployment; the webhook resolves the agent by parsing the recipient.
 
 ## Tools (unified catalog)
 
-Every agent capability — Anthropic-managed (`agent_toolset_20260401`
-members like `bash`, `read`, `web_search`, …) and our own MCP handlers —
-is a row in the `Tool` table, discriminated by `runtime`
-(`managed` | `platform`). One binding table (`AgentToolBinding`)
-references both. The Anthropic-specific request layout
-(`agent_toolset_20260401` + `mcp_toolset` + `mcp_servers`) is built only
-at publish time in
-[`apps/api/src/anthropic/provisioning.ts`](mdc:apps/api/src/anthropic/provisioning.ts).
-Don't reach into the binding payload from elsewhere — the `runtime`
-discriminator is the only thing application code should care about.
+Every agent capability — Daytona sandbox tools (`bash`, `read`,
+`web_search`, …) and our own platform handlers — is a row in the `Tool`
+table, discriminated by `runtime` (`managed` | `platform`). One binding
+table (`AgentToolBinding`) references both. Daytona translates these rows
+to Pi tools at run time; the `runtime` discriminator is the only thing
+application code should care about.
 
 External MCP servers live in `McpServer` and attach via `AgentMcpBinding`. They
 are per-agent endpoints, not catalog rows.
@@ -76,14 +72,13 @@ hand.
 - `routes/`  → calls into `services/` and enqueues jobs. No Prisma writes
   inline; extract to `services/*`.
 - `jobs/`    → orchestration shells. Heavy lifting goes in `services/`.
-- `services/` → reusable domain logic. May import `db.ts`, `anthropic/*`,
-  `mailgun/*`, `agents/*`, `mcp/*`, `secrets/*`. Must NOT import from
+- `services/` → reusable domain logic. May import `db.ts`, `mailgun/*`,
+  `agents/*`, `mcp/*`, `secrets/*`. Must NOT import from
   `routes/` or `jobs/<workerName>.ts`.
-- `agents/`, `mcp/`, `mailgun/`, `anthropic/`, `secrets/`, `auth/` →
+- `agents/`, `mcp/`, `mailgun/`, `secrets/`, `auth/` →
   leaf-ish modules. They may import `db.ts`, `log.ts`, `config.ts`, and
   each other (where the dependency is acyclic).
-- Cross-cutting helpers shared by `routes/` AND `jobs/` go in `services/`
-  (e.g. `signRunUploadUrl` in `services/uploadSigning.ts`).
+- Cross-cutting helpers shared by `routes/` AND `jobs/` go in `services/`.
 
 ## Database (Prisma 7)
 
@@ -136,12 +131,9 @@ the documentation is not allowed to drift. Touch every relevant doc:
 
 ## Common gotchas
 
-- New attachments force a new Anthropic session (resources only mount at
-  session-creation). The run-agent worker handles this; don't bypass it.
-- Anthropic beta headers `managed-agents-*` and `agent-api-*` are
-  mutually exclusive. Use the existing `AnthropicAgentBackend`, don't
-  open raw `fetch` calls to Anthropic.
-- Service credentials (Anthropic, Mailgun) live AES-GCM encrypted in
+- New attachments mount into existing Daytona sandboxes via
+  `mountSessionResources`; don't rotate sessions just to add files.
+- Service credentials (Daytona, model providers, Mailgun) live AES-GCM encrypted in
   the `Secret` table and are read via
   [`apps/api/src/secrets/service.ts`](mdc:apps/api/src/secrets/service.ts).
   Don't add new env vars for service credentials — they belong in the

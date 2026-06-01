@@ -113,9 +113,7 @@ function makeTool<TParams extends TSchema, TDetails = unknown>(tool: {
 
 /**
  * Repo-owned agent runtime backed by Pi for the model/tool loop and Daytona
- * for workspace execution. This is intentionally small: enough to make web
- * chat work without Anthropic Managed Agents while preserving the existing
- * RunEvent/SSE surface.
+ * for workspace execution while preserving the existing RunEvent/SSE surface.
  */
 export class DaytonaAgentBackend implements AgentBackend {
   readonly runtime = "daytona" as const;
@@ -601,7 +599,7 @@ function buildRuntimePrompt(
         "Bash uses a persistent shell session in the sandbox (cwd and env persist between calls).",
         "For web pages or search, use curl/wget in bash or bind a third-party MCP search tool — there is no built-in web_search.",
         "Platform tools (for example memory_*) and third-party MCP tools (name prefix server:tool) run on the orchestrator host, not inside the sandbox.",
-        "When the user needs a downloadable file, call attach_run_file with the sandbox path. Do not curl REPLY_ATTACHMENT_UPLOAD_URL from bash.",
+        "When the user needs a downloadable file, call attach_run_file with the sandbox path.",
       ].join("\n")
     : "No sandbox tools are currently enabled for this agent.";
 

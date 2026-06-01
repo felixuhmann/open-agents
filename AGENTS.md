@@ -13,7 +13,7 @@ surface (catch-all Mailgun route → recipient `<localPart>@<MAILGUN_DOMAIN>`).
 The runtime is split across two apps in a Turborepo monorepo:
 
 - [`apps/api`](apps/api/) — Hono backend + better-auth + pg-boss workers +
-  per-agent MCP server. Talks to Anthropic Managed Agents and Mailgun.
+  Daytona sandbox orchestration, platform tools, third-party MCP, and Mailgun.
 - [`apps/web`](apps/web/) — Vite + React + TanStack Query + better-auth/react
   SPA. The single control-plane UI for the deployment.
 
@@ -28,9 +28,9 @@ Shared code lives in [`packages/`](packages/):
   `react`).
 
 Agent definitions (system prompt, tools, skills, `mcp_servers`) are stored
-in **our** database and pushed to Anthropic via `POST /v1/agents/{id}` from
-the publishing flow in `apps/api/src/anthropic/provisioning.ts`. Anthropic
-is the runtime; we are the source of truth.
+in **our** database. Publishing freezes the current draft into an
+`AgentVersion` snapshot; Daytona is the runtime and Postgres is the source
+of truth.
 
 ## High-level data flow
 
@@ -41,8 +41,8 @@ Browser (SPA) ─────────────▶ Hono /api/*  ──▶ 
        │                                  │
        │                                  ▼
        │                          run-agent worker
-       │                          ├─ Anthropic Files (uploads)
-       │                          ├─ Anthropic Sessions (stream)
+       │                          ├─ Daytona sandbox resources
+       │                          ├─ Pi model/tool loop
        │                          └─ writes RunEvent rows + NOTIFY
        │
        └─ EventSource /api/runs/:id/events ◀── Postgres NOTIFY
@@ -51,11 +51,10 @@ Mailgun ──▶ POST /mailgun/inbound  ──▶ resolve agent by recipient �
                                                                             │
                                                                             ▼
                                                                        send-email worker ──▶ Mailgun
-Anthropic sandbox ──▶ POST /mcp/:agentSlug (bearer auth) ──▶ tools assembled per agent
 ```
 
 Web chat is durable: the HTTP `POST /api/conversations/:id/messages` only
-enqueues a job; the worker streams Anthropic events into the `RunEvent`
+enqueues a job; the worker streams Daytona/Pi events into the `RunEvent`
 append-only table; the SSE handler replays from `Last-Event-ID` and
 switches to live `LISTEN/NOTIFY`. If the browser drops, the run keeps
 going and the page picks up where it left off on reconnect.
@@ -72,9 +71,8 @@ going and the page picks up where it left off on reconnect.
 │   │       ├── auth/              better-auth wiring + middleware
 │   │       ├── secrets/           AES-GCM Secret service + readers
 │   │       ├── agents/service.ts  CRUD + cache + publishAgent()
-│   │       ├── anthropic/         client + provisioning
 │   │       ├── mcp/
-│   │       │   ├── server.ts      build per-agent McpServer from bindings
+│   │       │   ├── piTools.ts     host-side platform + third-party MCP tools
 │   │       │   └── platform/      code-shipped tool handlers (memory, …)
 │   │       ├── runs/events.ts     RunEvent + NOTIFY/LISTEN + SSE
 │   │       ├── jobs/              pg-boss workers (run-agent, send-email)
@@ -84,8 +82,7 @@ going and the page picks up where it left off on reconnect.
 │   │           ├── api/           /api/{agents,users,…}
 │   │           ├── auth.ts        better-auth catch-all
 │   │           ├── mailgun.ts     single catch-all webhook
-│   │           ├── mcp.ts         per-agent MCP HTTP transport
-│   │           └── upload.ts      signed run + cookie-auth conversation
+│   │           └── upload.ts      cookie-auth conversation uploads
 │   └── web/                       Vite + React control-plane SPA
 ├── packages/
 │   ├── db/                        @open-agents/db — Prisma 7 schema, prisma.config.ts,
@@ -139,21 +136,14 @@ recipient address against `Agent.inboundLocalPart`.
 Every capability the agent can call is a row in the `Tool` catalog,
 discriminated by `runtime`:
 
-- `managed` — the agent backend executes the tool. For Anthropic this
-  means a member of `agent_toolset_20260401` (`bash`, `read`, `write`,
-  `edit`, `glob`, `grep`, `web_fetch`, `web_search`). No code in this
-  repo backs them; the published agent advertises the capability and
-  Anthropic's container does the work.
-- `platform` — this backend executes the tool, served from
-  `/mcp/<slug>` via a `PlatformHandler` registered in
+- `managed` — the Daytona sandbox executes the tool (`bash`, `read`, `write`,
+  `edit`, `glob`, `grep`, `web_fetch`, `web_search`).
+- `platform` — this backend executes the tool through a `PlatformHandler` registered in
   [`apps/api/src/mcp/platform/index.ts`](apps/api/src/mcp/platform/index.ts).
 
 Both runtimes share one binding table (`AgentToolBinding`) and one UI
-picker. The Anthropic-specific layout (`agent_toolset_20260401` block,
-`mcp_toolset` entries, `mcp_servers`) is built only at publish time in
-[`apps/api/src/anthropic/provisioning.ts`](apps/api/src/anthropic/provisioning.ts)
-— the rest of the codebase just sees `Tool` + `AgentToolBinding`. Adding
-a future non-Anthropic backend means writing one new translator there.
+picker. Daytona translates bindings to Pi tools at run time; the rest of
+the codebase just sees `Tool` + `AgentToolBinding`.
 
 External (user-supplied) MCP servers stay separate as
 `McpServer` + `AgentMcpBinding` — deployment-wide MCP library entries attached per agent.
@@ -186,8 +176,7 @@ export const memoryTools = [
 Append the handler to `PLATFORM_HANDLERS`. A boot-time
 [`seedToolCatalog()`](apps/api/src/services/seedToolCatalog.ts) call
 upserts a `Tool` row (with `runtime = platform`) and also seeds the
-managed-runtime rows for `agent_toolset_20260401`. Don't insert `Tool`
-rows by hand.
+Daytona-managed sandbox tool rows. Don't insert `Tool` rows by hand.
 
 ### Database (Prisma 7)
 
@@ -263,22 +252,16 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 
 ## Common gotchas
 
-- **Anthropic beta headers can NOT be combined**: `managed-agents-*` and
-  `agent-api-*` are mutually exclusive. The client picks the right one
-  per endpoint — don't merge them.
-- **New attachments force a new Anthropic session**: Managed Agents only
-  mount `resources` at session-creation time. The run-agent worker passes
-  `forceNewSession = hasNewAttachments` for Anthropic; on the Daytona backend
-  the same flag is ignored and files are uploaded into the existing sandbox
-  via `mountSessionResources`.
-- **Service credentials are not env vars**: Anthropic / Mailgun keys live
+- **New attachments mount into existing Daytona sandboxes** via
+  `mountSessionResources`; don't rotate sessions just to add files.
+- **Service credentials are not env vars**: Daytona / model-provider / Mailgun keys live
   AES-GCM encrypted in the `Secret` table and are read via
   [`secrets/service.ts`](apps/api/src/secrets/service.ts). The only
   bootstrap envs are `DATABASE_URL`, `SECRET_ENCRYPTION_KEY`,
-  `BETTER_AUTH_SECRET`, `MCP_AUTH_TOKEN`, `UPLOAD_SIGNING_SECRET`,
+  `BETTER_AUTH_SECRET`, `UPLOAD_SIGNING_SECRET`,
   `WEB_BASE_URL`, `PUBLIC_BASE_URL` (see `apps/api/.env.example`).
 - **Email and chat never cross-pollinate**: each surface has its own
-  thread/conversation table and creates independent Anthropic sessions.
+  thread/conversation table and creates independent backend sessions.
   Don't try to share state between them.
 - **Daytona skills materialize at sandbox creation**: When
   `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` resolves the
@@ -291,13 +274,11 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   Resumed sandboxes keep whatever was copied when they were first created;
   changing skill bindings mid-conversation does not re-sync until a new
   session is forced.
-- **Daytona MCP runs on the orchestrator**: Platform tools and third-party
+- **MCP runs on the orchestrator**: Platform tools and third-party
   MCP servers are wired into the Pi loop via
   [`apps/api/src/mcp/piTools.ts`](apps/api/src/mcp/piTools.ts) (host-side).
-  The `/mcp/<slug>` HTTP route is for Anthropic Managed Agents only.
-- **Daytona run attachments use `attach_run_file`**: Do not inject
-  `REPLY_ATTACHMENT_UPLOAD_URL` for Daytona runs — sandboxes often cannot
-  reach `PUBLIC_BASE_URL`. The Pi loop exposes `attach_run_file`, which pulls
+- **Run attachments use `attach_run_file`**: The Pi loop exposes
+  `attach_run_file`, which pulls
   bytes from the sandbox on the orchestrator and stores `AgentAttachment` rows.
 - **Daytona sandbox lifecycle**: First-class metadata lives in the
   `AgentSandbox` table (`provider`, `providerSandboxId`, `state`,
@@ -325,8 +306,8 @@ Default ports: `apps/api` on `:3000`, `apps/web` on `:5173` (Vite proxies
 `/static` back to the API). Visit `http://localhost:5173` and complete the
 setup wizard to create the first admin and store credentials.
 
-Expose the API with ngrok / Tailscale Funnel so Mailgun and Anthropic can
-reach `/mailgun/inbound` and `/mcp/<slug>`.
+Expose the API with ngrok / Tailscale Funnel so Mailgun can reach
+`/mailgun/inbound`.
 
 ## Cursor Cloud specific instructions
 

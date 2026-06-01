@@ -81,8 +81,6 @@ export type IssueDetailSkillBinding = {
   skillVersionId: string;
   name: string;
   versionNumber: number;
-  anthropicSkillId: string | null;
-  anthropicSkillVersion: string | null;
 };
 
 export type IssueDetailRunSkill = SkillMaterializationEntry;
@@ -169,8 +167,6 @@ type AgentWithBindings = {
     skill: { id: string; name: string };
     skillVersion: {
       versionNumber: number;
-      anthropicSkillId: string | null;
-      anthropicSkillVersion: string | null;
     };
   }>;
   mcpBindings: Array<{
@@ -222,8 +218,6 @@ function toIssueDetailAgent(agent: AgentWithBindings): IssueDetailAgent {
       skillVersionId: b.skillVersionId,
       name: b.skill.name,
       versionNumber: b.skillVersion.versionNumber,
-      anthropicSkillId: b.skillVersion.anthropicSkillId,
-      anthropicSkillVersion: b.skillVersion.anthropicSkillVersion,
     })),
     mcpServers: agent.mcpBindings.map((b) => ({
       id: b.mcpServer.id,

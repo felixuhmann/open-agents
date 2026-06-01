@@ -207,8 +207,6 @@ export type FullAgentDto = {
   accessMode: "everyone" | "specific";
   inboundLocalPart: string;
   mailgunDomain: string | null;
-  anthropicAgentId: string | null;
-  environmentId: string | null;
   currentVersionId: string | null;
   currentVersionNumber: number | null;
   publishedAt: string | null;
@@ -301,14 +299,10 @@ export type SkillDto = {
   description: string | null;
   latestVersionId: string | null;
   latestVersionNumber: number | null;
-  anthropicSkillId: string | null;
-  anthropicSkillVersion: string | null;
   versions: Array<{
     id: string;
     versionNumber: number;
     filename: string;
-    anthropicSkillId: string | null;
-    anthropicSkillVersion: string | null;
     createdAt: string;
   }>;
   createdAt: string;
@@ -448,9 +442,8 @@ export type RunAttachmentSummary = {
 };
 
 /**
- * Files the agent uploaded back during a run via the signed
- * `REPLY_ATTACHMENT_UPLOAD_URL`. Used by the chat UI to render
- * downloadable links on the assistant message bubble.
+ * Files the agent attached during a run via `attach_run_file`. Used by the
+ * chat UI to render downloadable links on the assistant message bubble.
  */
 export function useRunAttachments(runId: string | null | undefined) {
   return useQuery({
@@ -598,8 +591,6 @@ export type IssueDetailSkillBinding = {
   skillVersionId: string;
   name: string;
   versionNumber: number;
-  anthropicSkillId: string | null;
-  anthropicSkillVersion: string | null;
 };
 
 export type IssueDetailThirdPartyMcp = {

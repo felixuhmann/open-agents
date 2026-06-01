@@ -133,8 +133,7 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
   });
   await appendRunStarted(runId, resolved);
 
-  const backend = await getAgentBackend();
-  const userMessage = buildRunUserMessage(backend, runId, incoming.body);
+  const userMessage = buildRunUserMessage(incoming.body);
 
   const output = await streamRunWithEvents(runId, resolved.sessionId, userMessage, {
     runId,
@@ -202,7 +201,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     baseAgent,
     {
       id: conversation.id,
-      anthropicSessionId: conversation.anthropicSessionId,
+      sessionId: conversation.sessionId,
       title: conversation.title,
     },
     resources,
@@ -216,8 +215,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
   });
   await appendRunStarted(runId, resolved);
 
-  const backend = await getAgentBackend();
-  const userMessage = buildRunUserMessage(backend, runId, message.content);
+  const userMessage = buildRunUserMessage(message.content);
 
   const output = await streamRunWithEvents(runId, resolved.sessionId, userMessage, {
     runId,
@@ -258,7 +256,7 @@ async function appendRunStarted(runId: string, resolved: ResolvedSession): Promi
       type: "run.started",
       runId,
       sessionId: resolved.sessionId,
-      backend: resolved.providerSandboxId ? "daytona" : "anthropic",
+      backend: "daytona",
       ...(resolved.providerSandboxId
         ? { providerSandboxId: resolved.providerSandboxId }
         : {}),
@@ -278,7 +276,7 @@ async function appendRunStarted(runId: string, resolved: ResolvedSession): Promi
 }
 
 /**
- * Stream the Anthropic SSE for one turn into RunEvent rows + NOTIFY.
+ * Stream one Daytona agent turn into RunEvent rows + NOTIFY.
  */
 async function streamRunWithEvents(
   runId: string,

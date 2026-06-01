@@ -33,7 +33,10 @@ type Form = {
   adminEmail: string;
   adminName: string;
   adminPassword: string;
+  daytonaApiKey: string;
   anthropicApiKey: string;
+  openaiApiKey: string;
+  openrouterApiKey: string;
   mailgunApiKey: string;
   mailgunDomain: string;
   mailgunSigningKey: string;
@@ -47,7 +50,10 @@ export default function SetupPage({ productName }: { productName: string }) {
     adminEmail: "",
     adminName: "",
     adminPassword: "",
+    daytonaApiKey: "",
     anthropicApiKey: "",
+    openaiApiKey: "",
+    openrouterApiKey: "",
     mailgunApiKey: "",
     mailgunDomain: "",
     mailgunSigningKey: "",
@@ -63,7 +69,10 @@ export default function SetupPage({ productName }: { productName: string }) {
     try {
       await api("/api/setup", {
         json: {
-          anthropicApiKey: form.anthropicApiKey,
+          daytonaApiKey: form.daytonaApiKey,
+          anthropicApiKey: form.anthropicApiKey || undefined,
+          openaiApiKey: form.openaiApiKey || undefined,
+          openrouterApiKey: form.openrouterApiKey || undefined,
           mailgunApiKey: form.mailgunApiKey || undefined,
           mailgunDomain: form.mailgunDomain || undefined,
           mailgunSigningKey: form.mailgunSigningKey || undefined,
@@ -161,24 +170,61 @@ export default function SetupPage({ productName }: { productName: string }) {
                     className="mr-1.5 inline size-4 text-muted-foreground"
                     weight="duotone"
                   />
-                  Anthropic
+                  Daytona
                 </FieldLegend>
                 <FieldDescription>
-                  Required. Used to provision agents and run conversations.
+                  Required. Used to create and resume agent sandboxes.
                 </FieldDescription>
                 <Field>
-                  <FieldLabel htmlFor="anthropic-key">API key</FieldLabel>
+                  <FieldLabel htmlFor="daytona-key">API key</FieldLabel>
+                  <Input
+                    id="daytona-key"
+                    required
+                    value={form.daytonaApiKey}
+                    onChange={update("daytonaApiKey")}
+                  />
+                </Field>
+              </FieldSet>
+
+              <FieldSeparator />
+
+              <FieldSet>
+                <FieldLegend>
+                  <KeyIcon
+                    className="mr-1.5 inline size-4 text-muted-foreground"
+                    weight="duotone"
+                  />
+                  Model providers
+                  <span className="ml-1 text-muted-foreground">(optional)</span>
+                </FieldLegend>
+                <FieldDescription>
+                  Add at least one model-provider key before running agents. You can
+                  configure these later in Settings.
+                </FieldDescription>
+                <Field>
+                  <FieldLabel htmlFor="anthropic-key">Anthropic API key</FieldLabel>
                   <Input
                     id="anthropic-key"
-                    required
                     placeholder="sk-ant-…"
                     value={form.anthropicApiKey}
                     onChange={update("anthropicApiKey")}
                   />
-                  <FieldDescription>
-                    The deployment vault is auto-provisioned when syncing to Anthropic
-                    (legacy backend).
-                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="openai-key">OpenAI API key</FieldLabel>
+                  <Input
+                    id="openai-key"
+                    value={form.openaiApiKey}
+                    onChange={update("openaiApiKey")}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="openrouter-key">OpenRouter API key</FieldLabel>
+                  <Input
+                    id="openrouter-key"
+                    value={form.openrouterApiKey}
+                    onChange={update("openrouterApiKey")}
+                  />
                 </Field>
               </FieldSet>
 

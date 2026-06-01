@@ -19,7 +19,6 @@ function bytes(b: Buffer): Uint8Array<ArrayBuffer> {
  */
 export const SERVICE_KEYS = {
   ANTHROPIC_API_KEY: "anthropic_api_key",
-  ANTHROPIC_VAULT_ID: "anthropic_vault_id",
   OPENAI_API_KEY: "openai_api_key",
   OPENROUTER_API_KEY: "openrouter_api_key",
   DAYTONA_API_KEY: "daytona_api_key",
@@ -156,7 +155,7 @@ export async function deleteToolSecrets(bindingId: string): Promise<void> {
 
 /** Whether the deployment has any service-credential rows yet. */
 export async function isServiceSetupComplete(): Promise<boolean> {
-  const required: ServiceKey[] = [SERVICE_KEYS.ANTHROPIC_API_KEY];
+  const required: ServiceKey[] = [SERVICE_KEYS.DAYTONA_API_KEY];
   for (const k of required) {
     const v = await getServiceSecret(k);
     if (!v) return false;
