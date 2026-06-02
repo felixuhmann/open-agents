@@ -42,6 +42,7 @@ const SandboxesSettingsPage = lazy(() => import("./pages/SandboxesSettingsPage")
 const UsersSettingsPage = lazy(() => import("./pages/UsersSettingsPage"));
 const GeneralSettingsPage = lazy(() => import("./pages/GeneralSettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const EmailIssueReportPage = lazy(() => import("./pages/EmailIssueReportPage"));
 
 function canAccessRoute(user: CurrentUser, roles: Array<UserRole> | "operator") {
   if (roles === "operator") return canOperateAgents(user.role);
@@ -229,6 +230,10 @@ export function App() {
       <Routes>
         <Route path="/setup" element={<SetupPage productName={productName} />} />
         <Route path="/login" element={<LoginPage productName={productName} />} />
+        <Route
+          path="/issues/report"
+          element={<EmailIssueReportPage productName={productName} />}
+        />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </Suspense>
