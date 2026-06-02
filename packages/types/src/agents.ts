@@ -18,11 +18,16 @@ export type UserRole = z.infer<typeof UserRole>;
 
 import { AgentModelSelection } from "./modelCatalog.js";
 
+/** Chat empty-state suggestion chips (web surface only). */
+export const StarterPromptsSchema = z.array(z.string().trim().min(1).max(200)).max(8);
+export type StarterPrompts = z.infer<typeof StarterPromptsSchema>;
+
 export const AgentDto = z.object({
   id: z.string(),
   slug: z.string(),
   displayName: z.string(),
   description: z.string().nullable(),
+  starterPrompts: StarterPromptsSchema,
   systemPrompt: z.string(),
   modelProvider: z.string(),
   modelId: z.string(),
@@ -75,6 +80,8 @@ export type CreateAgentInput = z.infer<typeof CreateAgentInput>;
 export const UpdateAgentInput = z.object({
   displayName: z.string().min(1).max(120).optional(),
   description: z.string().max(1000).nullable().optional(),
+  /** Replace-semantics: prompts shown in the web chat empty state. */
+  starterPrompts: StarterPromptsSchema.optional(),
   systemPrompt: z.string().max(20000).optional(),
   modelProvider: AgentModelSelection.shape.modelProvider.optional(),
   modelId: AgentModelSelection.shape.modelId.optional(),
