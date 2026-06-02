@@ -8,6 +8,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
+import { CreateMcpServerInput, UpdateMcpServerInput } from "@open-agents/types";
 import { ApiError, api } from "@/lib/api";
 import { type McpServerDto, useMcpServers } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
@@ -58,6 +59,26 @@ const emptyForm = (): McpFormState => ({
   bearer: "",
 });
 
+function buildCreatePayload(values: McpFormState) {
+  return {
+    name: values.name,
+    label: values.label.trim(),
+    description: values.description.trim() || null,
+    serverUrl: values.serverUrl.trim(),
+    ...(values.bearer.trim() ? { bearer: values.bearer.trim() } : {}),
+  };
+}
+
+function buildUpdatePayload(values: McpFormState) {
+  return {
+    name: values.name,
+    label: values.label.trim(),
+    description: values.description.trim() || null,
+    serverUrl: values.serverUrl.trim(),
+    ...(values.bearer !== "" ? { bearer: values.bearer } : {}),
+  };
+}
+
 function McpServerForm({
   title,
   description,
@@ -97,10 +118,13 @@ function McpServerForm({
               className="font-mono"
               placeholder="notion-prod"
               value={values.name}
-              onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, name: e.target.value.toLowerCase() }))
+              }
             />
             <FieldDescription>
-              Stable slug (lowercase letters, digits, dashes, underscores).
+              Stable slug (lowercase letters, digits, dashes, underscores). Cannot start
+              or end with - or _.
             </FieldDescription>
           </Field>
           <Field>
@@ -187,17 +211,17 @@ export default function McpLibraryPage() {
   };
 
   const create = useMutation({
-    mutationFn: (values: McpFormState) =>
-      api<McpServerDto>("/api/mcp-servers", {
+    mutationFn: (values: McpFormState) => {
+      const payload = buildCreatePayload(values);
+      const parsed = CreateMcpServerInput.safeParse(payload);
+      if (!parsed.success) {
+        throw new ApiError(400, parsed.error.issues.map((i) => i.message).join("; "));
+      }
+      return api<McpServerDto>("/api/mcp-servers", {
         method: "POST",
-        json: {
-          name: values.name.trim(),
-          label: values.label.trim(),
-          description: values.description.trim() || null,
-          serverUrl: values.serverUrl.trim(),
-          ...(values.bearer.trim() ? { bearer: values.bearer.trim() } : {}),
-        },
-      }),
+        json: parsed.data,
+      });
+    },
     onSuccess: async () => {
       toast.success("MCP server created");
       setCreateOpen(false);
@@ -210,17 +234,17 @@ export default function McpLibraryPage() {
   });
 
   const update = useMutation({
-    mutationFn: ({ id, values }: { id: string; values: McpFormState }) =>
-      api<McpServerDto>(`/api/mcp-servers/${id}`, {
+    mutationFn: ({ id, values }: { id: string; values: McpFormState }) => {
+      const payload = buildUpdatePayload(values);
+      const parsed = UpdateMcpServerInput.safeParse(payload);
+      if (!parsed.success) {
+        throw new ApiError(400, parsed.error.issues.map((i) => i.message).join("; "));
+      }
+      return api<McpServerDto>(`/api/mcp-servers/${id}`, {
         method: "PATCH",
-        json: {
-          name: values.name.trim(),
-          label: values.label.trim(),
-          description: values.description.trim() || null,
-          serverUrl: values.serverUrl.trim(),
-          ...(values.bearer !== "" ? { bearer: values.bearer } : {}),
-        },
-      }),
+        json: parsed.data,
+      });
+    },
     onSuccess: async () => {
       toast.success("MCP server updated");
       setEditing(null);

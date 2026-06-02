@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
+import { ZodError } from "zod";
 import { log } from "../../log.js";
 import type { AppVariables } from "../types.js";
 
@@ -102,6 +103,22 @@ export function applyRequestLogMiddleware(
   });
 
   app.onError((err, c) => {
+    if (err instanceof ZodError) {
+      const message = err.issues
+        .map((issue) => {
+          const path = issue.path.length ? `${issue.path.join(".")}: ` : "";
+          return `${path}${issue.message}`;
+        })
+        .join("; ");
+      log.info("http: validation failed", {
+        reqId: c.get("reqId"),
+        path: c.req.path,
+        method: c.req.method,
+        message,
+      });
+      return c.json({ error: message }, 400);
+    }
+
     log.error("http: handler threw", {
       reqId: c.get("reqId"),
       err: err instanceof Error ? (err.stack ?? err.message) : String(err),
