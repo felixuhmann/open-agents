@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+/** Stable slug for MCP library entries (normalized to lowercase). */
+export const McpServerNameSchema = z
+  .string()
+  .trim()
+  .transform((s) => s.toLowerCase())
+  .pipe(
+    z
+      .string()
+      .min(1)
+      .max(60)
+      .regex(
+        /^[a-z0-9]([a-z0-9-_]*[a-z0-9])?$/,
+        "Use lowercase letters, digits, dashes, or underscores; cannot start or end with - or _",
+      ),
+  );
+
 export const McpServerDto = z.object({
   id: z.string(),
   name: z.string(),
@@ -14,14 +30,7 @@ export const McpServerDto = z.object({
 export type McpServerDto = z.infer<typeof McpServerDto>;
 
 export const CreateMcpServerInput = z.object({
-  name: z
-    .string()
-    .min(1)
-    .max(60)
-    .regex(
-      /^[a-z0-9][a-z0-9-_]*[a-z0-9]$/,
-      "lowercase letters, digits, dashes, and underscores only",
-    ),
+  name: McpServerNameSchema,
   label: z.string().min(1).max(120),
   description: z.string().max(1000).nullable().optional(),
   serverUrl: z.string().url(),
@@ -30,7 +39,7 @@ export const CreateMcpServerInput = z.object({
 export type CreateMcpServerInput = z.infer<typeof CreateMcpServerInput>;
 
 export const UpdateMcpServerInput = z.object({
-  name: CreateMcpServerInput.shape.name.optional(),
+  name: McpServerNameSchema.optional(),
   label: z.string().min(1).max(120).optional(),
   description: z.string().max(1000).nullable().optional(),
   serverUrl: z.string().url().optional(),
