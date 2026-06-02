@@ -18,7 +18,11 @@ import { modelsRoutes } from "../routes/api/models.js";
 import { usersRoutes } from "../routes/api/users.js";
 import { authRoutes } from "../routes/auth.js";
 import { healthRoutes } from "../routes/health.js";
-import { issueReportRoutes, ISSUE_REPORT_PREFIX } from "../routes/issueReport.js";
+import {
+  issueReportRoutes,
+  ISSUE_REPORT_PREFIX,
+  shouldMountLegacyIssueReportRoutes,
+} from "../routes/issueReport.js";
 import { mailgunRoutes } from "../routes/mailgun.js";
 import {
   APP_ROUTE_PREFIXES,
@@ -88,7 +92,9 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route(HEALTH_PREFIX, healthRoutes);
   app.route(MAILGUN_PREFIX, mailgunRoutes);
   app.route(STATIC_PREFIX, staticRoutes);
-  app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
+  if (shouldMountLegacyIssueReportRoutes()) {
+    app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
+  }
   app.route("/", uploadRoutes);
 
   // SPA catch-all — must be last so every prefixed router above wins. In

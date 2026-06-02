@@ -30,7 +30,7 @@ export type {
 /**
  * User-filed issues against agent sessions. Domain logic shared between
  * the cookie-authed `/api/issues` admin routes and the public
- * `/issues/report` flow used by email recipients (no SPA session).
+ * `/api/issues/email-report` flow used by email recipients (no SPA session).
  */
 
 export type IssueListRow = {

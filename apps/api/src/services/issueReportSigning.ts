@@ -101,5 +101,6 @@ export function verifyIssueReportToken(token: string): VerifiedIssueReportToken 
  */
 export function buildIssueReportUrl(args: { threadId: string; email: string }): string {
   const token = signIssueReportToken(args);
-  return `${config.PUBLIC_BASE_URL}/issues/report?token=${encodeURIComponent(token)}`;
+  const base = config.WEB_BASE_URL.replace(/\/$/, "");
+  return `${base}/issues/report?token=${encodeURIComponent(token)}`;
 }

@@ -10,12 +10,19 @@ import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 import {
   createChatIssue,
+  createEmailIssue,
   getIssueDetail,
   listIssues,
   setIssueStatus,
 } from "../../services/issues.js";
+import { verifyIssueReportToken } from "../../services/issueReportSigning.js";
 
 export const issuesRoutes = new Hono<{ Variables: AppVariables }>();
+
+const EmailReportBody = z.object({
+  token: z.string().min(1),
+  description: z.string().min(1).max(4000),
+});
 
 const CreateChatIssueBody = z.object({
   conversationId: z.string().min(1),
@@ -28,9 +35,38 @@ const PatchIssueBody = z.object({
 
 /**
  * Members file issues against their own chat conversations; admins see
- * everything. The email-surface report flow lives on the unauthenticated
- * `/issues/report` route — those callers don't have a cookie session.
+ * everything. The email-surface report flow is the unauthenticated
+ * `/api/issues/email-report` routes — email recipients have no cookie session.
  */
+issuesRoutes.get("/email-report", async (c) => {
+  const token = c.req.query("token");
+  if (!token) throw new HttpError(400, "token is required");
+  const verified = verifyIssueReportToken(token);
+  if (!verified) throw new HttpError(400, "invalid or expired report link");
+  const thread = await prisma.emailThread.findUnique({
+    where: { id: verified.threadId },
+    include: { agent: { select: { displayName: true } } },
+  });
+  if (!thread) throw new HttpError(404, "thread not found");
+  return c.json({
+    agentDisplayName: thread.agent.displayName,
+    subject: thread.subject,
+    reporterEmail: verified.email,
+  });
+});
+
+issuesRoutes.post("/email-report", async (c) => {
+  const body = EmailReportBody.parse(await c.req.json());
+  const verified = verifyIssueReportToken(body.token);
+  if (!verified) throw new HttpError(400, "invalid or expired report link");
+  const created = await createEmailIssue({
+    threadId: verified.threadId,
+    reporterEmail: verified.email,
+    description: body.description,
+  });
+  return c.json({ id: created.id });
+});
+
 issuesRoutes.post("/", async (c) => {
   const user = requireUser(c);
   const body = CreateChatIssueBody.parse(await c.req.json());
