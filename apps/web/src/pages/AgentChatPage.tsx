@@ -481,6 +481,7 @@ export default function AgentChatPage() {
                 agentDisplayName={agent.data.displayName}
                 agentAvatar={agent.data.avatar}
                 agentInitials={initials}
+                starterPrompts={agent.data.starterPrompts}
                 onPick={(text) => setDraft(text)}
               />
             ) : (

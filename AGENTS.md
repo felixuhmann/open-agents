@@ -116,7 +116,8 @@ going and the page picks up where it left off on reconnect.
 There is no longer a code path. Agents are created through the SPA:
 
 1. Sign in as admin, go to `/agents`, click **New agent**, choose a slug.
-2. On the edit page set the system prompt, pick the model, toggle
+2. On the edit page set the system prompt, optional **chat starter prompts**
+   (empty-state suggestion chips on web chat), pick the model, toggle
    web/email surfaces, tick whatever **Tools** the agent needs (managed +
    platform live in the same picker, grouped by runtime), attach skill
    bundles, paste any third-party MCP server URLs.

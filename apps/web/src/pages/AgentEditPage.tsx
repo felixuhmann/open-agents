@@ -11,6 +11,7 @@ import {
   ImageIcon,
   MagnifyingGlassIcon,
   PlugsConnectedIcon,
+  PlusIcon,
   PuzzlePieceIcon,
   ShieldCheckIcon,
   TrashIcon,
@@ -75,6 +76,7 @@ import { DeleteAgentTriggerButton } from "@/components/DeleteAgentDialog";
 type EditState = {
   displayName: string;
   description: string;
+  starterPrompts: string[];
   systemPrompt: string;
   modelProvider: string;
   modelId: string;
@@ -100,6 +102,7 @@ function fromDto(a: FullAgentDto): EditState {
   return {
     displayName: a.displayName,
     description: a.description ?? "",
+    starterPrompts: a.starterPrompts.length > 0 ? [...a.starterPrompts] : [""],
     systemPrompt: a.systemPrompt,
     modelProvider: a.modelProvider,
     modelId: a.modelId,
@@ -154,6 +157,7 @@ export default function AgentEditPage() {
         json: {
           displayName: s.displayName,
           description: s.description || null,
+          starterPrompts: s.starterPrompts.map((p) => p.trim()).filter(Boolean),
           systemPrompt: s.systemPrompt,
           modelProvider: s.modelProvider,
           modelId: s.modelId,
@@ -427,6 +431,54 @@ export default function AgentEditPage() {
                 value={state.description}
                 onChange={(e) => setS({ description: e.target.value })}
               />
+            </Field>
+            <Field>
+              <FieldLabel>Chat starter prompts</FieldLabel>
+              <FieldDescription>
+                Short suggestions shown when a user opens web chat with no messages. Leave
+                all rows empty to use the deployment defaults. Up to 8 prompts, 200
+                characters each.
+              </FieldDescription>
+              <div className="mt-2 flex flex-col gap-2">
+                {state.starterPrompts.map((prompt, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={prompt}
+                      placeholder="e.g. Summarize my open issues"
+                      maxLength={200}
+                      onChange={(e) => {
+                        const next = [...state.starterPrompts];
+                        next[index] = e.target.value;
+                        setS({ starterPrompts: next });
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove starter prompt"
+                      disabled={state.starterPrompts.length <= 1}
+                      onClick={() => {
+                        const next = state.starterPrompts.filter((_, i) => i !== index);
+                        setS({ starterPrompts: next.length > 0 ? next : [""] });
+                      }}
+                    >
+                      <TrashIcon className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={state.starterPrompts.length >= 8}
+                  onClick={() => setS({ starterPrompts: [...state.starterPrompts, ""] })}
+                >
+                  <PlusIcon data-icon="inline-start" />
+                  Add prompt
+                </Button>
+              </div>
             </Field>
             <Field>
               <FieldLabel htmlFor="system-prompt">System prompt</FieldLabel>

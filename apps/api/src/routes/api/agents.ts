@@ -2,6 +2,7 @@ import { File } from "node:buffer";
 import { Hono } from "hono";
 import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
 import { resolveDraftSandboxPolicy } from "../../services/sandboxPolicy.js";
+import { parseStarterPrompts } from "../../agents/starterPrompts.js";
 import {
   createAgent,
   deleteAgent,
@@ -61,6 +62,7 @@ function toDto(
     slug: agent.slug,
     displayName: agent.displayName,
     description: agent.description,
+    starterPrompts: parseStarterPrompts(agent.starterPrompts),
     systemPrompt: agent.systemPrompt,
     modelProvider: agent.modelProvider,
     modelId: agent.modelId,

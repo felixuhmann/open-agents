@@ -146,6 +146,8 @@ model Agent {
   slug         String  @unique
   displayName  String
   description  String?
+  /// Suggested first messages shown in the web chat empty state (JSON string array).
+  starterPrompts Json @default("[]")
   /// Stored avatar reference. Three flavours are accepted:
   ///   - `/static/uploads/avatars/<file>` — admin upload through the SPA
   ///     (file lives under `apps/api/data/uploads/avatars/`);

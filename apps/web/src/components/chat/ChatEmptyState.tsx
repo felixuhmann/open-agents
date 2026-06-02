@@ -1,18 +1,14 @@
 import { ArrowUpRightIcon } from "@phosphor-icons/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { avatarSrc } from "@/lib/queries";
-
-const SUGGESTIONS = [
-  "What can you help me with?",
-  "Summarize a document I'll paste",
-  "Draft an email for me",
-  "Walk me through your tools",
-];
+import { DEFAULT_STARTER_PROMPTS } from "./defaultStarterPrompts.js";
 
 type Props = {
   agentDisplayName: string;
   agentAvatar: string | null;
   agentInitials: string;
+  /** Agent-configured prompts; falls back to {@link DEFAULT_STARTER_PROMPTS} when empty. */
+  starterPrompts?: string[];
   onPick: (text: string) => void;
 };
 
@@ -20,8 +16,14 @@ export function ChatEmptyState({
   agentDisplayName,
   agentAvatar,
   agentInitials,
+  starterPrompts,
   onPick,
 }: Props) {
+  const suggestions =
+    starterPrompts && starterPrompts.length > 0
+      ? starterPrompts
+      : DEFAULT_STARTER_PROMPTS;
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-4 py-10 text-center">
       <Avatar className="size-14 border border-border">
@@ -39,7 +41,7 @@ export function ChatEmptyState({
         </p>
       </div>
       <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button
             key={s}
             type="button"

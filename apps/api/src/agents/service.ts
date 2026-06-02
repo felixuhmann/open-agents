@@ -1,5 +1,9 @@
 import type { Agent, Prisma } from "@open-agents/db";
-import type { SandboxCommandPolicy, SandboxNetworkPolicy } from "@open-agents/types";
+import type {
+  SandboxCommandPolicy,
+  SandboxNetworkPolicy,
+  StarterPrompts,
+} from "@open-agents/types";
 import { HttpError } from "../auth/middleware.js";
 import { AgentBackendError } from "../agent-backend/types.js";
 import { resolvePiModel } from "../services/piModel.js";
@@ -142,6 +146,7 @@ export async function deleteAgent(id: string): Promise<void> {
 export type UpdateAgentArgs = {
   displayName?: string;
   description?: string | null;
+  starterPrompts?: StarterPrompts;
   systemPrompt?: string;
   modelProvider?: string;
   modelId?: string;
@@ -188,6 +193,9 @@ export async function updateAgent(
   const scalarUpdate: Prisma.AgentUpdateInput = {};
   if (args.displayName !== undefined) scalarUpdate.displayName = args.displayName;
   if (args.description !== undefined) scalarUpdate.description = args.description;
+  if (args.starterPrompts !== undefined) {
+    scalarUpdate.starterPrompts = args.starterPrompts;
+  }
   if (args.systemPrompt !== undefined) scalarUpdate.systemPrompt = args.systemPrompt;
   if (args.modelProvider !== undefined || args.modelId !== undefined) {
     if (!args.modelProvider || !args.modelId) {
