@@ -46,6 +46,7 @@ RUN mkdir -p apps/api/data/skills
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 
 COPY --from=build /app/packages/db/package.json ./packages/db/
+COPY --from=build /app/packages/db/node_modules ./packages/db/node_modules
 COPY --from=build /app/packages/db/dist ./packages/db/dist
 COPY --from=build /app/packages/db/prisma ./packages/db/prisma
 COPY --from=build /app/packages/db/prisma.config.ts ./packages/db/prisma.config.ts
