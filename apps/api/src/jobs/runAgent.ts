@@ -366,6 +366,7 @@ async function streamRunWithEvents(
             provider: event.provider,
             stopReason: event.stopReason,
             isError: event.isError,
+            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
             rawType: event.rawType,
             usage: event.usage,
           },

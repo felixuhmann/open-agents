@@ -877,7 +877,10 @@ function summariseEvent(ev: IssueDetailRunEvent): string {
       return p.providerSandboxId;
     }
   }
-  if (typeof p.stopReason === "string") return `stop: ${p.stopReason}`;
+  if (typeof p.errorMessage === "string") return p.errorMessage;
+  if (typeof p.stopReason === "string") {
+    return p.isError === true ? `error (${p.stopReason})` : `stop: ${p.stopReason}`;
+  }
   if (typeof p.provider === "string" && typeof p.model === "string") {
     return `${p.provider}/${p.model}`;
   }

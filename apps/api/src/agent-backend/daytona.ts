@@ -92,6 +92,11 @@ function readTextBlocks(message: AssistantMessage): string {
     .join("");
 }
 
+function readAssistantErrorMessage(message: AssistantMessage): string | undefined {
+  const err = (message as AssistantMessage & { errorMessage?: unknown }).errorMessage;
+  return typeof err === "string" && err.trim().length > 0 ? err.trim() : undefined;
+}
+
 function isAssistantMessage(message: AgentMessage): message is AssistantMessage {
   return (
     typeof message === "object" &&
@@ -307,6 +312,7 @@ export class DaytonaAgentBackend implements AgentBackend {
           ];
           let finalText = "";
           let deltaText = "";
+          let lastModelError: string | undefined;
 
           try {
             const runtimePrompt = buildRuntimePrompt(
@@ -337,6 +343,10 @@ export class DaytonaAgentBackend implements AgentBackend {
               }
               if (event.type === "turn_end" && isAssistantMessage(event.message)) {
                 const usage = event.message.usage;
+                const errorMessage = readAssistantErrorMessage(event.message);
+                if (event.message.stopReason === "error") {
+                  lastModelError = errorMessage ?? "Model request failed";
+                }
                 onEvent?.({
                   kind: "model_request",
                   rawType: "pi.turn_end",
@@ -344,6 +354,7 @@ export class DaytonaAgentBackend implements AgentBackend {
                   provider: event.message.provider,
                   stopReason: event.message.stopReason,
                   isError: event.message.stopReason === "error",
+                  errorMessage,
                   usage: {
                     inputTokens: usage.input,
                     outputTokens: usage.output,
@@ -355,7 +366,11 @@ export class DaytonaAgentBackend implements AgentBackend {
             });
 
             await piAgent.prompt(userMessage);
-            return finalText || deltaText;
+            const output = finalText || deltaText;
+            if (lastModelError && output.trim().length === 0) {
+              throw new AgentBackendError(lastModelError);
+            }
+            return output;
           } finally {
             await closeThirdPartyMcpConnections(mcpConnections);
           }

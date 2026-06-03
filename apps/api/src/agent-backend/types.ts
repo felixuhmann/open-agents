@@ -114,6 +114,7 @@ export type AgentStreamEvent =
       provider?: string;
       stopReason?: string;
       isError?: boolean;
+      errorMessage?: string;
       usage: {
         inputTokens: number;
         outputTokens: number;
