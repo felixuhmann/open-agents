@@ -40,6 +40,7 @@ COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml
 COPY --from=build /app/node_modules ./node_modules
 
 COPY --from=build /app/apps/api/package.json ./apps/api/
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 RUN mkdir -p apps/api/data/skills
 
@@ -52,6 +53,7 @@ COPY --from=build /app/packages/db/prisma ./packages/db/prisma
 COPY --from=build /app/packages/db/prisma.config.ts ./packages/db/prisma.config.ts
 
 COPY --from=build /app/packages/types/package.json ./packages/types/
+COPY --from=build /app/packages/types/node_modules ./packages/types/node_modules
 COPY --from=build /app/packages/types/dist ./packages/types/dist
 
 COPY docker/entrypoint.sh /entrypoint.sh
