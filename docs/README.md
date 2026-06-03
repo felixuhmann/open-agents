@@ -10,7 +10,7 @@ first time, dip into individual files later.
 | [`architecture.md`](architecture.md)               | First. Explains data flow, the components, the layering rules, and the data model.                                                              |
 | [`configuration.md`](configuration.md)             | When you're filling out `apps/api/.env` or wondering what an env var does (and which credentials live in the encrypted `Secret` table instead). |
 | [`local-development.md`](local-development.md)     | Before you run `pnpm dev` for the first time. Covers the setup wizard, web chat loop, Mailgun tunnel loop, and the email preview server.        |
-| [`deployment.md`](deployment.md)                   | Before you ship to Railway / any other Railpack-compatible host. Covers the single Mailgun catch-all route + Anthropic vault.                   |
+| [`deployment.md`](deployment.md)                   | Before you ship with Docker. Covers the Compose stack, image build, health checks, Mailgun catch-all route, and persistent volumes.             |
 | [`creating-agents.md`](creating-agents.md)         | Whenever you create or configure an agent in the UI. There is no longer any code path for adding agents.                                        |
 | [`mcp-tools.md`](mcp-tools.md)                     | When you're authoring a new platform MCP tool (code-shipped handler) or debugging a tool the agent calls.                                       |
 | [`email-and-templates.md`](email-and-templates.md) | When you're working on the inbound/outbound email path or editing react-email templates.                                                        |

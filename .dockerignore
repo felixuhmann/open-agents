@@ -1,0 +1,30 @@
+# Dependencies and build artifacts (rebuilt inside the image)
+node_modules
+**/node_modules
+**/dist
+packages/db/generated
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+apps/api/.env
+docker/.env
+
+# Git and editor
+.git
+.gitignore
+.cursor
+.agents
+**/.DS_Store
+
+# Docs and dev-only assets (not needed in the runtime image)
+docs
+*.md
+!apps/api/src/emails/**
+
+# Test and CI
+**/*.test.ts
+**/*.spec.ts
+coverage
+.turbo

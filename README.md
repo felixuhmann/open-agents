@@ -52,6 +52,16 @@ pnpm db:migrate                          # creates tables in DATABASE_URL
 pnpm dev                                 # turbo runs api + web together
 ```
 
+## Quick start (Docker)
+
+```bash
+cp docker/.env.example docker/.env       # set bootstrap secrets
+docker compose up --build
+```
+
+Open `http://localhost:3000` and complete the setup wizard. See
+[`docs/deployment.md`](docs/deployment.md) for production hosting notes.
+
 Open `http://localhost:5173`. The first request will redirect you to the
 **Setup wizard**, where you create the first admin user and paste your
 Daytona, model-provider, and Mailgun credentials. Everything else (creating agents,
@@ -84,8 +94,8 @@ header live in the plaintext `AppSetting` table and are edited from
   model, and request lifecycles.
 - `[docs/local-development.md](docs/local-development.md)` — full dev loop
   including the email preview server.
-- `[docs/deployment.md](docs/deployment.md)` — Railpack build, single
-  Mailgun route, and service configuration.
+- `[docs/deployment.md](docs/deployment.md)` — Docker image, Compose stack,
+  single Mailgun route, and service configuration.
 - `[docs/operations.md](docs/operations.md)` — logging, retries, and how
   to debug a sideways run.
 - `[docs/mcp-tools.md](docs/mcp-tools.md)` — registering platform tools

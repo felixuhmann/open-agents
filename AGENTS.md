@@ -310,6 +310,19 @@ setup wizard to create the first admin and store credentials.
 Expose the API with ngrok / Tailscale Funnel so Mailgun can reach
 `/mailgun/inbound`.
 
+## Docker deployment
+
+Production ships as a single image (API + built SPA). See
+[`docs/deployment.md`](docs/deployment.md).
+
+```bash
+cp docker/.env.example docker/.env
+docker compose up --build
+```
+
+The container entrypoint runs `prisma migrate deploy` before starting the API.
+Mount a volume at `apps/api/data/skills` for skill bundle persistence.
+
 ## Cursor Cloud specific instructions
 
 ### Prerequisites already installed on the VM

@@ -32,7 +32,7 @@ for (const path of ENV_CANDIDATES) {
  *
  * `env("DATABASE_URL")` throws at config-load time when the variable is
  * missing, which breaks any command that doesn't actually need a live DB.
- * The Docker / Railpack / Dokploy build runs `prisma generate` (codegen
+ * The Docker image build runs `prisma generate` (codegen
  * only — Prisma 7 has no Rust query engine for SQL providers, so generate
  * never connects) and there's no reason to inject a real `DATABASE_URL`
  * into the build environment.
