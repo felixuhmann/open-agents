@@ -1,0 +1,46 @@
+# Local or single-host production stack: Postgres + open-agents app.
+#
+#   cp docker/.env.example docker/.env   # edit secrets
+#   docker compose up --build
+#
+# Visit http://localhost:3000 and complete the setup wizard.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: open_agents
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d open_agents"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - docker/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/open_agents?schema=public
+      PORT: "3000"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+    volumes:
+      - skill_bundles:/app/apps/api/data/skills
+
+volumes:
+  postgres_data:
+  skill_bundles:
