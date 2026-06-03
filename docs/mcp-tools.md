@@ -61,6 +61,8 @@ Implementation lives under `apps/api/src/mcp/`:
 - `invokePlatformTool.ts` runs code-shipped handlers with decrypted per-binding secrets.
 - `thirdPartyClient.ts` connects to external MCP servers from the orchestrator and formats tool results.
 
+Third-party MCP tools are exposed to the model as `<server-slug>_<tool-name>` (for example `firecrawl_firecrawl_scrape`). Names must match OpenAI’s `^[a-zA-Z0-9_-]+$` pattern, so the orchestrator slugifies the server label and sanitizes the MCP tool name before registering them with Pi.
+
 Platform tool secrets never enter the Daytona sandbox. External MCP bearer tokens are decrypted on the API host and used only by the orchestrator-side MCP client.
 
 `RunEvent` payloads for `tool.use` / `tool.result` include `callId`, `args`, and truncated `result` text where available for debugging.

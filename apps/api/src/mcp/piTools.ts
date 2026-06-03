@@ -9,6 +9,7 @@ import {
   connectThirdPartyMcpServers,
   closeThirdPartyMcpConnections,
   formatMcpToolResult,
+  isOpenAiCompatibleToolName,
   thirdPartyPiToolName,
   type ThirdPartyMcpConnection,
 } from "./thirdPartyClient.js";
@@ -117,6 +118,15 @@ export async function buildThirdPartyPiTools(
     for (const mcpTool of conn.tools) {
       if (!mcpTool.name) continue;
       const piName = thirdPartyPiToolName(conn.label, mcpTool.name);
+      if (!isOpenAiCompatibleToolName(piName)) {
+        log.warn("pi-mcp: skipping tool with invalid OpenAI name", {
+          agentSlug: agent.slug,
+          mcpLabel: conn.label,
+          mcpToolName: mcpTool.name,
+          piName,
+        });
+        continue;
+      }
       const inputSchema = (mcpTool.inputSchema ?? {
         type: "object",
         properties: {},
