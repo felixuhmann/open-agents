@@ -135,6 +135,7 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     model: z.string().nullable().optional(),
     provider: z.string().optional(),
     isError: z.boolean().optional(),
+    errorMessage: z.string().optional(),
     stopReason: z.string().optional(),
     rawType: z.string().optional(),
     usage: ModelRequestUsage,
