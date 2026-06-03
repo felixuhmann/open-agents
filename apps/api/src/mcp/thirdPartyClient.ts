@@ -12,6 +12,9 @@ export type ThirdPartyMcpConnection = {
   tools: Tool[];
 };
 
+/** OpenAI / Pi tool names must match `^[a-zA-Z0-9_-]+$`. */
+const OPENAI_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
 function slugifyLabel(label: string): string {
   const slug = label
     .trim()
@@ -21,17 +24,49 @@ function slugifyLabel(label: string): string {
   return slug || "mcp";
 }
 
-/** Pi-visible tool name: `<server-slug>:<tool-name>`. */
-export function thirdPartyPiToolName(label: string, toolName: string): string {
-  return `${slugifyLabel(label)}:${toolName}`;
+function sanitizeToolNameSegment(segment: string): string {
+  const cleaned = segment
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return cleaned || "tool";
 }
 
+/** Pi-visible tool name: `<server-slug>_<tool-name>` (OpenAI-safe). */
+export function thirdPartyPiToolName(label: string, toolName: string): string {
+  return `${slugifyLabel(label)}_${sanitizeToolNameSegment(toolName)}`;
+}
+
+export function isOpenAiCompatibleToolName(name: string): boolean {
+  return OPENAI_TOOL_NAME_PATTERN.test(name);
+}
+
+/** Legacy Pi tool names used `<server-slug>:<tool-name>` (invalid for OpenAI). */
 export function parseThirdPartyPiToolName(
   piName: string,
 ): { serverSlug: string; toolName: string } | null {
   const idx = piName.indexOf(":");
   if (idx <= 0) return null;
   return { serverSlug: piName.slice(0, idx), toolName: piName.slice(idx + 1) };
+}
+
+function resolveThirdPartyToolCall(
+  connections: ThirdPartyMcpConnection[],
+  piToolName: string,
+): { conn: ThirdPartyMcpConnection; toolName: string } | null {
+  for (const conn of connections) {
+    const prefix = `${slugifyLabel(conn.label)}_`;
+    if (piToolName.startsWith(prefix)) {
+      const toolName = piToolName.slice(prefix.length);
+      if (toolName) return { conn, toolName };
+    }
+  }
+
+  const parsed = parseThirdPartyPiToolName(piToolName);
+  if (!parsed) return null;
+  const conn = connections.find((c) => slugifyLabel(c.label) === parsed.serverSlug);
+  if (!conn) return null;
+  return { conn, toolName: parsed.toolName };
 }
 
 /**
@@ -115,22 +150,16 @@ export async function callThirdPartyTool(
   piToolName: string,
   args: Record<string, unknown>,
 ): Promise<{ text: string; isError: boolean }> {
-  const parsed = parseThirdPartyPiToolName(piToolName);
-  if (!parsed) {
+  const resolved = resolveThirdPartyToolCall(connections, piToolName);
+  if (!resolved) {
     return { text: `Invalid third-party tool name: ${piToolName}`, isError: true };
   }
 
-  const conn = connections.find((c) => slugifyLabel(c.label) === parsed.serverSlug);
-  if (!conn) {
-    return {
-      text: `No connected MCP server for slug ${parsed.serverSlug}`,
-      isError: true,
-    };
-  }
+  const { conn, toolName } = resolved;
 
   try {
     const result = await conn.client.callTool({
-      name: parsed.toolName,
+      name: toolName,
       arguments: args,
     });
     const text = formatMcpToolResult(result);
