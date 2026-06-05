@@ -47,6 +47,7 @@ const UsersSettingsPage = lazy(() => import("./pages/UsersSettingsPage"));
 const GeneralSettingsPage = lazy(() => import("./pages/GeneralSettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const McpConnectionPage = lazy(() => import("./pages/McpConnectionPage"));
+const OAuthConsentPage = lazy(() => import("./pages/OAuthConsentPage"));
 const EmailIssueReportPage = lazy(() => import("./pages/EmailIssueReportPage"));
 
 function canAccessRoute(user: CurrentUser, roles: Array<UserRole> | "operator") {
@@ -258,6 +259,10 @@ export function App() {
       <Routes>
         <Route path="/setup" element={<SetupPage productName={productName} />} />
         <Route path="/login" element={<LoginPage productName={productName} />} />
+        <Route
+          path="/oauth/consent"
+          element={<OAuthConsentPage productName={productName} />}
+        />
         <Route
           path="/issues/report"
           element={<EmailIssueReportPage productName={productName} />}

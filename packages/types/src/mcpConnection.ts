@@ -3,6 +3,9 @@ import { z } from "zod";
 export const McpConnectionInfoSchema = z.object({
   mcpUrl: z.string().url(),
   docsPath: z.string(),
+  oauthAuthorizationServerUrl: z.string().url(),
+  oauthProtectedResourceUrl: z.string().url(),
+  authServerUrl: z.string().url(),
 });
 
 export type McpConnectionInfo = z.infer<typeof McpConnectionInfoSchema>;

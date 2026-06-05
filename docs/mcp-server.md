@@ -15,15 +15,36 @@ When you add a new REST route, add a catalog row in `apps/api/src/mcp/controlPla
 
 ## Authentication
 
-MCP clients authenticate with a **better-auth session token** via the Bearer plugin:
+MCP clients authenticate in one of two ways:
+
+### OAuth connector (recommended)
+
+Claude Desktop and other OAuth-native MCP clients use the standard MCP OAuth discovery flow:
+
+1. Connect to `{PUBLIC_BASE_URL}/mcp`
+2. On 401, read `WWW-Authenticate` → `/.well-known/oauth-protected-resource`
+3. Discover the authorization server at `/.well-known/oauth-authorization-server`
+4. Complete OAuth 2.1 authorization code + PKCE in the browser
+5. Call `/mcp` with the issued `Authorization: Bearer <access_token>`
+
+**Setup:** open **Settings → MCP connection** in the web UI (`/settings/mcp-connection`) and copy the MCP URL into Claude Desktop's OAuth connector UI. No manual token or config file is required.
+
+OAuth is provided by better-auth's MCP plugin (`apps/api/src/auth/index.ts`). Root-level discovery endpoints are mounted at:
+
+- `/.well-known/oauth-protected-resource`
+- `/.well-known/oauth-authorization-server`
+
+The authorization server itself lives under `/api/auth` (endpoints such as `/api/auth/mcp/authorize`, `/api/auth/mcp/token`, `/api/auth/mcp/register`).
+
+### Bearer session token (advanced)
+
+For clients that support manual Streamable HTTP configuration (for example Cursor), you can still generate a long-lived better-auth **session token**:
 
 ```
 Authorization: Bearer <session_token>
 ```
 
-### Getting a token
-
-**Recommended:** open **Settings → MCP connection** in the web UI (`/settings/mcp-connection`), click **Generate auth token**, and copy the ready-made `claude_desktop_config.json` block.
+On **Settings → MCP connection**, expand **Advanced: bearer token**, click **Generate auth token**, and paste the token into your client config.
 
 Alternatively, sign in through the web UI or via the auth API:
 
@@ -33,15 +54,26 @@ curl -s -X POST "$PUBLIC_BASE_URL/api/auth/sign-in/email" \
   -d '{"email":"you@example.com","password":"your-password"}'
 ```
 
-2. The response body includes a `token` field (and the `set-auth-token` response header). Use that value as the Bearer token.
+The response body includes a `token` field (and the `set-auth-token` response header). Use that value as the Bearer token.
 
-3. Tokens expire with the session (default 7 days). Sign in again to refresh.
+Tokens expire with the session (default 7 days). Sign in again to refresh.
 
 Role-based access is enforced exactly as in the SPA: admins can manage users/secrets, contributors can create agents, members see only agents they have access to.
 
 ## Claude Desktop connector
 
-Add to your Claude Desktop MCP config (`claude_desktop_config.json`):
+### OAuth (recommended)
+
+1. Open Claude Desktop → Settings → Connectors
+2. Add a custom MCP / OAuth connector
+3. Paste your deployment MCP URL, e.g. `https://your-deployment.example.com/mcp`
+4. Sign in through the browser when prompted and approve consent if shown
+
+Claude discovers OAuth metadata automatically; you do not edit `claude_desktop_config.json`.
+
+### Manual bearer config (legacy)
+
+For clients that still accept static headers in config JSON:
 
 ```json
 {
@@ -112,10 +144,13 @@ Then publish:
 | File                                          | Role                                             |
 | --------------------------------------------- | ------------------------------------------------ |
 | `apps/api/src/routes/mcp.ts`                  | Hono route, auth gate, Streamable HTTP transport |
+| `apps/api/src/routes/wellKnown.ts`            | Root OAuth discovery for MCP clients             |
+| `apps/api/src/auth/mcpAuth.ts`                | OAuth + bearer session resolution for `/mcp`     |
 | `apps/api/src/mcp/controlPlane/server.ts`     | MCP tool registration                            |
 | `apps/api/src/mcp/controlPlane/apiProxy.ts`   | Internal `app.request` proxy                     |
 | `apps/api/src/mcp/controlPlane/apiCatalog.ts` | Endpoint discovery manifest                      |
-| `apps/api/src/auth/index.ts`                  | `bearer()` plugin for token auth                 |
+| `apps/api/src/auth/index.ts`                  | `bearer()` + `mcp()` plugins                     |
+| `apps/web/src/pages/OAuthConsentPage.tsx`     | OAuth consent UI during connector setup          |
 
 ## Distinction from agent-runtime MCP
 

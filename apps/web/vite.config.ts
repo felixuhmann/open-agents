@@ -15,6 +15,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:3000",
       "/mcp": "http://localhost:3000",
+      "/.well-known": "http://localhost:3000",
       "/runs": "http://localhost:3000",
       "/conversations": "http://localhost:3000",
       "/workflow-conversations": "http://localhost:3000",

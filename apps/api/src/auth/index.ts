@@ -2,9 +2,13 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { hashPassword } from "better-auth/crypto";
 import { bearer } from "better-auth/plugins/bearer";
+import { mcp } from "better-auth/plugins";
 import type { UserRole } from "@open-agents/types";
 import { config } from "../config.js";
 import { prisma } from "../db.js";
+
+const publicOrigin = config.PUBLIC_BASE_URL.replace(/\/$/, "");
+const webOrigin = config.WEB_BASE_URL.replace(/\/$/, "");
 
 /**
  * better-auth instance for the platform. Email/password only — admin
@@ -47,7 +51,17 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: "open-agents",
   },
-  plugins: [bearer()],
+  plugins: [
+    bearer(),
+    mcp({
+      loginPage: `${webOrigin}/login`,
+      resource: `${publicOrigin}/mcp`,
+      oidcConfig: {
+        loginPage: `${webOrigin}/login`,
+        consentPage: `${webOrigin}/oauth/consent`,
+      },
+    }),
+  ],
 });
 
 export type Auth = typeof auth;
