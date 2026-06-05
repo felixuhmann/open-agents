@@ -201,6 +201,7 @@ export type WorkflowConversationDetail = {
   id: string;
   title: string;
   workflow: { id: string; slug: string; displayName: string };
+  activeWorkflowRunId: string | null;
   messages: WorkflowChatMessage[];
 };
 

@@ -114,6 +114,11 @@ export default function WorkflowChatPage() {
     if (lastUser && lastUser.content === optimistic) setOptimistic(null);
   }, [messages, optimistic]);
 
+  useEffect(() => {
+    const active = conversation.data?.activeWorkflowRunId;
+    if (active && !activeRunId) setActiveRunId(active);
+  }, [activeRunId, conversation.data?.activeWorkflowRunId]);
+
   const createConversation = useMutation({
     mutationFn: async (input: { firstMessage: string }) => {
       const conv = await api<{ id: string }>("/api/workflow-conversations", {

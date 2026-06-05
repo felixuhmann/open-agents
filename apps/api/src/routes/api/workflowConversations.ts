@@ -99,6 +99,12 @@ workflowConversationsRoutes.get("/:id", async (c) => {
     include: {
       workflow: { select: { id: true, slug: true, displayName: true } },
       messages: { orderBy: { createdAt: "asc" } },
+      runs: {
+        where: { status: { in: ["pending", "running"] } },
+        orderBy: { startedAt: "desc" },
+        take: 1,
+        select: { id: true },
+      },
     },
   });
   if (!conv) throw new HttpError(404, "conversation not found");
@@ -109,6 +115,7 @@ workflowConversationsRoutes.get("/:id", async (c) => {
     id: conv.id,
     title: conv.title,
     workflow: conv.workflow,
+    activeWorkflowRunId: conv.runs[0]?.id ?? null,
     messages: conv.messages.map((m) => ({
       id: m.id,
       role: m.role,
