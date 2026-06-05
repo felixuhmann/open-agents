@@ -1,24 +1,14 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  ChatCircleDotsIcon,
-  DotsThreeIcon,
-  EnvelopeIcon,
-  GlobeIcon,
-  PencilSimpleIcon,
-  PlusIcon,
-  RobotIcon,
-  TrashIcon,
-} from "@phosphor-icons/react";
+import { PlusIcon, RobotIcon } from "@phosphor-icons/react";
+import { AgentListRow } from "@/components/AgentListRow";
 import { DeleteAgentDialog } from "@/components/DeleteAgentDialog";
 import { ApiError, api } from "@/lib/api";
-import { avatarSrc, canOperateAgents, useAgents, useCurrentUser } from "@/lib/queries";
+import { canOperateAgents, useAgents, useCurrentUser } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +18,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Empty,
   EmptyContent,
@@ -49,7 +33,6 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -144,91 +127,12 @@ export default function AgentsListPage() {
             </TableHeader>
             <TableBody>
               {agents.data.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      to={`/agents/${a.slug}`}
-                      className="flex items-center gap-2 underline-offset-4 hover:underline"
-                    >
-                      <Avatar size="sm">
-                        {a.avatar ? (
-                          <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
-                        ) : null}
-                        <AvatarFallback className="bg-primary text-primary-foreground">
-                          {a.displayName.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      {a.displayName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {a.slug}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1.5">
-                      {a.webEnabled ? (
-                        <Badge variant="secondary">
-                          <GlobeIcon data-icon="inline-start" />
-                          web
-                        </Badge>
-                      ) : null}
-                      {a.emailEnabled ? (
-                        <Badge variant="secondary">
-                          <EnvelopeIcon data-icon="inline-start" />
-                          email
-                        </Badge>
-                      ) : null}
-                      {!a.webEnabled && !a.emailEnabled ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {a.accessMode}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" aria-label="Open actions">
-                          <DotsThreeIcon weight="bold" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link to={`/agents/${a.slug}`}>
-                            <RobotIcon data-icon="inline-start" />
-                            View details
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link to={`/agents/${a.slug}/chat`}>
-                            <ChatCircleDotsIcon data-icon="inline-start" />
-                            Open chat
-                          </Link>
-                        </DropdownMenuItem>
-                        {canManageAgents ? (
-                          <DropdownMenuItem asChild>
-                            <Link to={`/agents/${a.slug}/edit`}>
-                              <PencilSimpleIcon data-icon="inline-start" />
-                              Edit
-                            </Link>
-                          </DropdownMenuItem>
-                        ) : null}
-                        {canManageAgents ? (
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteSlug(a.slug)}
-                          >
-                            <TrashIcon data-icon="inline-start" />
-                            Delete agent
-                          </DropdownMenuItem>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                <AgentListRow
+                  key={a.id}
+                  agent={a}
+                  canManageAgents={canManageAgents}
+                  onDelete={() => setDeleteSlug(a.slug)}
+                />
               ))}
             </TableBody>
           </Table>
