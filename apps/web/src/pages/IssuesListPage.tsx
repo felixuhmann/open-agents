@@ -4,6 +4,7 @@ import {
   ChatCircleDotsIcon,
   CheckCircleIcon,
   EnvelopeSimpleIcon,
+  FlowArrowIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import {
@@ -89,7 +90,7 @@ export default function IssuesListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Agent</TableHead>
+                <TableHead>Target</TableHead>
                 <TableHead>Reporter</TableHead>
                 <TableHead>Surface</TableHead>
                 <TableHead>Description</TableHead>
@@ -99,7 +100,12 @@ export default function IssuesListPage() {
             </TableHeader>
             <TableBody>
               {issues.data.map((i) => {
-                const initials = i.agent.displayName.slice(0, 2).toUpperCase();
+                const targetName =
+                  i.surface === "workflow"
+                    ? (i.workflow?.displayName ?? "Workflow")
+                    : (i.agent?.displayName ?? "Agent");
+                const targetAvatar = i.agent?.avatar ?? null;
+                const initials = targetName.slice(0, 2).toUpperCase();
                 return (
                   <TableRow key={i.id} className="cursor-pointer">
                     <TableCell>
@@ -108,17 +114,14 @@ export default function IssuesListPage() {
                         className="flex items-center gap-2 hover:underline"
                       >
                         <Avatar className="size-7">
-                          {i.agent.avatar ? (
-                            <AvatarImage
-                              src={avatarSrc(i.agent.avatar)}
-                              alt={i.agent.displayName}
-                            />
+                          {targetAvatar ? (
+                            <AvatarImage src={avatarSrc(targetAvatar)} alt={targetName} />
                           ) : null}
                           <AvatarFallback className="bg-muted text-foreground text-[10px]">
                             {initials}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-medium">{i.agent.displayName}</span>
+                        <span className="font-medium">{targetName}</span>
                       </Link>
                     </TableCell>
                     <TableCell>
@@ -185,13 +188,15 @@ export function StatusBadge({ status }: { status: IssueStatus }) {
   );
 }
 
-export function SurfaceBadge({ surface }: { surface: "chat" | "email" }) {
+export function SurfaceBadge({ surface }: { surface: "chat" | "email" | "workflow" }) {
   return (
     <Badge variant="outline">
       {surface === "chat" ? (
         <ChatCircleDotsIcon data-icon="inline-start" />
-      ) : (
+      ) : surface === "email" ? (
         <EnvelopeSimpleIcon data-icon="inline-start" />
+      ) : (
+        <FlowArrowIcon data-icon="inline-start" />
       )}
       {surface}
     </Badge>

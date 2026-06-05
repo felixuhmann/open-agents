@@ -549,7 +549,7 @@ export function useConversation(id: string | undefined) {
   });
 }
 
-export type IssueSurface = "chat" | "email";
+export type IssueSurface = "chat" | "email" | "workflow";
 export type IssueStatus = "open" | "resolved";
 
 export type IssueListItem = {
@@ -560,9 +560,11 @@ export type IssueListItem = {
   reporterEmail: string;
   reporterUserId: string | null;
   reporterName: string | null;
-  agent: { id: string; slug: string; displayName: string; avatar: string | null };
+  agent: { id: string; slug: string; displayName: string; avatar: string | null } | null;
+  workflow: { id: string; slug: string; displayName: string } | null;
   conversationId: string | null;
   threadId: string | null;
+  workflowConversationId: string | null;
   sessionLabel: string;
   createdAt: string;
   resolvedAt: string | null;
@@ -696,7 +698,7 @@ export type IssueDetailAgent = {
 
 /** Agent trace payload (chat/email session) without issue metadata. */
 export type SessionTrace = {
-  surface: IssueSurface;
+  surface: "chat" | "email";
   agent: IssueDetailAgent;
   session: {
     conversationId: string | null;
@@ -710,7 +712,69 @@ export type SessionTrace = {
   runs: IssueDetailRun[];
 };
 
-export type IssueDetail = SessionTrace & {
+export type WorkflowTraceMessage = {
+  id: string;
+  role: string;
+  content: string;
+  workflowRunId: string | null;
+  createdAt: string;
+};
+
+export type WorkflowTraceStepRun = {
+  id: string;
+  position: number;
+  agentId: string;
+  agentSlug: string;
+  agentDisplayName: string;
+  agentVersionId: string | null;
+  runId: string | null;
+  status: string;
+  inputText: string | null;
+  output: string | null;
+  error: string | null;
+  createdAt: string;
+  agentRun: IssueDetailRun | null;
+};
+
+export type WorkflowTraceRun = {
+  id: string;
+  workflowVersionId: string | null;
+  versionNumber: number | null;
+  versionPayload: unknown;
+  status: string;
+  error: string | null;
+  output: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  events: IssueDetailRunEvent[];
+  stepRuns: WorkflowTraceStepRun[];
+};
+
+export type WorkflowTrace = {
+  surface: "workflow";
+  workflow: {
+    id: string;
+    slug: string;
+    displayName: string;
+    description: string | null;
+    webEnabled: boolean;
+    currentVersionId: string | null;
+    currentVersionNumber: number | null;
+    publishedPayload: unknown;
+    publishedAt: string | null;
+  };
+  session: {
+    conversationId: string;
+    label: string;
+    userEmail: string | null;
+    backendSessionIds: string[];
+    sandboxes: IssueDetailSandbox[];
+  };
+  messages: WorkflowTraceMessage[];
+  runs: WorkflowTraceRun[];
+};
+
+export type IssueMetadata = {
   id: string;
   status: IssueStatus;
   description: string;
@@ -724,11 +788,22 @@ export type IssueDetail = SessionTrace & {
   updatedAt: string;
 };
 
+export type IssueDetail = IssueMetadata & (SessionTrace | WorkflowTrace);
+
 export function useConversationTrace(conversationId: string | undefined) {
   return useQuery({
     enabled: Boolean(conversationId),
     queryKey: ["conversations", conversationId, "trace"],
     queryFn: () => api<SessionTrace>(`/api/conversations/${conversationId}/trace`),
+  });
+}
+
+export function useWorkflowConversationTrace(conversationId: string | undefined) {
+  return useQuery({
+    enabled: Boolean(conversationId),
+    queryKey: ["workflow-conversations", conversationId, "trace"],
+    queryFn: () =>
+      api<WorkflowTrace>(`/api/workflow-conversations/${conversationId}/trace`),
   });
 }
 

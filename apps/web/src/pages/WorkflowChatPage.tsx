@@ -12,13 +12,16 @@ import {
   FileIcon,
   FlowArrowIcon,
   SpinnerGapIcon,
+  TerminalWindowIcon,
   WarningCircleIcon,
   XCircleIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import {
   type RunAttachmentSummary,
+  canOperateAgents,
   runAttachmentDownloadUrl,
+  useCurrentUser,
   useWorkflow,
   useWorkflowConversation,
 } from "@/lib/queries";
@@ -27,6 +30,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/Markdown";
 import { Composer } from "@/components/chat/Composer";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
+import { ToolCallCard } from "@/components/chat/ToolCallCard";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { formatBytes } from "@/components/chat/utils";
 import { cn } from "@/lib/utils";
@@ -40,6 +45,17 @@ type StreamEvent = {
 
 type StepStatus = "pending" | "running" | "succeeded" | "failed";
 
+type LiveToolCall = { callId: string; toolName: string; output: string; done: boolean };
+
+type WorkflowActivityEvent = {
+  key: string;
+  seq: number;
+  type: string;
+  createdAt: string;
+  summary: string;
+  payload: Record<string, unknown>;
+};
+
 type StepState = {
   position: number;
   agentSlug: string;
@@ -48,6 +64,8 @@ type StepState = {
   text: string;
   attachments: RunAttachmentSummary[];
   runId: string | null;
+  toolCalls: LiveToolCall[];
+  events: WorkflowActivityEvent[];
 };
 
 export default function WorkflowChatPage() {
@@ -58,6 +76,7 @@ export default function WorkflowChatPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const workflow = useWorkflow(slug);
+  const me = useCurrentUser();
   const conversation = useWorkflowConversation(conversationId);
   const [draft, setDraft] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -66,11 +85,9 @@ export default function WorkflowChatPage() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const atBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const isOperator = canOperateAgents(me.data?.role);
 
-  const messages = useMemo(
-    () => conversation.data?.messages ?? [],
-    [conversation.data],
-  );
+  const messages = useMemo(() => conversation.data?.messages ?? [], [conversation.data]);
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
@@ -165,14 +182,22 @@ export default function WorkflowChatPage() {
               text: "",
               attachments: [],
               runId: null,
+              toolCalls: [],
+              events: [],
             })),
           );
         } else if (data.type === "workflow.step.started") {
           const pos = p.position as number;
+          const event = toActivityEvent(data);
           setSteps((prev) =>
             prev.map((s) =>
               s.position === pos
-                ? { ...s, status: "running", runId: (p.runId as string) ?? null }
+                ? {
+                    ...s,
+                    status: "running",
+                    runId: (p.runId as string) ?? null,
+                    events: [...s.events, event],
+                  }
                 : s,
             ),
           );
@@ -180,14 +205,13 @@ export default function WorkflowChatPage() {
           const pos = p.position as number;
           const text = (p.text as string) ?? "";
           setSteps((prev) =>
-            prev.map((s) =>
-              s.position === pos ? { ...s, text: s.text + text } : s,
-            ),
+            prev.map((s) => (s.position === pos ? { ...s, text: s.text + text } : s)),
           );
         } else if (data.type === "workflow.step.succeeded") {
           const pos = p.position as number;
           const output = (p.output as string) ?? "";
           const attachments = (p.attachments as RunAttachmentSummary[]) ?? [];
+          const event = toActivityEvent(data);
           setSteps((prev) =>
             prev.map((s) =>
               s.position === pos
@@ -197,9 +221,37 @@ export default function WorkflowChatPage() {
                     text: output || s.text,
                     attachments,
                     runId: (p.runId as string) ?? s.runId,
+                    toolCalls: s.toolCalls.map((tc) => ({ ...tc, done: true })),
+                    events: [...s.events, event],
                   }
                 : s,
             ),
+          );
+        } else if (data.type === "workflow.step.tool") {
+          const pos = p.position as number;
+          const toolName = (p.toolName as string) || "tool";
+          const status = p.status === "end" ? "end" : "start";
+          const event = toActivityEvent(data);
+          setSteps((prev) =>
+            prev.map((s) => {
+              if (s.position !== pos) return s;
+              return {
+                ...s,
+                events: [...s.events, event],
+                toolCalls:
+                  status === "start"
+                    ? [
+                        ...s.toolCalls,
+                        {
+                          callId: `workflow-${pos}-${data.seq}`,
+                          toolName,
+                          output: "",
+                          done: false,
+                        },
+                      ]
+                    : finishLatestToolCall(s.toolCalls, toolName),
+              };
+            }),
           );
         } else if (data.type === "workflow.run.succeeded") {
           source.close();
@@ -211,8 +263,18 @@ export default function WorkflowChatPage() {
           source.close();
           const pos = p.position as number | null;
           if (typeof pos === "number") {
+            const event = toActivityEvent(data);
             setSteps((prev) =>
-              prev.map((s) => (s.position === pos ? { ...s, status: "failed" } : s)),
+              prev.map((s) =>
+                s.position === pos
+                  ? {
+                      ...s,
+                      status: "failed",
+                      toolCalls: s.toolCalls.map((tc) => ({ ...tc, done: true })),
+                      events: [...s.events, event],
+                    }
+                  : s,
+              ),
             );
           }
           setActiveRunId(null);
@@ -270,8 +332,7 @@ export default function WorkflowChatPage() {
   const sending =
     createConversation.isPending || sendMessage.isPending || Boolean(activeRunId);
   const initials = workflow.data.displayName.slice(0, 2).toUpperCase();
-  const empty =
-    messages.length === 0 && steps.length === 0 && !optimistic && !sending;
+  const empty = messages.length === 0 && steps.length === 0 && !optimistic && !sending;
   const notPublished = !workflow.data.currentVersionId;
 
   return (
@@ -285,10 +346,23 @@ export default function WorkflowChatPage() {
             {workflow.data.displayName}
           </h1>
           <p className="truncate text-xs text-muted-foreground">
-            {conversation.data?.title ??
-              `${workflow.data.steps.length}-step pipeline`}
+            {conversation.data?.title ?? `${workflow.data.steps.length}-step pipeline`}
           </p>
         </div>
+        {conversationId && messages.length > 0 ? (
+          <ReportIssueDialog
+            workflowConversationId={conversationId}
+            targetLabel="workflow conversation"
+          />
+        ) : null}
+        {conversationId && isOperator ? (
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/workflows/${slug}/chat/${conversationId}/debug`}>
+              <TerminalWindowIcon data-icon="inline-start" />
+              Debug
+            </Link>
+          </Button>
+        ) : null}
         <Button asChild variant="outline" size="sm">
           <Link to={`/workflows/${workflow.data.slug}/edit`}>
             <ClockCounterClockwiseIcon data-icon="inline-start" />
@@ -393,6 +467,60 @@ function AssistantBubble({ content }: { content: string }) {
   );
 }
 
+function finishLatestToolCall(
+  toolCalls: LiveToolCall[],
+  toolName: string,
+): LiveToolCall[] {
+  const idx = toolCalls.findLastIndex(
+    (tc) => tc.toolName === toolName && tc.done === false,
+  );
+  if (idx < 0) return toolCalls;
+  const next = [...toolCalls];
+  const row = next[idx];
+  if (!row) return toolCalls;
+  next[idx] = { ...row, done: true };
+  return next;
+}
+
+function toActivityEvent(event: StreamEvent): WorkflowActivityEvent {
+  return {
+    key: `${event.type}-${event.seq}`,
+    seq: event.seq,
+    type: event.type,
+    createdAt: event.createdAt,
+    payload: event.payload,
+    summary: summariseWorkflowEvent(event),
+  };
+}
+
+function summariseWorkflowEvent(event: StreamEvent): string {
+  const p = event.payload;
+  if (event.type === "workflow.step.started") {
+    return `Started ${stringPayload(p.agentDisplayName) ?? stringPayload(p.agentSlug) ?? "step"}`;
+  }
+  if (event.type === "workflow.step.tool") {
+    const status = p.status === "end" ? "finished" : "started";
+    return `${stringPayload(p.toolName) ?? "tool"} ${status}`;
+  }
+  if (event.type === "workflow.step.succeeded") {
+    const output =
+      typeof p.output === "string" ? p.output.replace(/\s+/g, " ").trim() : "";
+    return output ? `Completed: ${truncate(output, 96)}` : "Completed";
+  }
+  if (event.type === "workflow.run.failed") {
+    return typeof p.error === "string" ? p.error : "Failed";
+  }
+  return event.type;
+}
+
+function stringPayload(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
 function StepStatusIcon({ status }: { status: StepStatus }) {
   if (status === "running")
     return <SpinnerGapIcon className="size-4 animate-spin text-primary" />;
@@ -403,13 +531,41 @@ function StepStatusIcon({ status }: { status: StepStatus }) {
   return <span className="size-2 rounded-full bg-muted-foreground/40" />;
 }
 
-function PipelinePanel({
-  steps,
-  running,
-}: {
-  steps: StepState[];
-  running: boolean;
-}) {
+function WorkflowActivityCard({ event }: { event: WorkflowActivityEvent }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border bg-muted/30">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? (
+          <CaretDownIcon className="size-3 text-muted-foreground" />
+        ) : (
+          <CaretRightIcon className="size-3 text-muted-foreground" />
+        )}
+        <span className="font-mono text-[10px] text-muted-foreground">#{event.seq}</span>
+        <span className="rounded-sm bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          {event.type}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {event.summary}
+        </span>
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {new Date(event.createdAt).toLocaleTimeString()}
+        </span>
+      </button>
+      {open ? (
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words border-t bg-background/60 p-2 font-mono text-[11px] leading-relaxed">
+          {JSON.stringify(event.payload, null, 2)}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
+function PipelinePanel({ steps, running }: { steps: StepState[]; running: boolean }) {
   return (
     <div className="flex w-full items-start gap-3">
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground">
@@ -448,7 +604,11 @@ function StepCard({
     if (step.status === "running") setOpen(true);
   }, [step.status]);
 
-  const hasBody = step.text.trim().length > 0 || step.attachments.length > 0;
+  const hasBody =
+    step.text.trim().length > 0 ||
+    step.attachments.length > 0 ||
+    step.toolCalls.length > 0 ||
+    step.events.length > 0;
 
   return (
     <div className="border bg-card">
@@ -471,7 +631,26 @@ function StepCard({
         <span className="truncate text-sm font-medium">{step.agentDisplayName}</span>
       </button>
       {open && hasBody ? (
-        <div className="border-t px-3 py-2">
+        <div className="flex flex-col gap-2 border-t px-3 py-2">
+          {step.events.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              {step.events.map((event) => (
+                <WorkflowActivityCard key={event.key} event={event} />
+              ))}
+            </div>
+          ) : null}
+          {step.toolCalls.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {step.toolCalls.map((tc) => (
+                <ToolCallCard
+                  key={tc.callId}
+                  toolName={tc.toolName}
+                  output={tc.output}
+                  running={!tc.done}
+                />
+              ))}
+            </div>
+          ) : null}
           {step.text.trim().length > 0 ? (
             <div
               className={cn(
@@ -483,7 +662,7 @@ function StepCard({
             </div>
           ) : null}
           {step.attachments.length > 0 && step.runId ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               {step.attachments.map((a) => (
                 <a
                   key={a.id}
@@ -495,7 +674,9 @@ function StepCard({
                   <span className="max-w-[18rem] truncate" title={a.filename}>
                     {a.filename}
                   </span>
-                  <span className="text-muted-foreground">{formatBytes(a.sizeBytes)}</span>
+                  <span className="text-muted-foreground">
+                    {formatBytes(a.sizeBytes)}
+                  </span>
                   <DownloadSimpleIcon className="size-3.5" />
                 </a>
               ))}

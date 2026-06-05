@@ -309,7 +309,12 @@ export default function WorkflowEditPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="button" variant="outline" onClick={addStep} disabled={!pickAgent}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addStep}
+              disabled={!pickAgent}
+            >
               <PlusIcon data-icon="inline-start" />
               Add step
             </Button>
@@ -344,10 +349,7 @@ export default function WorkflowEditPage() {
           {accessMode === "specific" ? (
             <div className="flex flex-col gap-2">
               {(access.data?.users ?? []).map((u) => (
-                <label
-                  key={u.id}
-                  className="flex items-center gap-2 text-sm"
-                >
+                <label key={u.id} className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={accessUserIds.includes(u.id)}
                     onCheckedChange={(checked) =>

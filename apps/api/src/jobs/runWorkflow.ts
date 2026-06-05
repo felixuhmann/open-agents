@@ -326,7 +326,8 @@ async function collectStepInputFiles(priorRunId: string): Promise<SessionResourc
 }
 
 function buildStepUserMessage(inputText: string, resources: SessionResource[]): string {
-  const text = inputText.trim().length > 0 ? inputText : "(no text from the previous step)";
+  const text =
+    inputText.trim().length > 0 ? inputText : "(no text from the previous step)";
   if (resources.length === 0) return buildRunUserMessage(text);
   const fileList = resources.map((r) => `- ${r.mountPath}`).join("\n");
   const withFiles = [

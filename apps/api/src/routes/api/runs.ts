@@ -38,13 +38,12 @@ async function resolveRunForCaller(c: Parameters<typeof requireUser>[0], runId: 
     // Workflow step runs are owned by the workflow conversation's user.
     const stepRun = await prisma.workflowStepRun.findUnique({
       where: { runId: run.id },
-      include: { workflowRun: { select: { conversation: { select: { userId: true } } } } },
+      include: {
+        workflowRun: { select: { conversation: { select: { userId: true } } } },
+      },
     });
     if (!stepRun) throw new HttpError(404, "run not found");
-    if (
-      stepRun.workflowRun.conversation.userId !== user.id &&
-      !canOperateAgents(user)
-    ) {
+    if (stepRun.workflowRun.conversation.userId !== user.id && !canOperateAgents(user)) {
       throw new HttpError(403, "not your run");
     }
   } else {

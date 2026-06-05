@@ -3,12 +3,14 @@ import { z } from "zod";
 import {
   HttpError,
   canOperateAgents,
+  requireAgentOperator,
   requireUser,
   requireWorkflowAccess,
 } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 import { enqueueWorkflowTurn } from "../../services/workflowChat.js";
+import { getWorkflowConversationTrace } from "../../services/workflowTrace.js";
 import { getWorkflowBySlug } from "../../workflows/service.js";
 
 export const workflowConversationsRoutes = new Hono<{ Variables: AppVariables }>();
@@ -78,6 +80,17 @@ workflowConversationsRoutes.post("/", async (c) => {
   });
 });
 
+/**
+ * Full workflow trace for builders (admin/contributor). Mirrors the agent
+ * debug route but includes pipeline-level events and per-step agent runs.
+ */
+workflowConversationsRoutes.get("/:id/trace", async (c) => {
+  requireAgentOperator(c);
+  const id = c.req.param("id");
+  const trace = await getWorkflowConversationTrace(id);
+  return c.json(trace);
+});
+
 workflowConversationsRoutes.get("/:id", async (c) => {
   const user = requireUser(c);
   const id = c.req.param("id");
@@ -121,8 +134,7 @@ workflowConversationsRoutes.post("/:id/messages", async (c) => {
   if (!conv.workflow.webEnabled) throw new HttpError(400, "web chat disabled");
 
   const userMessage = await prisma.$transaction(async (tx) => {
-    const nextTitle =
-      conv.title === DEFAULT_TITLE ? titleFromPrompt(body.text) : null;
+    const nextTitle = conv.title === DEFAULT_TITLE ? titleFromPrompt(body.text) : null;
     const real = await tx.workflowMessage.create({
       data: { conversationId: conv.id, role: "user", content: body.text },
     });
