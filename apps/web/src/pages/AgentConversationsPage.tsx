@@ -1,13 +1,8 @@
 import { Link, useParams } from "react-router-dom";
 import { ChatCircleDotsIcon, PlusIcon, WarningOctagonIcon } from "@phosphor-icons/react";
-import {
-  avatarSrc,
-  useAgent,
-  useConversations,
-  type ConversationListItem,
-} from "@/lib/queries";
+import { useAgent, useConversations, type ConversationListItem } from "@/lib/queries";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { PageHeader } from "@/components/PageHeader";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -60,14 +55,7 @@ export default function AgentConversationsPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-3">
-            <Avatar size="lg">
-              {a.avatar ? (
-                <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
-              ) : null}
-              <AvatarFallback className="bg-primary text-primary-foreground">
-                {a.displayName.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <AgentAvatar avatar={a.avatar} displayName={a.displayName} size="lg" />
             Conversations
           </span>
         }

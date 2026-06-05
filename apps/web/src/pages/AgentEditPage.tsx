@@ -20,7 +20,6 @@ import {
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import {
-  avatarSrc,
   type FullAgentDto,
   useAgent,
   useAgentAccess,
@@ -28,7 +27,7 @@ import {
   useSkills,
   useTools,
 } from "@/lib/queries";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -341,17 +340,11 @@ export default function AgentEditPage() {
             <Field>
               <FieldLabel>Profile picture</FieldLabel>
               <div className="flex items-center gap-4">
-                <Avatar size="lg">
-                  {agent.data.avatar ? (
-                    <AvatarImage
-                      src={avatarSrc(agent.data.avatar)}
-                      alt={agent.data.displayName}
-                    />
-                  ) : null}
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    {agent.data.displayName.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <AgentAvatar
+                  avatar={agent.data.avatar}
+                  displayName={agent.data.displayName}
+                  size="lg"
+                />
                 <div className="flex flex-col gap-2">
                   <input
                     ref={fileInputRef}
