@@ -39,12 +39,19 @@ async function resolveRunForCaller(c: Parameters<typeof requireUser>[0], runId: 
     const stepRun = await prisma.workflowStepRun.findUnique({
       where: { runId: run.id },
       include: {
-        workflowRun: { select: { conversation: { select: { userId: true } } } },
+        workflowRun: {
+          select: { conversation: { select: { userId: true } }, emailThreadId: true },
+        },
       },
     });
     if (!stepRun) throw new HttpError(404, "run not found");
-    if (stepRun.workflowRun.conversation.userId !== user.id && !canOperateAgents(user)) {
-      throw new HttpError(403, "not your run");
+    const conv = stepRun.workflowRun.conversation;
+    if (conv) {
+      if (conv.userId !== user.id && !canOperateAgents(user)) {
+        throw new HttpError(403, "not your run");
+      }
+    } else if (!canOperateAgents(user)) {
+      throw new HttpError(403, "agent operator role required");
     }
   } else {
     if (!canOperateAgents(user)) throw new HttpError(403, "agent operator role required");

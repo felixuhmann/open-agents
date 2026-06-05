@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 type StepRow = { agentId: string };
@@ -42,6 +43,10 @@ export default function WorkflowEditPage() {
 
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
+  const [starterPrompts, setStarterPrompts] = useState<string[]>([""]);
+  const [webEnabled, setWebEnabled] = useState(true);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [inboundLocalPart, setInboundLocalPart] = useState("");
   const [accessMode, setAccessMode] = useState<"everyone" | "specific">("everyone");
   const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
   const [steps, setSteps] = useState<StepRow[]>([]);
@@ -52,6 +57,12 @@ export default function WorkflowEditPage() {
     if (!workflow.data || hydrated) return;
     setDisplayName(workflow.data.displayName);
     setDescription(workflow.data.description ?? "");
+    setStarterPrompts(
+      workflow.data.starterPrompts.length > 0 ? [...workflow.data.starterPrompts] : [""],
+    );
+    setWebEnabled(workflow.data.webEnabled);
+    setEmailEnabled(workflow.data.emailEnabled);
+    setInboundLocalPart(workflow.data.inboundLocalPart);
     setAccessMode(workflow.data.accessMode);
     setAccessUserIds(workflow.data.accessUserIds);
     setSteps(workflow.data.steps.map((s) => ({ agentId: s.agentId })));
@@ -77,17 +88,23 @@ export default function WorkflowEditPage() {
     return map;
   }, [agents.data, workflow.data]);
 
+  const patchPayload = () => ({
+    displayName,
+    description: description.trim() ? description.trim() : null,
+    starterPrompts: starterPrompts.map((p) => p.trim()).filter(Boolean),
+    webEnabled,
+    emailEnabled,
+    inboundLocalPart,
+    accessMode,
+    accessUserIds: accessMode === "specific" ? accessUserIds : [],
+    steps: steps.map((s) => ({ agentId: s.agentId })),
+  });
+
   const save = useMutation({
     mutationFn: () =>
       api(`/api/workflows/${slug}`, {
         method: "PATCH",
-        json: {
-          displayName,
-          description: description.trim() ? description.trim() : null,
-          accessMode,
-          accessUserIds: accessMode === "specific" ? accessUserIds : [],
-          steps: steps.map((s) => ({ agentId: s.agentId })),
-        },
+        json: patchPayload(),
       }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["workflows"] });
@@ -105,13 +122,7 @@ export default function WorkflowEditPage() {
       // Persist the current draft first, then freeze a version.
       await api(`/api/workflows/${slug}`, {
         method: "PATCH",
-        json: {
-          displayName,
-          description: description.trim() ? description.trim() : null,
-          accessMode,
-          accessUserIds: accessMode === "specific" ? accessUserIds : [],
-          steps: steps.map((s) => ({ agentId: s.agentId })),
-        },
+        json: patchPayload(),
       });
       return api(`/api/workflows/${slug}/publish`, { method: "POST" });
     },
@@ -160,6 +171,9 @@ export default function WorkflowEditPage() {
   };
 
   const busy = save.isPending || publish.isPending;
+  const emailAddress = `${inboundLocalPart || slug || "slug"}@${
+    workflow.data.mailgunDomain ?? "your email domain"
+  }`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -210,7 +224,92 @@ export default function WorkflowEditPage() {
                 onChange={(e) => setDescription(e.target.value)}
               />
             </Field>
+            <Field>
+              <FieldLabel>Chat starter prompts</FieldLabel>
+              <FieldDescription>
+                Suggestions shown in the workflow chat empty state. Leave all rows empty
+                to use deployment defaults. Up to 8 prompts, 200 characters each.
+              </FieldDescription>
+              <div className="mt-2 flex flex-col gap-2">
+                {starterPrompts.map((prompt, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={prompt}
+                      placeholder="e.g. Run the onboarding pipeline"
+                      maxLength={200}
+                      onChange={(e) => {
+                        const next = [...starterPrompts];
+                        next[index] = e.target.value;
+                        setStarterPrompts(next);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove starter prompt"
+                      disabled={starterPrompts.length <= 1}
+                      onClick={() => {
+                        const next = starterPrompts.filter((_, i) => i !== index);
+                        setStarterPrompts(next.length > 0 ? next : [""]);
+                      }}
+                    >
+                      <TrashIcon className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  disabled={starterPrompts.length >= 8}
+                  onClick={() => setStarterPrompts([...starterPrompts, ""])}
+                >
+                  <PlusIcon data-icon="inline-start" />
+                  Add prompt
+                </Button>
+              </div>
+            </Field>
           </FieldGroup>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Surfaces</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <FieldLabel>Web chat</FieldLabel>
+              <FieldDescription>
+                Exposes <code>/workflows/{slug}/chat</code>
+              </FieldDescription>
+            </div>
+            <Switch checked={webEnabled} onCheckedChange={setWebEnabled} />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <FieldLabel>Email</FieldLabel>
+              <FieldDescription>
+                Inbound mail at <span className="font-mono text-xs">{emailAddress}</span>
+              </FieldDescription>
+            </div>
+            <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} />
+          </div>
+          {emailEnabled ? (
+            <Field>
+              <FieldLabel htmlFor="wf-local-part">Email slug</FieldLabel>
+              <Input
+                id="wf-local-part"
+                className="font-mono"
+                value={inboundLocalPart}
+                onChange={(e) => setInboundLocalPart(e.target.value)}
+              />
+              <FieldDescription>{emailAddress}</FieldDescription>
+            </Field>
+          ) : null}
         </CardContent>
       </Card>
 

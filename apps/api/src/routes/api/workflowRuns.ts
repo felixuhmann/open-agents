@@ -25,11 +25,18 @@ async function resolveWorkflowRunForCaller(
   const user = requireUser(c);
   const run = await prisma.workflowRun.findUnique({
     where: { id: workflowRunId },
-    include: { conversation: { select: { userId: true } } },
+    include: {
+      conversation: { select: { userId: true } },
+      emailThread: { select: { userEmail: true } },
+    },
   });
   if (!run) throw new HttpError(404, "run not found");
-  if (run.conversation.userId !== user.id && !canOperateAgents(user)) {
-    throw new HttpError(403, "not your run");
+  if (run.conversation) {
+    if (run.conversation.userId !== user.id && !canOperateAgents(user)) {
+      throw new HttpError(403, "not your run");
+    }
+  } else if (!canOperateAgents(user)) {
+    throw new HttpError(403, "agent operator role required");
   }
   return run;
 }

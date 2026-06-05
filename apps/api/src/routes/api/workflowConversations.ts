@@ -98,7 +98,20 @@ workflowConversationsRoutes.get("/:id", async (c) => {
     where: { id },
     include: {
       workflow: { select: { id: true, slug: true, displayName: true } },
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: {
+        where: { role: { not: "pending_user_upload" } },
+        orderBy: { createdAt: "asc" },
+        include: {
+          attachments: {
+            select: {
+              id: true,
+              filename: true,
+              contentType: true,
+              sizeBytes: true,
+            },
+          },
+        },
+      },
       runs: {
         where: { status: { in: ["pending", "running"] } },
         orderBy: { startedAt: "desc" },
@@ -147,6 +160,12 @@ workflowConversationsRoutes.get("/:id", async (c) => {
         m.agentRunId ??
         (m.workflowRunId ? (agentRunIdByWorkflowRun.get(m.workflowRunId) ?? null) : null),
       createdAt: m.createdAt.toISOString(),
+      attachments: m.attachments.map((a) => ({
+        id: a.id,
+        filename: a.filename,
+        contentType: a.contentType,
+        sizeBytes: a.sizeBytes,
+      })),
     })),
   });
 });
@@ -167,9 +186,28 @@ workflowConversationsRoutes.post("/:id/messages", async (c) => {
 
   const userMessage = await prisma.$transaction(async (tx) => {
     const nextTitle = conv.title === DEFAULT_TITLE ? titleFromPrompt(body.text) : null;
+    const pending = await tx.workflowMessage.findMany({
+      where: { conversationId: conv.id, role: "pending_user_upload" },
+      include: { attachments: { select: { id: true } } },
+    });
+
     const real = await tx.workflowMessage.create({
       data: { conversationId: conv.id, role: "user", content: body.text },
     });
+
+    if (pending.length > 0) {
+      const attachmentIds = pending.flatMap((m) => m.attachments.map((a) => a.id));
+      if (attachmentIds.length > 0) {
+        await tx.workflowAttachment.updateMany({
+          where: { id: { in: attachmentIds } },
+          data: { workflowMessageId: real.id },
+        });
+      }
+      await tx.workflowMessage.deleteMany({
+        where: { id: { in: pending.map((m) => m.id) } },
+      });
+    }
+
     if (nextTitle) {
       await tx.workflowConversation.update({
         where: { id: conv.id },

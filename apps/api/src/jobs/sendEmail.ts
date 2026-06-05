@@ -51,12 +51,45 @@ export function buildFromHeader(args: {
 }
 
 async function handleSendEmail(job: Job<SendEmailJobData>): Promise<void> {
-  const { threadId, runId, body } = job.data;
+  const { agentRunId, body } = job.data;
   const jobStart = Date.now();
-  log.info("send-email: start", {
+
+  if (job.data.workflowThreadId) {
+    await sendWorkflowReply({
+      workflowThreadId: job.data.workflowThreadId,
+      agentRunId,
+      body,
+      jobId: job.id,
+      jobStart,
+    });
+    return;
+  }
+
+  if (!job.data.threadId) {
+    throw new Error("send-email: threadId or workflowThreadId required");
+  }
+
+  await sendAgentReply({
+    threadId: job.data.threadId,
+    agentRunId,
+    body,
     jobId: job.id,
+    jobStart,
+  });
+}
+
+async function sendAgentReply(args: {
+  threadId: string;
+  agentRunId: string;
+  body: string;
+  jobId: string | undefined;
+  jobStart: number;
+}): Promise<void> {
+  const { threadId, agentRunId, body, jobId, jobStart } = args;
+  log.info("send-email: start (agent)", {
+    jobId,
     threadId,
-    runId,
+    agentRunId,
     bodyChars: body.length,
   });
 
@@ -105,25 +138,155 @@ async function handleSendEmail(job: Job<SendEmailJobData>): Promise<void> {
     displayName: thread.agent.displayName,
     fallbackFrom,
   });
-  log.info("send-email: prepared", {
-    threadId,
-    runId,
-    agentSlug: thread.agent.slug,
+
+  await deliverEmailReply({
     from,
     to: thread.userEmail,
     subject,
     inReplyTo: lastInbound.messageId,
-    referencesCount: references.length,
+    references,
+    displayName: thread.agent.displayName,
+    avatarFilename: thread.agent.avatar ?? undefined,
+    threadIdForRender: thread.id,
+    recipientEmail: thread.userEmail,
+    agentRunId,
+    body,
+    persistOutbound: async (outboundMessageId, outboundSubject) => {
+      await prisma.emailMessage.create({
+        data: {
+          threadId: thread.id,
+          messageId: outboundMessageId,
+          inReplyTo: lastInbound.messageId,
+          direction: "outbound",
+          subject: outboundSubject,
+          body,
+        },
+      });
+    },
+    logContext: { threadId, agentRunId, agentSlug: thread.agent.slug },
+    jobStart,
+  });
+}
+
+async function sendWorkflowReply(args: {
+  workflowThreadId: string;
+  agentRunId: string;
+  body: string;
+  jobId: string | undefined;
+  jobStart: number;
+}): Promise<void> {
+  const { workflowThreadId, agentRunId, body, jobId, jobStart } = args;
+  log.info("send-email: start (workflow)", {
+    jobId,
+    workflowThreadId,
+    agentRunId,
+    bodyChars: body.length,
   });
 
+  const thread = await prisma.workflowEmailThread.findUnique({
+    where: { id: workflowThreadId },
+    include: {
+      workflow: true,
+      messages: {
+        where: { direction: "inbound" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+  if (!thread) {
+    log.error("send-email: workflow thread not found", { workflowThreadId });
+    throw new Error(`Workflow thread not found: ${workflowThreadId}`);
+  }
+
+  const lastInbound = thread.messages[0];
+  if (!lastInbound) {
+    log.error("send-email: no inbound message to reply to", { workflowThreadId });
+    throw new Error(
+      `No inbound message to reply to for workflow thread ${workflowThreadId}`,
+    );
+  }
+
+  const allPriorMessageIds = await prisma.workflowEmailMessage.findMany({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "asc" },
+    select: { messageId: true },
+  });
+  const references = allPriorMessageIds.map((m) => m.messageId);
+
+  const subject = replySubject(thread.subject);
+  const fallbackFrom =
+    (await getAppSetting(APP_SETTING_KEYS.INBOUND_FROM)) ??
+    (await getServiceSecret(SERVICE_KEYS.INBOUND_FROM)) ??
+    `${thread.workflow.displayName} <${thread.workflow.inboundLocalPart}@example.com>`;
+
+  const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
+  const fullInbound = mailgunDomain
+    ? `${thread.workflow.inboundLocalPart}@${mailgunDomain}`
+    : thread.inboundAddress;
+
+  const from = buildFromHeader({
+    inboundAddress: fullInbound,
+    displayName: thread.workflow.displayName,
+    fallbackFrom,
+  });
+
+  await deliverEmailReply({
+    from,
+    to: thread.userEmail,
+    subject,
+    inReplyTo: lastInbound.messageId,
+    references,
+    displayName: thread.workflow.displayName,
+    avatarFilename: undefined,
+    threadIdForRender: thread.id,
+    recipientEmail: thread.userEmail,
+    agentRunId,
+    body,
+    persistOutbound: async (outboundMessageId, outboundSubject) => {
+      await prisma.workflowEmailMessage.create({
+        data: {
+          threadId: thread.id,
+          messageId: outboundMessageId,
+          inReplyTo: lastInbound.messageId,
+          direction: "outbound",
+          subject: outboundSubject,
+          body,
+        },
+      });
+    },
+    logContext: {
+      workflowThreadId,
+      agentRunId,
+      workflowSlug: thread.workflow.slug,
+    },
+    jobStart,
+  });
+}
+
+async function deliverEmailReply(args: {
+  from: string;
+  to: string;
+  subject: string;
+  inReplyTo: string;
+  references: string[];
+  displayName: string;
+  avatarFilename?: string;
+  threadIdForRender: string;
+  recipientEmail: string;
+  agentRunId: string;
+  body: string;
+  persistOutbound: (messageId: string, subject: string) => Promise<void>;
+  logContext: Record<string, unknown>;
+  jobStart: number;
+}): Promise<void> {
   const attachments = await prisma.agentAttachment.findMany({
-    where: { runId },
+    where: { runId: args.agentRunId },
     orderBy: { createdAt: "asc" },
   });
   if (attachments.length > 0) {
-    log.info("send-email: attaching agent outputs", {
-      threadId,
-      runId,
+    log.info("send-email: attaching outputs", {
+      ...args.logContext,
       count: attachments.length,
       totalBytes: attachments.reduce((acc, a) => acc + a.sizeBytes, 0),
       names: attachments.map((a) => a.filename),
@@ -132,20 +295,20 @@ async function handleSendEmail(job: Job<SendEmailJobData>): Promise<void> {
 
   try {
     const html = await renderAgentResponseHtml({
-      agentDisplayName: thread.agent.displayName,
-      avatarFilename: thread.agent.avatar ?? undefined,
-      markdown: body,
-      threadId: thread.id,
-      recipientEmail: thread.userEmail,
+      agentDisplayName: args.displayName,
+      avatarFilename: args.avatarFilename,
+      markdown: args.body,
+      threadId: args.threadIdForRender,
+      recipientEmail: args.recipientEmail,
     });
 
     const sent = await sendEmail({
-      from,
-      to: thread.userEmail,
-      subject,
+      from: args.from,
+      to: args.to,
+      subject: args.subject,
       html,
-      inReplyTo: lastInbound.messageId,
-      references,
+      inReplyTo: args.inReplyTo,
+      references: args.references,
       attachments: attachments.map((a) => ({
         filename: a.filename,
         contentType: a.contentType,
@@ -157,31 +320,20 @@ async function handleSendEmail(job: Job<SendEmailJobData>): Promise<void> {
       ? sent.id.replace(/^<|>$/g, "")
       : await makeOutboundMessageId();
 
-    await prisma.emailMessage.create({
-      data: {
-        threadId: thread.id,
-        messageId: outboundMessageId,
-        inReplyTo: lastInbound.messageId,
-        direction: "outbound",
-        subject,
-        body,
-      },
-    });
+    await args.persistOutbound(outboundMessageId, args.subject);
 
     log.info("send-email: done", {
-      threadId,
-      runId,
-      to: thread.userEmail,
+      ...args.logContext,
+      to: args.to,
       mailgunId: sent.id,
       outboundMessageId,
-      durationMs: Date.now() - jobStart,
+      durationMs: Date.now() - args.jobStart,
     });
   } catch (err) {
     log.error("send-email: failed", {
-      threadId,
-      runId,
-      to: thread.userEmail,
-      durationMs: Date.now() - jobStart,
+      ...args.logContext,
+      to: args.to,
+      durationMs: Date.now() - args.jobStart,
       err: err instanceof Error ? (err.stack ?? err.message) : String(err),
     });
     throw err;

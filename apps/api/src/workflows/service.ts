@@ -3,6 +3,7 @@ import type { StarterPrompts } from "@open-agents/types";
 import { HttpError } from "../auth/middleware.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+import { isInboundLocalPartTaken } from "../services/inboundLocalPart.js";
 import { buildWorkflowConfigSnapshot } from "./snapshot.js";
 
 /**
@@ -28,6 +29,19 @@ const HYDRATED_INCLUDE = {
 } as const satisfies Prisma.WorkflowInclude;
 
 const cache = new Map<string, HydratedWorkflow>();
+
+/** Lookup by inbound local part (catch-all Mailgun route resolver). */
+export async function getWorkflowByInboundLocalPart(
+  localPart: string,
+): Promise<HydratedWorkflow | null> {
+  const workflow = await prisma.workflow.findUnique({
+    where: { inboundLocalPart: localPart },
+    include: HYDRATED_INCLUDE,
+  });
+  if (!workflow) return null;
+  cache.set(workflow.slug, workflow);
+  return workflow;
+}
 
 export async function getWorkflowBySlug(slug: string): Promise<HydratedWorkflow | null> {
   const cached = cache.get(slug);
@@ -73,11 +87,19 @@ export type CreateWorkflowArgs = {
 export async function createWorkflow(
   args: CreateWorkflowArgs,
 ): Promise<HydratedWorkflow> {
+  const inboundLocalPart = args.slug;
+  if (await isInboundLocalPartTaken(inboundLocalPart)) {
+    throw new HttpError(
+      409,
+      `Inbound address "${inboundLocalPart}" is already in use by an agent or workflow.`,
+    );
+  }
   const created = await prisma.workflow.create({
     data: {
       slug: args.slug,
       displayName: args.displayName,
       description: args.description ?? null,
+      inboundLocalPart,
       createdById: args.createdById ?? null,
     },
     include: HYDRATED_INCLUDE,
@@ -97,7 +119,9 @@ export type UpdateWorkflowArgs = {
   displayName?: string;
   description?: string | null;
   starterPrompts?: StarterPrompts;
+  emailEnabled?: boolean;
   webEnabled?: boolean;
+  inboundLocalPart?: string;
   accessMode?: "everyone" | "specific";
   /** Replace-semantics: ordered agent ids the pipeline runs. */
   steps?: { agentId: string }[];
@@ -116,8 +140,24 @@ export async function updateWorkflow(
   if (args.description !== undefined) scalarUpdate.description = args.description;
   if (args.starterPrompts !== undefined)
     scalarUpdate.starterPrompts = args.starterPrompts;
+  if (args.emailEnabled !== undefined) scalarUpdate.emailEnabled = args.emailEnabled;
   if (args.webEnabled !== undefined) scalarUpdate.webEnabled = args.webEnabled;
   if (args.accessMode !== undefined) scalarUpdate.accessMode = args.accessMode;
+  if (args.inboundLocalPart !== undefined) {
+    const normalized = args.inboundLocalPart.trim().toLowerCase();
+    if (!normalized) throw new HttpError(400, "inboundLocalPart cannot be empty");
+    if (
+      await isInboundLocalPartTaken(normalized, {
+        workflowId: id,
+      })
+    ) {
+      throw new HttpError(
+        409,
+        `Inbound address "${normalized}" is already in use by an agent or workflow.`,
+      );
+    }
+    scalarUpdate.inboundLocalPart = normalized;
+  }
 
   // Drop unknown agent ids (an agent may have been deleted in another tab)
   // rather than aborting the whole patch with an FK violation.

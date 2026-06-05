@@ -5,23 +5,40 @@ import { log } from "../log.js";
 import { touchSandboxActivity } from "./sandboxes.js";
 import type { ResolvedSession } from "./sessions.js";
 
+export type WorkflowSessionScope = { conversationId: string } | { emailThreadId: string };
+
 /**
  * Resolve the Daytona session for one workflow step. Sessions are keyed per
- * (workflow conversation, agent) so each agent keeps its own sandbox + memory
- * across turns, independent of sibling agents in the pipeline.
+ * (workflow conversation or email thread, agent) so each agent keeps its own
+ * sandbox + memory across turns.
  */
 export async function resolveWorkflowStepSession(
   agent: { id: string; slug: string },
-  conversationId: string,
+  scope: WorkflowSessionScope,
   agentVersionId: string,
   resources: SessionResource[],
   observabilityRunId: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
 
-  const existing = await prisma.workflowAgentSession.findUnique({
-    where: { conversationId_agentId: { conversationId, agentId: agent.id } },
-  });
+  const existing =
+    "conversationId" in scope
+      ? await prisma.workflowAgentSession.findUnique({
+          where: {
+            conversationId_agentId: {
+              conversationId: scope.conversationId,
+              agentId: agent.id,
+            },
+          },
+        })
+      : await prisma.workflowAgentSession.findUnique({
+          where: {
+            emailThreadId_agentId: {
+              emailThreadId: scope.emailThreadId,
+              agentId: agent.id,
+            },
+          },
+        });
 
   if (existing) {
     if (resources.length > 0) {
@@ -42,10 +59,16 @@ export async function resolveWorkflowStepSession(
     observability: { runId: observabilityRunId },
   });
   await prisma.workflowAgentSession.create({
-    data: { conversationId, agentId: agent.id, sessionId: session.id },
+    data: {
+      ...("conversationId" in scope
+        ? { conversationId: scope.conversationId }
+        : { emailThreadId: scope.emailThreadId }),
+      agentId: agent.id,
+      sessionId: session.id,
+    },
   });
   log.info("workflow-sessions: created", {
-    conversationId,
+    ...scope,
     agentId: agent.id,
     sessionId: session.id,
   });

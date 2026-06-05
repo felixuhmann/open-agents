@@ -23,6 +23,8 @@ export const WorkflowDto = z.object({
   displayName: z.string(),
   description: z.string().nullable(),
   starterPrompts: StarterPromptsSchema,
+  emailEnabled: z.boolean(),
+  inboundLocalPart: z.string(),
   webEnabled: z.boolean(),
   accessMode: AgentAccessMode,
   currentVersionNumber: z.number().int().positive().nullable().optional(),
@@ -32,6 +34,7 @@ export const WorkflowDto = z.object({
   accessUserIds: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
+  mailgunDomain: z.string().nullable().optional(),
 });
 export type WorkflowDto = z.infer<typeof WorkflowDto>;
 
@@ -40,6 +43,7 @@ export const WorkflowSummaryDto = WorkflowDto.pick({
   slug: true,
   displayName: true,
   description: true,
+  emailEnabled: true,
   webEnabled: true,
   accessMode: true,
 }).extend({
@@ -63,6 +67,13 @@ export const UpdateWorkflowInput = z.object({
   displayName: z.string().min(1).max(120).optional(),
   description: z.string().max(1000).nullable().optional(),
   starterPrompts: StarterPromptsSchema.optional(),
+  emailEnabled: z.boolean().optional(),
+  inboundLocalPart: z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]?$/, "lowercase letters, digits, and dashes only")
+    .optional(),
   webEnabled: z.boolean().optional(),
   accessMode: AgentAccessMode.optional(),
   /** Replace-semantics: the ordered list of agent ids the pipeline runs. */

@@ -189,6 +189,13 @@ export function useWorkflowConversations(workflowSlug?: string) {
   });
 }
 
+export type WorkflowChatAttachmentSummary = {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
 export type WorkflowChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -197,6 +204,7 @@ export type WorkflowChatMessage = {
   /** Final pipeline step's AgentRun — used for attachment downloads. */
   agentRunId: string | null;
   createdAt: string;
+  attachments?: WorkflowChatAttachmentSummary[];
 };
 
 export type WorkflowConversationDetail = {

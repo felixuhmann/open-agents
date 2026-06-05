@@ -17,6 +17,7 @@ export default defineConfig({
       "/mcp": "http://localhost:3000",
       "/runs": "http://localhost:3000",
       "/conversations": "http://localhost:3000",
+      "/workflow-conversations": "http://localhost:3000",
       "/static": "http://localhost:3000",
       "/health": "http://localhost:3000",
       "/mailgun": "http://localhost:3000",

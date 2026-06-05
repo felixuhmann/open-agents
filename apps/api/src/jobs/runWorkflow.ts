@@ -6,12 +6,23 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
 import { appendWorkflowEvent } from "../runs/workflowEvents.js";
+import {
+  loadWorkflowUserUploadResources,
+  uploadPendingWorkflowAttachments,
+  uploadPendingWorkflowEmailAttachments,
+  uploadedToSessionResources,
+} from "../services/workflowAttachments.js";
 import { buildRunUserMessage } from "../services/runUserMessage.js";
 import { streamRunWithEvents } from "../services/runStream.js";
 import { resolveWorkflowStepSession } from "../services/workflowSessions.js";
 import { loadWorkflowSnapshotForRun } from "../workflows/snapshot.js";
 import { getBoss } from "./queue.js";
-import { JOB_RUN_WORKFLOW, type RunWorkflowJobData } from "./types.js";
+import {
+  JOB_RUN_WORKFLOW,
+  JOB_SEND_EMAIL,
+  type RunWorkflowJobData,
+  type SendEmailJobData,
+} from "./types.js";
 
 class WorkflowStepError extends Error {
   constructor(
@@ -50,7 +61,7 @@ async function handleRunWorkflow(job: Job<RunWorkflowJobData>): Promise<void> {
   });
 
   try {
-    await runPipeline(workflowRunId);
+    await runPipeline(workflowRunId, job.data);
     log.info("run-workflow: done", { workflowRunId, durationMs: Date.now() - start });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -85,8 +96,14 @@ async function handleRunWorkflow(job: Job<RunWorkflowJobData>): Promise<void> {
   }
 }
 
-async function runPipeline(workflowRunId: string): Promise<void> {
-  const run = await prisma.workflowRun.findUnique({ where: { id: workflowRunId } });
+async function runPipeline(
+  workflowRunId: string,
+  jobData: RunWorkflowJobData,
+): Promise<void> {
+  const run = await prisma.workflowRun.findUnique({
+    where: { id: workflowRunId },
+    include: { emailThread: true },
+  });
   if (!run) throw new Error(`WorkflowRun not found: ${workflowRunId}`);
 
   const snapshot: WorkflowConfigSnapshot = await loadWorkflowSnapshotForRun(
@@ -94,11 +111,34 @@ async function runPipeline(workflowRunId: string): Promise<void> {
     run.workflowVersionId,
   );
 
-  const lastUserMessage = await prisma.workflowMessage.findFirst({
-    where: { conversationId: run.conversationId, role: "user" },
-    orderBy: { createdAt: "desc" },
-  });
-  const userInput = lastUserMessage?.content ?? "";
+  let userInput: string;
+  let stepZeroUserResources: SessionResource[] = [];
+
+  if (run.emailThreadId && jobData.workflowEmailMessageId) {
+    const incoming = await prisma.workflowEmailMessage.findUnique({
+      where: { id: jobData.workflowEmailMessageId },
+    });
+    if (!incoming) {
+      throw new Error(
+        `Workflow email message not found: ${jobData.workflowEmailMessageId}`,
+      );
+    }
+    userInput = incoming.body;
+    const uploaded = await uploadPendingWorkflowEmailAttachments(incoming.id);
+    stepZeroUserResources = uploadedToSessionResources(uploaded);
+  } else if (run.conversationId) {
+    const lastUserMessage = await prisma.workflowMessage.findFirst({
+      where: { conversationId: run.conversationId, role: "user" },
+      orderBy: { createdAt: "desc" },
+    });
+    userInput = lastUserMessage?.content ?? "";
+    if (lastUserMessage) {
+      await uploadPendingWorkflowAttachments(lastUserMessage.id);
+      stepZeroUserResources = await loadWorkflowUserUploadResources(run.conversationId);
+    }
+  } else {
+    throw new Error(`WorkflowRun ${workflowRunId} has no conversation or email thread`);
+  }
 
   await appendWorkflowEvent({
     workflowRunId,
@@ -163,14 +203,26 @@ async function runPipeline(workflowRunId: string): Promise<void> {
     });
 
     try {
-      // Route the prior step's produced files into this step's sandbox.
       const resources = priorRunId
         ? await collectStepInputFiles(priorRunId)
-        : ([] satisfies SessionResource[]);
+        : step.position === 0
+          ? stepZeroUserResources
+          : ([] satisfies SessionResource[]);
+
+      const sessionScope = run.conversationId
+        ? { conversationId: run.conversationId }
+        : run.emailThreadId
+          ? { emailThreadId: run.emailThreadId }
+          : null;
+      if (!sessionScope) {
+        throw new Error(
+          `WorkflowRun ${workflowRunId} has no conversation or email thread`,
+        );
+      }
 
       const resolved = await resolveWorkflowStepSession(
         { id: baseAgent.id, slug: baseAgent.slug },
-        run.conversationId,
+        sessionScope,
         step.agentVersionId,
         resources,
         agentRun.id,
@@ -194,7 +246,11 @@ async function runPipeline(workflowRunId: string): Promise<void> {
         },
       });
 
-      const userMessage = buildStepUserMessage(currentInput, resources);
+      const fileHint =
+        step.position === 0 && resources.length > 0 && !priorRunId
+          ? "user_upload"
+          : "previous_step";
+      const userMessage = buildStepUserMessage(currentInput, resources, fileHint);
       const output = await streamRunWithEvents(
         agentRun.id,
         resolved.sessionId,
@@ -291,7 +347,7 @@ async function runPipeline(workflowRunId: string): Promise<void> {
     data: { status: "succeeded", completedAt: new Date(), output: lastOutput },
   });
 
-  if (lastOutput.trim().length > 0) {
+  if (run.conversationId && lastOutput.trim().length > 0) {
     await prisma.workflowMessage.create({
       data: {
         conversationId: run.conversationId,
@@ -308,6 +364,19 @@ async function runPipeline(workflowRunId: string): Promise<void> {
     type: "workflow.run.succeeded",
     payload: { type: "workflow.run.succeeded", output: lastOutput, finalRunId },
   });
+
+  if (run.emailThreadId && finalRunId) {
+    const sendJob: SendEmailJobData = {
+      workflowThreadId: run.emailThreadId,
+      agentRunId: finalRunId,
+      body:
+        lastOutput.trim().length > 0
+          ? lastOutput
+          : "(The workflow produced no textual output for this turn.)",
+    };
+    const boss = await getBoss();
+    await boss.send(JOB_SEND_EMAIL, sendJob);
+  }
 }
 
 /** Pull the prior step's produced files and mount them under `inputs/`. */
@@ -326,16 +395,23 @@ async function collectStepInputFiles(priorRunId: string): Promise<SessionResourc
   }));
 }
 
-function buildStepUserMessage(inputText: string, resources: SessionResource[]): string {
+function buildStepUserMessage(
+  inputText: string,
+  resources: SessionResource[],
+  fileHint: "previous_step" | "user_upload",
+): string {
   const text =
-    inputText.trim().length > 0 ? inputText : "(no text from the previous step)";
+    inputText.trim().length > 0
+      ? inputText
+      : fileHint === "user_upload"
+        ? "(no message text)"
+        : "(no text from the previous step)";
   if (resources.length === 0) return buildRunUserMessage(text);
   const fileList = resources.map((r) => `- ${r.mountPath}`).join("\n");
-  const withFiles = [
-    text,
-    "",
-    "Files produced by the previous workflow step are mounted in this sandbox:",
-    fileList,
-  ].join("\n");
+  const label =
+    fileHint === "user_upload"
+      ? "Files attached to this request are mounted in this sandbox:"
+      : "Files produced by the previous workflow step are mounted in this sandbox:";
+  const withFiles = [text, "", label, fileList].join("\n");
   return buildRunUserMessage(withFiles);
 }
