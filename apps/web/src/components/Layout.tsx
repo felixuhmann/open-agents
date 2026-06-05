@@ -147,15 +147,15 @@ export function Layout({ user, children }: Props) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip={productName}>
                 <Link to="/" className="flex items-center gap-2">
-                  <div className="flex size-8 items-center justify-center text-sidebar-foreground">
+                  <div className="flex size-10 shrink-0 items-center justify-center text-sidebar-foreground [&_svg]:!size-full">
                     {sidebarLogo ? (
                       <img
                         src={sidebarLogo}
                         alt=""
-                        className="max-h-full max-w-full object-contain"
+                        className="size-full object-contain"
                       />
                     ) : (
-                      <FallbackLogo className="size-full" />
+                      <FallbackLogo />
                     )}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">

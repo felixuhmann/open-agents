@@ -49,6 +49,7 @@ export function AgentListRow({ agent: a, canManageAgents, onDelete }: AgentListR
                 avatar={a.avatar}
                 displayName={a.displayName}
                 size="sm"
+                className="shrink-0"
               />
               {a.displayName}
             </Link>

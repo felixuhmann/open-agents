@@ -26,8 +26,8 @@ export function AgentAvatar({
   return (
     <Avatar className={className} size={size} {...props}>
       {avatar ? <AvatarImage src={avatarSrc(avatar)} alt={displayName} /> : null}
-      <AvatarFallback className="bg-muted text-foreground">
-        <FallbackLogo className={cn("size-[75%]", logoClassName)} />
+      <AvatarFallback className="overflow-hidden bg-muted text-foreground">
+        <FallbackLogo className={cn("size-[82%]", logoClassName)} />
       </AvatarFallback>
     </Avatar>
   );
