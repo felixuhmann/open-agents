@@ -2,12 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ChartLineIcon,
   CheckCircleIcon,
   EnvelopeIcon,
   KeyIcon,
   UserIcon,
 } from "@phosphor-icons/react";
+import { FallbackLogo } from "@/components/FallbackLogo";
 import { ApiError, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,8 +102,8 @@ export default function SetupPage({ productName }: { productName: string }) {
     <div className="grid min-h-screen place-items-center bg-background p-6">
       <Card className="w-full max-w-2xl">
         <CardHeader>
-          <div className="mb-2 flex size-9 items-center justify-center bg-primary text-primary-foreground">
-            <ChartLineIcon className="size-4" weight="fill" />
+          <div className="mb-2 flex size-9 items-center justify-center text-foreground">
+            <FallbackLogo className="size-6" />
           </div>
           <CardTitle>Welcome to {productName}</CardTitle>
           <CardDescription>

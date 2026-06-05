@@ -1,12 +1,10 @@
 import { ArrowUpRightIcon } from "@phosphor-icons/react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { avatarSrc } from "@/lib/queries";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { DEFAULT_STARTER_PROMPTS } from "./defaultStarterPrompts.js";
 
 type Props = {
   agentDisplayName: string;
   agentAvatar: string | null;
-  agentInitials: string;
   /** Agent-configured prompts; falls back to {@link DEFAULT_STARTER_PROMPTS} when empty. */
   starterPrompts?: string[];
   onPick: (text: string) => void;
@@ -15,7 +13,6 @@ type Props = {
 export function ChatEmptyState({
   agentDisplayName,
   agentAvatar,
-  agentInitials,
   starterPrompts,
   onPick,
 }: Props) {
@@ -26,14 +23,12 @@ export function ChatEmptyState({
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-4 py-10 text-center">
-      <Avatar className="size-14 border border-border">
-        {agentAvatar ? (
-          <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
-        ) : null}
-        <AvatarFallback className="bg-primary text-base text-primary-foreground">
-          {agentInitials}
-        </AvatarFallback>
-      </Avatar>
+      <AgentAvatar
+        avatar={agentAvatar}
+        displayName={agentDisplayName}
+        className="size-14 border border-border"
+        logoClassName="size-[58%]"
+      />
       <div className="space-y-1.5">
         <h2 className="font-heading text-lg font-semibold">{agentDisplayName}</h2>
         <p className="max-w-md text-sm text-muted-foreground">

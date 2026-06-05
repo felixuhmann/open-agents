@@ -24,7 +24,13 @@ practice).
 ## Files expected here
 
 - `fallback.png` — default agent avatar shown in the email header when
-  an `Agent` row doesn't declare its own `avatar`. Square PNG.
+  an `Agent` row doesn't declare its own `avatar`. Square PNG with a
+  transparent background and dark ink (`#111827`) so it reads on the
+  white email card. Source artwork lives in
+  `apps/web/src/assets/open-agents-logo.svg`; regenerate the PNG from
+  `fallback.svg` when the mark changes.
+- `fallback.svg` — build source for `fallback.png` (not embedded in
+  emails — many clients ignore SVG).
 
 Per-agent profile pictures and the footer logo are uploaded through the
 SPA and stored under `apps/api/data/uploads/`; nothing per-customer

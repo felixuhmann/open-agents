@@ -9,7 +9,6 @@ import {
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import {
-  avatarSrc,
   canOperateAgents,
   type ChatAttachmentSummary,
   type ChatMessage as ChatMessageData,
@@ -17,7 +16,7 @@ import {
   useConversation,
   useCurrentUser,
 } from "@/lib/queries";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/Markdown";
@@ -406,7 +405,6 @@ export default function AgentChatPage() {
 
   const sending =
     createConversation.isPending || sendMessage.isPending || Boolean(activeRunId);
-  const initials = agent.data.displayName.slice(0, 2).toUpperCase();
   const showOptimistic = optimistic !== null;
   const empty = messages.length === 0 && !streamingText && !showOptimistic && !sending;
   const waitingFirstToken =
@@ -415,17 +413,12 @@ export default function AgentChatPage() {
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-3">
       <header className="flex items-center gap-3 border-b pb-3">
-        <Avatar className="size-9 border border-border">
-          {agent.data.avatar ? (
-            <AvatarImage
-              src={avatarSrc(agent.data.avatar)}
-              alt={agent.data.displayName}
-            />
-          ) : null}
-          <AvatarFallback className="bg-primary text-primary-foreground">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <AgentAvatar
+          avatar={agent.data.avatar}
+          displayName={agent.data.displayName}
+          className="size-9 border border-border"
+          logoClassName="size-[58%]"
+        />
         <div className="min-w-0 flex-1">
           <h1 className="font-heading text-base font-semibold leading-tight">
             {agent.data.displayName}
@@ -464,7 +457,6 @@ export default function AgentChatPage() {
               <ChatEmptyState
                 agentDisplayName={agent.data.displayName}
                 agentAvatar={agent.data.avatar}
-                agentInitials={initials}
                 starterPrompts={agent.data.starterPrompts}
                 onPick={(text) => setDraft(text)}
               />
@@ -499,17 +491,12 @@ export default function AgentChatPage() {
 
                 {streamingText || toolCalls.length > 0 || waitingFirstToken ? (
                   <div className="group/msg flex w-full items-start gap-3">
-                    <Avatar className="mt-0.5 size-7 shrink-0 border border-border">
-                      {agent.data.avatar ? (
-                        <AvatarImage
-                          src={avatarSrc(agent.data.avatar)}
-                          alt={agent.data.displayName}
-                        />
-                      ) : null}
-                      <AvatarFallback className="bg-muted text-foreground">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
+                    <AgentAvatar
+                      avatar={agent.data.avatar}
+                      displayName={agent.data.displayName}
+                      className="mt-0.5 size-7 shrink-0 border border-border"
+                      logoClassName="size-[62%]"
+                    />
                     <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
                       <span className="text-xs font-medium text-muted-foreground">
                         {agent.data.displayName}

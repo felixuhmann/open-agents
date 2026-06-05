@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ChartLineIcon, SignInIcon } from "@phosphor-icons/react";
+import { SignInIcon } from "@phosphor-icons/react";
+import { FallbackLogo } from "@/components/FallbackLogo";
 import { authClient } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,8 +50,8 @@ export default function LoginPage({ productName }: { productName: string }) {
     <div className="grid min-h-screen place-items-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <div className="mb-2 flex size-9 items-center justify-center bg-primary text-primary-foreground">
-            <ChartLineIcon className="size-4" weight="fill" />
+          <div className="mb-2 flex size-9 items-center justify-center text-foreground">
+            <FallbackLogo className="size-6" />
           </div>
           <CardTitle>Sign in to {productName}</CardTitle>
           <CardDescription>

@@ -11,8 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import type { AgentSummaryDto } from "@open-agents/types";
 import { AgentPreviewPanel } from "@/components/AgentPreviewPanel";
-import { avatarSrc } from "@/lib/queries";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,14 +45,12 @@ export function AgentListRow({ agent: a, canManageAgents, onDelete }: AgentListR
               to={`/agents/${a.slug}`}
               className="flex items-center gap-2 underline-offset-4 hover:underline"
             >
-              <Avatar size="sm">
-                {a.avatar ? (
-                  <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
-                ) : null}
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {a.displayName.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              <AgentAvatar
+                avatar={a.avatar}
+                displayName={a.displayName}
+                size="sm"
+                logoClassName="size-[62%]"
+              />
               {a.displayName}
             </Link>
           </TableCell>
