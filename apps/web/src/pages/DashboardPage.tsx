@@ -2,12 +2,18 @@ import { Link } from "react-router-dom";
 import {
   ChatCircleDotsIcon,
   EnvelopeIcon,
+  FlowArrowIcon,
   GlobeIcon,
   PlusIcon,
   RobotIcon,
 } from "@phosphor-icons/react";
 import type { AgentSummaryDto } from "@open-agents/types";
-import { avatarSrc, useAgents, useConversations } from "@/lib/queries";
+import {
+  avatarSrc,
+  useAgents,
+  useConversations,
+  useWorkflowConversations,
+} from "@/lib/queries";
 import { PageHeader, SectionHeading } from "@/components/PageHeader";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -31,9 +37,26 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 
+type RecentConversation =
+  | {
+      kind: "agent";
+      id: string;
+      title: string;
+      updatedAt: string;
+      agent: { slug: string; displayName: string; avatar: string | null };
+    }
+  | {
+      kind: "workflow";
+      id: string;
+      title: string;
+      updatedAt: string;
+      workflow: { slug: string; displayName: string };
+    };
+
 export default function DashboardPage() {
   const agents = useAgents();
   const conversations = useConversations();
+  const workflowConversations = useWorkflowConversations();
   const recentAgents =
     conversations.data && agents.data
       ? conversations.data
@@ -45,13 +68,37 @@ export default function DashboardPage() {
           }, [])
           .slice(0, 6)
       : [];
-  const recentConversations = conversations.data?.slice(0, 5) ?? [];
+  const recentConversations: RecentConversation[] = [
+    ...(conversations.data?.map(
+      (c) =>
+        ({
+          kind: "agent" as const,
+          id: c.id,
+          title: c.title,
+          updatedAt: c.updatedAt,
+          agent: c.agent,
+        }) satisfies RecentConversation,
+    ) ?? []),
+    ...(workflowConversations.data?.map(
+      (c) =>
+        ({
+          kind: "workflow" as const,
+          id: c.id,
+          title: c.title,
+          updatedAt: c.updatedAt,
+          workflow: c.workflow,
+        }) satisfies RecentConversation,
+    ) ?? []),
+  ]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5);
+  const conversationsLoading = conversations.isLoading || workflowConversations.isLoading;
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Dashboard"
-        description="Pick an agent to chat with, or jump back into a recent conversation."
+        description="Pick an agent or workflow to chat with, or jump back into a recent conversation."
         actions={
           <Button asChild>
             <Link to="/agents">
@@ -154,7 +201,7 @@ export default function DashboardPage() {
 
       <section className="flex flex-col gap-3">
         <SectionHeading title="Recent conversations" />
-        {conversations.isLoading ? (
+        {conversationsLoading ? (
           <div className="flex flex-col gap-2">
             {Array.from({ length: 3 }).map((_, idx) => (
               <Skeleton key={idx} className="h-16" />
@@ -163,7 +210,11 @@ export default function DashboardPage() {
         ) : recentConversations.length > 0 ? (
           <Card className="divide-y divide-border">
             {recentConversations.map((c, idx) => (
-              <ConversationRow key={c.id} conversation={c} showSeparator={idx > 0} />
+              <ConversationRow
+                key={`${c.kind}-${c.id}`}
+                conversation={c}
+                showSeparator={idx > 0}
+              />
             ))}
           </Card>
         ) : (
@@ -174,7 +225,7 @@ export default function DashboardPage() {
               </EmptyMedia>
               <EmptyTitle>No conversations yet</EmptyTitle>
               <EmptyDescription>
-                Start a chat with an agent and it will appear here.
+                Start a chat with an agent or workflow and it will appear here.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -188,38 +239,47 @@ function ConversationRow({
   conversation,
   showSeparator,
 }: {
-  conversation: {
-    id: string;
-    title: string;
-    agent: { slug: string; displayName: string; avatar: string | null };
-    updatedAt: string;
-  };
+  conversation: RecentConversation;
   showSeparator: boolean;
 }) {
+  const href =
+    conversation.kind === "agent"
+      ? `/agents/${conversation.agent.slug}/chat/${conversation.id}`
+      : `/workflows/${conversation.workflow.slug}/chat/${conversation.id}`;
+  const label =
+    conversation.kind === "agent"
+      ? conversation.agent.displayName
+      : conversation.workflow.displayName;
+
   return (
     <>
       {showSeparator ? <Separator /> : null}
       <Link
-        to={`/agents/${conversation.agent.slug}/chat/${conversation.id}`}
+        to={href}
         className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-accent/30"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar size="sm">
-            {conversation.agent.avatar ? (
-              <AvatarImage
-                src={avatarSrc(conversation.agent.avatar)}
-                alt={conversation.agent.displayName}
-              />
-            ) : null}
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              {conversation.agent.displayName.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          {conversation.kind === "agent" ? (
+            <Avatar size="sm">
+              {conversation.agent.avatar ? (
+                <AvatarImage
+                  src={avatarSrc(conversation.agent.avatar)}
+                  alt={conversation.agent.displayName}
+                />
+              ) : null}
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {conversation.agent.displayName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          ) : (
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <FlowArrowIcon className="size-4" />
+            </span>
+          )}
           <div className="flex min-w-0 flex-col">
             <p className="truncate text-sm font-medium">{conversation.title}</p>
             <p className="text-xs text-muted-foreground">
-              {conversation.agent.displayName} ·{" "}
-              {new Date(conversation.updatedAt).toLocaleString()}
+              {label} · {new Date(conversation.updatedAt).toLocaleString()}
             </p>
           </div>
         </div>

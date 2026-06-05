@@ -11,6 +11,7 @@ import {
   DownloadSimpleIcon,
   FileIcon,
   FlowArrowIcon,
+  PencilSimpleIcon,
   SpinnerGapIcon,
   TerminalWindowIcon,
   WarningCircleIcon,
@@ -458,11 +459,19 @@ export default function WorkflowChatPage() {
           </Button>
         ) : null}
         <Button asChild variant="outline" size="sm">
-          <Link to={`/workflows/${workflow.data.slug}/edit`}>
+          <Link to={`/workflows/${workflow.data.slug}/conversations`}>
             <ClockCounterClockwiseIcon data-icon="inline-start" />
-            Edit
+            History
           </Link>
         </Button>
+        {isOperator ? (
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/workflows/${workflow.data.slug}/edit`}>
+              <PencilSimpleIcon data-icon="inline-start" />
+              Edit
+            </Link>
+          </Button>
+        ) : null}
       </header>
 
       {notPublished ? (
