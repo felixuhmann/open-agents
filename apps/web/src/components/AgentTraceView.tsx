@@ -45,10 +45,14 @@ import {
   buildCompactRunEventsExport,
   buildSessionTraceExport,
 } from "@/lib/sessionTraceExport";
+import { filterDebugTraceEvents } from "@/lib/traceEventVisibility";
 import { cn } from "@/lib/utils";
 
 export function AgentTracePanel({ data }: { data: SessionTrace }) {
-  const totalEvents = data.runs.reduce((acc, r) => acc + r.events.length, 0);
+  const totalEvents = data.runs.reduce(
+    (acc, r) => acc + filterDebugTraceEvents(r.events).length,
+    0,
+  );
 
   return (
     <>
@@ -656,7 +660,7 @@ function buildUnifiedTimeline(data: SessionTrace): UnifiedItem[] {
     }
   }
   for (const r of data.runs) {
-    for (const ev of r.events) {
+    for (const ev of filterDebugTraceEvents(r.events)) {
       out.push({
         kind: "event",
         ts: ev.createdAt,
