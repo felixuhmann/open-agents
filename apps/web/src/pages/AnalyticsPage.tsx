@@ -1,15 +1,36 @@
+import type {
+  AnalyticsAgentRow,
+  AnalyticsMetricRow,
+  AnalyticsSurface,
+} from "@open-agents/types";
 import type { ComponentType } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIcon,
   ClockIcon,
   CoinsIcon,
+  DownloadSimpleIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { PageHeader, SectionHeading } from "@/components/PageHeader";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -28,6 +49,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -38,7 +61,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAnalyticsWindow, type AnalyticsMetricRow } from "@/lib/queries";
+import { buildAnalyticsCsv, downloadAnalyticsCsv } from "@/lib/analyticsExport";
+import { useAnalyticsRange, type AnalyticsRange } from "@/lib/queries";
 
 const spendChartConfig = {
   spendUsd: { label: "Spend", color: "var(--chart-2)" },
@@ -58,10 +82,42 @@ const modelChartConfig = {
   totalTokens: { label: "Tokens", color: "var(--chart-4)" },
 } satisfies ChartConfig;
 
+const providerChartConfig = {
+  totalTokens: { label: "Tokens", color: "var(--chart-5)" },
+} satisfies ChartConfig;
+
+const surfaceChartConfig = {
+  chat: { label: "Chat", color: "var(--chart-1)" },
+  email: { label: "Email", color: "var(--chart-2)" },
+  workflow: { label: "Workflow", color: "var(--chart-3)" },
+} satisfies ChartConfig;
+
+const SURFACE_COLORS: Record<AnalyticsSurface, string> = {
+  chat: "var(--color-chat)",
+  email: "var(--color-email)",
+  workflow: "var(--color-workflow)",
+};
+
+type SurfaceFilter = "all" | AnalyticsSurface;
+
 export default function AnalyticsPage() {
-  const [window, setWindow] = useState<"30d" | "12m">("12m");
-  const analytics = useAnalyticsWindow(window);
+  const [range, setRange] = useState<AnalyticsRange>({ preset: "12m" });
+  const [customDraft, setCustomDraft] = useState(defaultCustomRange);
+  const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>("all");
+  const analytics = useAnalyticsRange(range);
   const data = analytics.data;
+  const isDaily = data?.window.granularity === "day";
+
+  const filteredAgents = useMemo(() => {
+    if (!data) return [];
+    return data.agents
+      .map((agent) => ({
+        agent,
+        metrics: resolveAgentMetrics(agent, surfaceFilter),
+      }))
+      .filter(({ metrics }) => surfaceFilter === "all" || metrics.runs > 0)
+      .sort((a, b) => b.metrics.spendUsd - a.metrics.spendUsd);
+  }, [data, surfaceFilter]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -71,24 +127,92 @@ export default function AnalyticsPage() {
         meta={
           data
             ? `${formatDate(data.window.from)} - ${formatDate(data.window.to)}`
-            : window === "30d"
-              ? "Last 30 days"
-              : "Last 12 months"
+            : range.preset === "custom"
+              ? "Custom range"
+              : range.preset === "30d"
+                ? "Last 30 days"
+                : "Last 12 months"
         }
         actions={
-          <Tabs
-            value={window}
-            onValueChange={(value) => {
-              if (value === "30d" || value === "12m") setWindow(value);
-            }}
-          >
-            <TabsList aria-label="Analytics time frame">
-              <TabsTrigger value="30d">30 days</TabsTrigger>
-              <TabsTrigger value="12m">12 months</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-wrap items-end justify-end gap-3">
+            {data ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const filename = `analytics-${data.window.from.slice(0, 10)}-${data.window.to.slice(0, 10)}.csv`;
+                  downloadAnalyticsCsv(
+                    filename,
+                    buildAnalyticsCsv(data, { surfaceFilter }),
+                  );
+                }}
+              >
+                <DownloadSimpleIcon />
+                Export CSV
+              </Button>
+            ) : null}
+            <Tabs
+              value={range.preset}
+              onValueChange={(value) => {
+                if (value === "30d" || value === "12m") {
+                  setRange({ preset: value });
+                  return;
+                }
+                if (value === "custom") {
+                  setRange({ preset: "custom", ...customDraft });
+                }
+              }}
+            >
+              <TabsList aria-label="Analytics time frame">
+                <TabsTrigger value="30d">30 days</TabsTrigger>
+                <TabsTrigger value="12m">12 months</TabsTrigger>
+                <TabsTrigger value="custom">Custom</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         }
       />
+
+      {range.preset === "custom" ? (
+        <Card>
+          <CardContent className="flex flex-wrap items-end gap-4 pt-6">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="analytics-from">From</Label>
+              <Input
+                id="analytics-from"
+                type="date"
+                value={customDraft.from}
+                max={customDraft.to}
+                onChange={(event) => {
+                  const next = { ...customDraft, from: event.target.value };
+                  setCustomDraft(next);
+                  if (next.from && next.to) {
+                    setRange({ preset: "custom", ...next });
+                  }
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="analytics-to">To</Label>
+              <Input
+                id="analytics-to"
+                type="date"
+                value={customDraft.to}
+                min={customDraft.from}
+                max={toIsoDate(new Date())}
+                onChange={(event) => {
+                  const next = { ...customDraft, to: event.target.value };
+                  setCustomDraft(next);
+                  if (next.from && next.to) {
+                    setRange({ preset: "custom", ...next });
+                  }
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {analytics.isLoading ? (
         <AnalyticsSkeleton />
@@ -124,23 +248,23 @@ export default function AnalyticsPage() {
           <section className="grid gap-4 xl:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {window === "30d" ? "Daily spend" : "Monthly spend"}
-                </CardTitle>
+                <CardTitle>{isDaily ? "Daily spend" : "Monthly spend"}</CardTitle>
                 <CardDescription>
-                  Estimated USD by run start {window === "30d" ? "day" : "month"}.
+                  Estimated USD by run start {isDaily ? "day" : "month"}.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <ChartContainer config={spendChartConfig} className="h-[260px] w-full">
-                  <AreaChart accessibilityLayer data={data.monthly}>
+                  <AreaChart accessibilityLayer data={data.periods}>
                     <CartesianGrid vertical={false} />
                     <XAxis
-                      dataKey="month"
+                      dataKey="period"
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
-                      tickFormatter={(value) => formatPeriod(String(value), window)}
+                      tickFormatter={(value) =>
+                        formatPeriod(String(value), data.window.granularity)
+                      }
                     />
                     <YAxis
                       tickLine={false}
@@ -171,20 +295,22 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {window === "30d" ? "Daily token usage" : "Monthly token usage"}
+                  {isDaily ? "Daily token usage" : "Monthly token usage"}
                 </CardTitle>
                 <CardDescription>Input, output, and cache-read tokens.</CardDescription>
               </CardHeader>
               <CardContent>
                 <ChartContainer config={tokenChartConfig} className="h-[260px] w-full">
-                  <BarChart accessibilityLayer data={data.monthly}>
+                  <BarChart accessibilityLayer data={data.periods}>
                     <CartesianGrid vertical={false} />
                     <XAxis
-                      dataKey="month"
+                      dataKey="period"
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
-                      tickFormatter={(value) => formatPeriod(String(value), window)}
+                      tickFormatter={(value) =>
+                        formatPeriod(String(value), data.window.granularity)
+                      }
                     />
                     <YAxis
                       tickLine={false}
@@ -243,12 +369,49 @@ export default function AnalyticsPage() {
             />
           </section>
 
-          <section className="flex flex-col gap-3">
-            <SectionHeading
-              title="Agents"
-              description="Runs, spend, reliability, and latency per agent."
+          <section className="grid gap-4 xl:grid-cols-2">
+            <SurfaceBreakdownChart surfaces={data.surfaces} />
+            <BreakdownChart
+              title="Per-provider usage"
+              description="Token volume by model provider."
+              data={data.providers.slice(0, 8).map((row) => ({
+                name: formatProviderLabel(row.provider),
+                totalTokens: row.totalTokens,
+              }))}
+              config={providerChartConfig}
+              dataKey="totalTokens"
+              valueFormatter={formatTokens}
             />
-            <AnalyticsTable rows={data.agents} />
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <SectionHeading
+                title="Agents"
+                description="Runs, spend, reliability, and latency per agent."
+              />
+              <Tabs
+                value={surfaceFilter}
+                onValueChange={(value) => {
+                  if (
+                    value === "all" ||
+                    value === "chat" ||
+                    value === "email" ||
+                    value === "workflow"
+                  ) {
+                    setSurfaceFilter(value);
+                  }
+                }}
+              >
+                <TabsList aria-label="Filter agents by surface">
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="chat">Chat</TabsTrigger>
+                  <TabsTrigger value="email">Email</TabsTrigger>
+                  <TabsTrigger value="workflow">Workflow</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            <AnalyticsTable rows={filteredAgents} surfaceFilter={surfaceFilter} />
           </section>
         </>
       ) : (
@@ -265,6 +428,79 @@ export default function AnalyticsPage() {
         </Empty>
       )}
     </div>
+  );
+}
+
+function SurfaceBreakdownChart({
+  surfaces,
+}: {
+  surfaces: Array<AnalyticsMetricRow & { surface: AnalyticsSurface }>;
+}) {
+  const data = surfaces
+    .filter((row) => row.runs > 0)
+    .map((row) => ({
+      surface: row.surface,
+      label: formatSurfaceLabel(row.surface),
+      spendUsd: row.spendUsd,
+      runs: row.runs,
+    }));
+
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Surface breakdown</CardTitle>
+          <CardDescription>Spend share across chat, email, and workflow.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Empty className="min-h-[260px] border border-dashed">
+            <EmptyHeader>
+              <EmptyTitle>No surface activity yet</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Surface breakdown</CardTitle>
+        <CardDescription>
+          Estimated spend share across chat, email, and workflow.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={surfaceChartConfig} className="h-[260px] w-full">
+          <PieChart>
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value, name) => {
+                    if (name === "spendUsd") return formatMoney(Number(value));
+                    return String(value);
+                  }}
+                />
+              }
+            />
+            <Pie
+              data={data}
+              dataKey="spendUsd"
+              nameKey="label"
+              innerRadius={56}
+              outerRadius={88}
+              paddingAngle={2}
+            >
+              {data.map((entry) => (
+                <Cell key={entry.surface} fill={SURFACE_COLORS[entry.surface]} />
+              ))}
+            </Pie>
+            <ChartLegend content={<ChartLegendContent nameKey="label" />} />
+          </PieChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -352,8 +588,10 @@ function BreakdownChart({
 
 function AnalyticsTable({
   rows,
+  surfaceFilter,
 }: {
-  rows: Array<AnalyticsMetricRow & { slug: string; displayName: string }>;
+  rows: Array<{ agent: AnalyticsAgentRow; metrics: AnalyticsMetricRow }>;
+  surfaceFilter: SurfaceFilter;
 }) {
   if (rows.length === 0) {
     return (
@@ -364,7 +602,9 @@ function AnalyticsTable({
           </EmptyMedia>
           <EmptyTitle>No agent runs yet</EmptyTitle>
           <EmptyDescription>
-            Usage and reliability details will appear after the first run.
+            {surfaceFilter === "all"
+              ? "Usage and reliability details will appear after the first run."
+              : `No ${formatSurfaceLabel(surfaceFilter).toLowerCase()} runs in this time range.`}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -377,6 +617,7 @@ function AnalyticsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Agent</TableHead>
+            <TableHead>Surfaces</TableHead>
             <TableHead className="text-right">Runs</TableHead>
             <TableHead className="text-right">Tokens</TableHead>
             <TableHead className="text-right">Spend</TableHead>
@@ -385,30 +626,41 @@ function AnalyticsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.slug}>
+          {rows.map(({ agent, metrics }) => (
+            <TableRow key={agent.slug}>
               <TableCell>
                 <div className="flex min-w-0 flex-col">
-                  <span className="truncate font-medium">{row.displayName}</span>
+                  <span className="truncate font-medium">{agent.displayName}</span>
                   <span className="font-mono text-xs text-muted-foreground">
-                    {row.slug}
+                    {agent.slug}
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {row.runs.toLocaleString()}
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {agent.bySurface
+                    .filter((row) => row.runs > 0)
+                    .map((row) => (
+                      <Badge key={row.surface} variant="outline">
+                        {formatSurfaceLabel(row.surface)}
+                      </Badge>
+                    ))}
+                </div>
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatTokens(row.totalTokens)}
+                {metrics.runs.toLocaleString()}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatMoney(row.spendUsd)}
+                {formatTokens(metrics.totalTokens)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatPercent(row.errorRate)}
+                {formatMoney(metrics.spendUsd)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatDuration(row.avgDurationMs)}
+                {formatPercent(metrics.errorRate)}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {formatDuration(metrics.avgDurationMs)}
               </TableCell>
             </TableRow>
           ))}
@@ -435,6 +687,41 @@ function AnalyticsSkeleton() {
   );
 }
 
+function resolveAgentMetrics(
+  agent: AnalyticsAgentRow,
+  surfaceFilter: SurfaceFilter,
+): AnalyticsMetricRow {
+  if (surfaceFilter === "all") {
+    return agent;
+  }
+  const surface = agent.bySurface.find((row) => row.surface === surfaceFilter);
+  return (
+    surface ?? {
+      runs: 0,
+      failedRuns: 0,
+      errorRate: 0,
+      avgDurationMs: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      totalTokens: 0,
+      spendUsd: 0,
+    }
+  );
+}
+
+function defaultCustomRange(): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to);
+  from.setUTCDate(from.getUTCDate() - 29);
+  return { from: toIsoDate(from), to: toIsoDate(to) };
+}
+
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString(undefined, {
     month: "short",
@@ -443,13 +730,22 @@ function formatDate(value: string): string {
   });
 }
 
-function formatPeriod(period: string, window: "30d" | "12m"): string {
+function formatPeriod(period: string, granularity: "day" | "month"): string {
   const [year, rawMonth, rawDay] = period.split("-");
   const date = new Date(Number(year), Number(rawMonth) - 1, Number(rawDay ?? "1"));
   return date.toLocaleDateString(undefined, {
     month: "short",
-    day: window === "30d" ? "numeric" : undefined,
+    day: granularity === "day" ? "numeric" : undefined,
   });
+}
+
+function formatSurfaceLabel(surface: AnalyticsSurface): string {
+  if (surface === "workflow") return "Workflow";
+  return surface.charAt(0).toUpperCase() + surface.slice(1);
+}
+
+function formatProviderLabel(provider: string): string {
+  return provider.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatMoney(value: number): string {

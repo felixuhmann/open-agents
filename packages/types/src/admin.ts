@@ -40,11 +40,6 @@ export const ListSandboxesQuery = z.object({
 });
 export type ListSandboxesQuery = z.infer<typeof ListSandboxesQuery>;
 
-export const AnalyticsQuery = z.object({
-  window: z.enum(["30d", "12m"]).optional().describe("Time window (default: 12m)"),
-});
-export type AnalyticsQuery = z.infer<typeof AnalyticsQuery>;
-
 export const RunEventsQuery = z.object({
   lastEventId: z.coerce
     .number()

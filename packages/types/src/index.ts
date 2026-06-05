@@ -1,4 +1,5 @@
 export * from "./admin.js";
+export * from "./analytics.js";
 export * from "./agentVersion.js";
 export * from "./agents.js";
 export * from "./conversations.js";

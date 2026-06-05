@@ -268,7 +268,7 @@ export const adminControlPlaneTools = [
     auth: "operator",
     method: "GET",
     path: "/api/analytics",
-    queryFields: ["window"],
+    queryFields: ["window", "from", "to"],
     input: AnalyticsQuery,
   }),
   defineControlPlaneTool({
