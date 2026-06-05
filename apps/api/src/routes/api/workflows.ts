@@ -9,6 +9,7 @@ import {
 } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import { parseStarterPrompts } from "../../agents/starterPrompts.js";
+import { getServiceSecret, SERVICE_KEYS } from "../../secrets/service.js";
 import type { AppVariables } from "../../server/types.js";
 import {
   createWorkflow,
@@ -36,13 +37,15 @@ function toSummary(w: HydratedWorkflow) {
   };
 }
 
-function toDto(w: HydratedWorkflow) {
+function toDto(w: HydratedWorkflow, mailgunDomain?: string | null) {
   return {
     id: w.id,
     slug: w.slug,
     displayName: w.displayName,
     description: w.description,
     starterPrompts: parseStarterPrompts(w.starterPrompts),
+    emailEnabled: w.emailEnabled,
+    inboundLocalPart: w.inboundLocalPart,
     webEnabled: w.webEnabled,
     accessMode: w.accessMode,
     currentVersionId: w.currentVersionId,
@@ -61,6 +64,7 @@ function toDto(w: HydratedWorkflow) {
     accessUserIds: w.access.map((a) => a.userId),
     createdAt: w.createdAt.toISOString(),
     updatedAt: w.updatedAt.toISOString(),
+    mailgunDomain: mailgunDomain ?? null,
   };
 }
 
@@ -95,7 +99,8 @@ workflowsRoutes.get("/:slug", async (c) => {
   const workflow = await getWorkflowBySlug(slug);
   if (!workflow) throw new HttpError(404, "workflow not found");
   await requireWorkflowAccess(c, workflow.id);
-  return c.json(toDto(workflow));
+  const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
+  return c.json(toDto(workflow, mailgunDomain));
 });
 
 workflowsRoutes.patch("/:slug", async (c) => {
@@ -108,7 +113,8 @@ workflowsRoutes.patch("/:slug", async (c) => {
     ...body,
     description: body.description ?? undefined,
   });
-  return c.json(toDto(updated));
+  const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
+  return c.json(toDto(updated, mailgunDomain));
 });
 
 workflowsRoutes.post("/:slug/publish", async (c) => {
@@ -117,7 +123,8 @@ workflowsRoutes.post("/:slug/publish", async (c) => {
   const workflow = await getWorkflowBySlug(slug);
   if (!workflow) throw new HttpError(404, "workflow not found");
   const published = await publishWorkflow(workflow.id);
-  return c.json(toDto(published));
+  const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
+  return c.json(toDto(published, mailgunDomain));
 });
 
 workflowsRoutes.delete("/:slug", async (c) => {

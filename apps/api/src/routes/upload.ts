@@ -10,6 +10,7 @@ import type { AppVariables } from "../server/types.js";
  * conversation attachments without going through `/api`.
  */
 export const UPLOAD_PREFIX = "/conversations";
+export const WORKFLOW_UPLOAD_PREFIX = "/workflow-conversations";
 
 export const uploadRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -83,6 +84,67 @@ uploadRoutes.post("/conversations/:conversationId/attachments", async (c) => {
   return c.json({
     chatMessageId: placeholder.id,
     chatAttachmentId: row.id,
+    filename: row.filename,
+    contentType: row.contentType,
+    sizeBytes: row.sizeBytes,
+  });
+});
+
+uploadRoutes.post("/workflow-conversations/:conversationId/attachments", async (c) => {
+  const reqId = c.get("reqId");
+  const user = requireUser(c);
+  const conversationId = c.req.param("conversationId");
+
+  const conv = await prisma.workflowConversation.findUnique({
+    where: { id: conversationId },
+  });
+  if (!conv) return c.text("unknown conversation", 404);
+  if (conv.userId !== user.id && !canOperateAgents(user)) {
+    return c.text("forbidden", 403);
+  }
+
+  let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+  try {
+    form = await c.req.parseBody({ all: false });
+  } catch {
+    return c.text("invalid multipart body", 400);
+  }
+
+  const file = form.file;
+  if (!(file instanceof File)) return c.text("missing 'file' field", 400);
+  if (file.size === 0) return c.text("empty file", 400);
+  if (file.size > MAX_BYTES) return c.text("file too large", 413);
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const placeholder = await prisma.workflowMessage.create({
+    data: {
+      conversationId: conv.id,
+      role: "pending_user_upload",
+      content: file.name || "attachment",
+    },
+  });
+  const row = await prisma.workflowAttachment.create({
+    data: {
+      workflowMessageId: placeholder.id,
+      filename: file.name || "attachment",
+      contentType: file.type || "application/octet-stream",
+      sizeBytes: buf.byteLength,
+      bytes: buf,
+    },
+  });
+
+  log.info("workflow upload: stored", {
+    reqId,
+    conversationId,
+    workflowMessageId: placeholder.id,
+    workflowAttachmentId: row.id,
+    filename: row.filename,
+    sizeBytes: row.sizeBytes,
+  });
+
+  return c.json({
+    workflowMessageId: placeholder.id,
+    workflowAttachmentId: row.id,
     filename: row.filename,
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,

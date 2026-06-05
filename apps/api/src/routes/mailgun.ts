@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { getAgentByInboundLocalPart } from "../agents/service.js";
+import { getWorkflowByInboundLocalPart } from "../workflows/service.js";
+import { ingestInboundWorkflowEmail } from "../services/workflowInbound.js";
 import { log } from "../log.js";
 import { parseAttachments } from "../mailgun/attachments.js";
 import { parseInbound } from "../mailgun/parse.js";
@@ -15,9 +17,9 @@ export const mailgunRoutes = new Hono<{ Variables: AppVariables }>();
 
 /**
  * Catch-all inbound webhook. The deployment configures ONE Mailgun route
- * matching `*@<MAILGUN_DOMAIN>` that forwards here. We resolve which agent
- * the email was for by parsing the recipient address; we drop silently
- * (with a warn log) when no agent matches or the agent has email disabled.
+ * matching `*@<MAILGUN_DOMAIN>` that forwards here. We resolve the target
+ * agent or workflow by parsing the recipient local-part; we drop silently
+ * (with a warn log) when nothing matches or email is disabled.
  */
 mailgunRoutes.post("/inbound", async (c) => {
   const reqId = c.get("reqId");
@@ -78,42 +80,70 @@ mailgunRoutes.post("/inbound", async (c) => {
     return c.text("unknown recipient", 400);
   }
 
+  const attachments = await parseAttachments(form);
+
   const agent = await getAgentByInboundLocalPart(localPart);
-  if (!agent) {
-    log.warn("mailgun inbound: no agent for recipient", {
-      reqId,
-      localPart,
-    });
-    return c.text("ok", 200);
-  }
-  if (!agent.emailEnabled) {
-    log.warn("mailgun inbound: email disabled for agent", {
+  if (agent) {
+    if (!agent.emailEnabled) {
+      log.warn("mailgun inbound: email disabled for agent", {
+        reqId,
+        agentSlug: agent.slug,
+      });
+      return c.text("ok", 200);
+    }
+    log.info("mailgun inbound: parsed (agent)", {
       reqId,
       agentSlug: agent.slug,
+      from: parsed.from,
+      subject: parsed.subject,
+      messageId: parsed.messageId,
+      bodyChars: parsed.body.length,
+      attachmentCount: attachments.length,
+      attachmentBytes: attachments.reduce((sum, a) => sum + a.sizeBytes, 0),
+    });
+    await ingestInboundEmail({
+      reqId,
+      agentId: agent.id,
+      agentSlug: agent.slug,
+      parsed,
+      attachments,
     });
     return c.text("ok", 200);
   }
 
-  const attachments = await parseAttachments(form);
-  log.info("mailgun inbound: parsed", {
-    reqId,
-    agentSlug: agent.slug,
-    from: parsed.from,
-    subject: parsed.subject,
-    messageId: parsed.messageId,
-    bodyChars: parsed.body.length,
-    attachmentCount: attachments.length,
-    attachmentBytes: attachments.reduce((sum, a) => sum + a.sizeBytes, 0),
-  });
+  const workflow = await getWorkflowByInboundLocalPart(localPart);
+  if (workflow) {
+    if (!workflow.emailEnabled) {
+      log.warn("mailgun inbound: email disabled for workflow", {
+        reqId,
+        workflowSlug: workflow.slug,
+      });
+      return c.text("ok", 200);
+    }
+    log.info("mailgun inbound: parsed (workflow)", {
+      reqId,
+      workflowSlug: workflow.slug,
+      from: parsed.from,
+      subject: parsed.subject,
+      messageId: parsed.messageId,
+      bodyChars: parsed.body.length,
+      attachmentCount: attachments.length,
+      attachmentBytes: attachments.reduce((sum, a) => sum + a.sizeBytes, 0),
+    });
+    await ingestInboundWorkflowEmail({
+      reqId,
+      workflowId: workflow.id,
+      workflowSlug: workflow.slug,
+      parsed,
+      attachments,
+    });
+    return c.text("ok", 200);
+  }
 
-  await ingestInboundEmail({
+  log.warn("mailgun inbound: no agent or workflow for recipient", {
     reqId,
-    agentId: agent.id,
-    agentSlug: agent.slug,
-    parsed,
-    attachments,
+    localPart,
   });
-
   return c.text("ok", 200);
 });
 

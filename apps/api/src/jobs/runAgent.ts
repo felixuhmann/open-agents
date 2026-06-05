@@ -151,7 +151,7 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
 
   const sendJob: SendEmailJobData = {
     threadId: thread.id,
-    runId,
+    agentRunId: runId,
     body:
       output.trim().length > 0
         ? output

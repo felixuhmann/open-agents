@@ -674,9 +674,13 @@ model Workflow {
   description String?
   /// Suggested first messages shown in the workflow chat empty state.
   starterPrompts Json @default("[]")
-  webEnabled  Boolean @default(true)
+  emailEnabled     Boolean @default(false)
+  webEnabled       Boolean @default(true)
   /// `everyone` (any deployment user can run it) or `specific` (WorkflowAccess).
   accessMode  String  @default("everyone")
+  /// Local part for inbound mail (`<inboundLocalPart>@<MAILGUN_DOMAIN>`).
+  /// Defaults to the slug; admin can override. Must not collide with an Agent.
+  inboundLocalPart String @unique
 
   /// Latest published (frozen) pipeline snapshot. Runs pin a version.
   currentVersionId String?          @unique
@@ -691,6 +695,7 @@ model Workflow {
   steps         WorkflowStep[]
   access        WorkflowAccess[]
   conversations WorkflowConversation[]
+  emailThreads  WorkflowEmailThread[]
   runs          WorkflowRun[]
   issues        Issue[]
 
@@ -767,7 +772,7 @@ model WorkflowConversation {
 model WorkflowMessage {
   id             String               @id @default(cuid())
   conversationId String
-  /// `user` | `assistant`.
+  /// `user` | `assistant` | `pending_user_upload`.
   role           String
   content        String
   /// FK to the producing WorkflowRun (set on assistant messages).
@@ -776,46 +781,124 @@ model WorkflowMessage {
   agentRunId     String?
   createdAt      DateTime             @default(now())
   conversation   WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments    WorkflowAttachment[]
 
   @@index([conversationId])
 }
 
-/// One Daytona session per (workflow conversation, agent) so each agent keeps
-/// its own memory + sandbox across turns within the conversation.
+/// Files uploaded by the user in workflow web chat. Mounted into the first
+/// pipeline step's sandbox only; later steps receive prior-step outputs.
+model WorkflowAttachment {
+  id                String          @id @default(cuid())
+  workflowMessageId String
+  filename          String
+  contentType       String
+  sizeBytes         Int
+  bytes             Bytes
+  backendFileId     String?
+  mountPath         String?
+  createdAt         DateTime        @default(now())
+  workflowMessage   WorkflowMessage @relation(fields: [workflowMessageId], references: [id], onDelete: Cascade)
+
+  @@index([workflowMessageId])
+}
+
+/// One Daytona session per (workflow conversation or email thread, agent) so
+/// each agent keeps its own memory + sandbox across turns.
 model WorkflowAgentSession {
-  id             String               @id @default(cuid())
-  conversationId String
+  id             String                @id @default(cuid())
+  conversationId String?
+  emailThreadId  String?
   agentId        String
-  sessionId      String               @unique
-  createdAt      DateTime             @default(now())
-  conversation   WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sessionId      String                @unique
+  createdAt      DateTime              @default(now())
+  conversation   WorkflowConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  emailThread    WorkflowEmailThread?  @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
 
   @@unique([conversationId, agentId])
+  @@unique([emailThreadId, agentId])
   @@index([conversationId])
+  @@index([emailThreadId])
+}
+
+/// Inbound email surface for a workflow (mirrors EmailThread for agents).
+model WorkflowEmailThread {
+  id             String                @id @default(cuid())
+  workflowId     String
+  userEmail      String
+  inboundAddress String?
+  subject        String
+  rootMessageId  String                @unique
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  workflow       Workflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  messages       WorkflowEmailMessage[]
+  runs           WorkflowRun[]
+  agentSessions  WorkflowAgentSession[]
+
+  @@index([workflowId])
+  @@index([userEmail])
+}
+
+model WorkflowEmailMessage {
+  id          String                    @id @default(cuid())
+  threadId    String
+  messageId   String                    @unique
+  inReplyTo   String?
+  /// `inbound` | `outbound`.
+  direction   String
+  subject     String
+  body        String
+  createdAt   DateTime                  @default(now())
+  thread      WorkflowEmailThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments WorkflowEmailAttachment[]
+
+  @@index([inReplyTo])
+  @@index([threadId])
+}
+
+model WorkflowEmailAttachment {
+  id                   String               @id @default(cuid())
+  workflowEmailMessageId String
+  filename             String
+  contentType          String
+  sizeBytes            Int
+  bytes                Bytes
+  backendFileId        String?
+  mountPath            String?
+  createdAt            DateTime             @default(now())
+  workflowEmailMessage WorkflowEmailMessage @relation(fields: [workflowEmailMessageId], references: [id], onDelete: Cascade)
+
+  @@index([workflowEmailMessageId])
 }
 
 /// One run of the whole pipeline for a single user turn.
 model WorkflowRun {
-  id                String               @id @default(cuid())
+  id                String                @id @default(cuid())
   workflowId        String
   /// Frozen pipeline this run executed against (`Workflow.currentVersionId` at enqueue).
   workflowVersionId String?
-  conversationId    String
+  /// Set when the run originated from web chat.
+  conversationId    String?
+  /// Set when the run originated from inbound email.
+  emailThreadId     String?
   /// `pending` | `running` | `succeeded` | `failed`.
-  status            String               @default("pending")
+  status            String                @default("pending")
   error             String?
   /// Final (last step) aggregated text delivered to the user.
   output            String?
-  startedAt         DateTime             @default(now())
+  startedAt         DateTime              @default(now())
   completedAt       DateTime?
-  workflow          Workflow             @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  workflowVersion   WorkflowVersion?     @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
-  conversation      WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workflow          Workflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion   WorkflowVersion?      @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
+  conversation      WorkflowConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  emailThread       WorkflowEmailThread?  @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
   events            WorkflowRunEvent[]
   stepRuns          WorkflowStepRun[]
 
   @@index([workflowId])
   @@index([conversationId])
+  @@index([emailThreadId])
   @@index([status])
 }
 

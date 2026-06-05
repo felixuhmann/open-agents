@@ -28,13 +28,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/Markdown";
-import { Composer } from "@/components/chat/Composer";
+import { Composer, type PendingUpload } from "@/components/chat/Composer";
+import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
 import { ToolCallCard } from "@/components/chat/ToolCallCard";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
 import { formatBytes } from "@/components/chat/utils";
+
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 import { cn } from "@/lib/utils";
 
 type StreamEvent = {
@@ -80,9 +83,14 @@ export default function WorkflowChatPage() {
   const me = useCurrentUser();
   const conversation = useWorkflowConversation(conversationId);
   const [draft, setDraft] = useState("");
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [steps, setSteps] = useState<StepState[]>([]);
-  const [optimistic, setOptimistic] = useState<string | null>(null);
+  const [optimistic, setOptimistic] = useState<{
+    text: string;
+    attachments: { filename: string; sizeBytes: number }[];
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const atBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -112,8 +120,77 @@ export default function WorkflowChatPage() {
   useEffect(() => {
     if (!optimistic) return;
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
-    if (lastUser && lastUser.content === optimistic) setOptimistic(null);
+    if (lastUser && lastUser.content === optimistic.text) setOptimistic(null);
   }, [messages, optimistic]);
+
+  const ensureConversationId = async (): Promise<string> => {
+    if (conversationId) return conversationId;
+    if (!slug) throw new Error("missing workflow slug");
+    const conv = await api<{ id: string }>("/api/workflow-conversations", {
+      json: { workflowSlug: slug },
+    });
+    void navigate(`/workflows/${slug}/chat/${conv.id}`, { replace: true });
+    return conv.id;
+  };
+
+  const handleFilePick = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const items = Array.from(files);
+    setUploadingCount((n) => n + items.length);
+    try {
+      const cid = await ensureConversationId();
+      for (const file of items) {
+        if (file.size === 0) {
+          toast.error(`${file.name}: empty file, skipped`);
+          continue;
+        }
+        if (file.size > MAX_UPLOAD_BYTES) {
+          toast.error(`${file.name}: too large (>25 MB)`);
+          continue;
+        }
+        const form = new FormData();
+        form.append("file", file);
+        try {
+          const res = await fetch(`/workflow-conversations/${cid}/attachments`, {
+            method: "POST",
+            credentials: "include",
+            body: form,
+          });
+          if (!res.ok) {
+            const text = await res.text().catch(() => res.statusText);
+            throw new ApiError(res.status, text || res.statusText);
+          }
+          const body = (await res.json()) as {
+            workflowMessageId: string;
+            workflowAttachmentId: string;
+            filename: string;
+            contentType: string;
+            sizeBytes: number;
+          };
+          setPendingUploads((prev) => [
+            ...prev,
+            {
+              chatMessageId: body.workflowMessageId,
+              chatAttachmentId: body.workflowAttachmentId,
+              filename: body.filename,
+              contentType: body.contentType,
+              sizeBytes: body.sizeBytes,
+            },
+          ]);
+        } catch (err) {
+          toast.error(`${file.name}: upload failed`, {
+            description: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    } catch (err) {
+      toast.error("Couldn't stage uploads", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setUploadingCount((n) => Math.max(0, n - items.length));
+    }
+  };
 
   useEffect(() => {
     const active = conversation.data?.activeWorkflowRunId;
@@ -151,6 +228,7 @@ export default function WorkflowChatPage() {
       ),
     onSuccess: async (res) => {
       setActiveRunId(res.workflowRunId);
+      setPendingUploads([]);
       await qc.invalidateQueries({
         queryKey: ["workflow-conversations", conversationId],
       });
@@ -314,9 +392,16 @@ export default function WorkflowChatPage() {
   }, [activeRunId, conversationId, qc]);
 
   const submit = () => {
-    const text = draft.trim();
+    const trimmed = draft.trim();
+    const text = trimmed || (pendingUploads.length > 0 ? "(see attached files)" : "");
     if (!text || !slug) return;
-    setOptimistic(text);
+    setOptimistic({
+      text,
+      attachments: pendingUploads.map((u) => ({
+        filename: u.filename,
+        sizeBytes: u.sizeBytes,
+      })),
+    });
     atBottomRef.current = true;
     if (!conversationId) {
       createConversation.mutate({ firstMessage: text });
@@ -336,7 +421,10 @@ export default function WorkflowChatPage() {
   }
 
   const sending =
-    createConversation.isPending || sendMessage.isPending || Boolean(activeRunId);
+    createConversation.isPending ||
+    sendMessage.isPending ||
+    uploadingCount > 0 ||
+    Boolean(activeRunId);
   const initials = workflow.data.displayName.slice(0, 2).toUpperCase();
   const empty = messages.length === 0 && steps.length === 0 && !optimistic && !sending;
   const notPublished = !workflow.data.currentVersionId;
@@ -400,7 +488,11 @@ export default function WorkflowChatPage() {
               <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-1 py-4">
                 {messages.map((m) =>
                   m.role === "user" ? (
-                    <UserBubble key={m.id} content={m.content} />
+                    <UserBubble
+                      key={m.id}
+                      content={m.content}
+                      attachments={m.attachments}
+                    />
                   ) : (
                     <AssistantBubble
                       key={m.id}
@@ -410,7 +502,17 @@ export default function WorkflowChatPage() {
                   ),
                 )}
 
-                {optimistic ? <UserBubble content={optimistic} /> : null}
+                {optimistic ? (
+                  <UserBubble
+                    content={optimistic.text}
+                    attachments={optimistic.attachments.map((a, i) => ({
+                      id: `opt-${i}`,
+                      filename: a.filename,
+                      contentType: "application/octet-stream",
+                      sizeBytes: a.sizeBytes,
+                    }))}
+                  />
+                ) : null}
 
                 {steps.length > 0 ? (
                   <PipelinePanel steps={steps} running={Boolean(activeRunId)} />
@@ -437,28 +539,61 @@ export default function WorkflowChatPage() {
         </div>
 
         <div className="mx-auto w-full max-w-3xl">
-          <Composer
-            value={draft}
-            onChange={setDraft}
-            onSubmit={submit}
-            onFiles={() => undefined}
-            pendingUploads={[]}
-            onRemoveUpload={() => undefined}
-            uploadingCount={0}
-            sending={sending}
-            placeholder={`Message ${workflow.data.displayName}…`}
-          />
+          <ChatFileDropZone
+            disabled={sending}
+            onFiles={(files) => void handleFilePick(files)}
+          >
+            <Composer
+              value={draft}
+              onChange={setDraft}
+              onSubmit={submit}
+              onFiles={(files) => void handleFilePick(files)}
+              pendingUploads={pendingUploads}
+              onRemoveUpload={(item) =>
+                setPendingUploads((prev) =>
+                  prev.filter((p) => p.chatAttachmentId !== item.chatAttachmentId),
+                )
+              }
+              uploadingCount={uploadingCount}
+              sending={sending}
+              placeholder={`Message ${workflow.data.displayName}…`}
+            />
+          </ChatFileDropZone>
         </div>
       </div>
     </div>
   );
 }
 
-function UserBubble({ content }: { content: string }) {
+function UserBubble({
+  content,
+  attachments,
+}: {
+  content: string;
+  attachments?: {
+    id: string;
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+  }[];
+}) {
   return (
     <div className="flex w-full justify-end">
-      <div className="max-w-[80%] whitespace-pre-wrap bg-primary px-3 py-2 text-sm text-primary-foreground">
-        {content}
+      <div className="max-w-[80%] space-y-2">
+        <div className="whitespace-pre-wrap bg-primary px-3 py-2 text-sm text-primary-foreground">
+          {content}
+        </div>
+        {attachments && attachments.length > 0 ? (
+          <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+            {attachments.map((a) => (
+              <li key={a.id} className="flex items-center gap-1.5 justify-end">
+                <FileIcon className="size-3.5 shrink-0" />
+                <span className="truncate">{a.filename}</span>
+                <span className="shrink-0">({formatBytes(a.sizeBytes)})</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </div>
   );

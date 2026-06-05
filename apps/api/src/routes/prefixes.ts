@@ -4,7 +4,7 @@ import { ISSUE_REPORT_PREFIX } from "./issueReport.js";
 import { MAILGUN_PREFIX } from "./mailgun.js";
 import { SETUP_PREFIX } from "./setup.js";
 import { STATIC_PREFIX } from "./static.js";
-import { UPLOAD_PREFIX } from "./upload.js";
+import { UPLOAD_PREFIX, WORKFLOW_UPLOAD_PREFIX } from "./upload.js";
 
 export const API_PREFIX = "/api";
 
@@ -27,6 +27,7 @@ export const APP_ROUTE_PREFIXES = [
   MAILGUN_PREFIX,
   STATIC_PREFIX,
   UPLOAD_PREFIX,
+  WORKFLOW_UPLOAD_PREFIX,
   SETUP_PREFIX,
   AUTH_PREFIX,
   API_PREFIX,

@@ -28,9 +28,14 @@ export type RunAgentJobData = {
   chatMessageId?: string;
 };
 
+/**
+ * Agent email: `threadId` + `agentRunId`. Workflow email: `workflowThreadId` +
+ * `agentRunId` (final pipeline step run for attachments).
+ */
 export type SendEmailJobData = {
-  threadId: string;
-  runId: string;
+  threadId?: string;
+  workflowThreadId?: string;
+  agentRunId: string;
   body: string;
 };
 
@@ -43,4 +48,6 @@ export type SandboxReconcileJobData = Record<string, never>;
  */
 export type RunWorkflowJobData = {
   workflowRunId: string;
+  /** Set when the run originated from inbound email (step-0 file mounts). */
+  workflowEmailMessageId?: string;
 };
