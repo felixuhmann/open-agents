@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ChatCircleDotsIcon,
+  ClockCounterClockwiseIcon,
   DotsThreeIcon,
   FlowArrowIcon,
   PencilSimpleIcon,
@@ -208,6 +209,12 @@ export default function WorkflowsListPage() {
                           <Link to={`/workflows/${w.slug}/chat`}>
                             <ChatCircleDotsIcon data-icon="inline-start" />
                             Open chat
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to={`/workflows/${w.slug}/conversations`}>
+                            <ClockCounterClockwiseIcon data-icon="inline-start" />
+                            History
                           </Link>
                         </DropdownMenuItem>
                         {canManage ? (
