@@ -27,6 +27,7 @@ import {
   shouldMountLegacyIssueReportRoutes,
 } from "../routes/issueReport.js";
 import { mailgunRoutes } from "../routes/mailgun.js";
+import { mcpRoutes, MCP_PREFIX } from "../routes/mcp.js";
 import {
   APP_ROUTE_PREFIXES,
   AUTH_PREFIX,
@@ -65,8 +66,14 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
     cors({
       origin: [config.WEB_BASE_URL, config.PUBLIC_BASE_URL],
       credentials: true,
-      allowHeaders: ["Content-Type", "Authorization", "Last-Event-ID"],
-      exposeHeaders: ["Last-Event-ID"],
+      allowHeaders: [
+        "Content-Type",
+        "Authorization",
+        "Last-Event-ID",
+        "mcp-session-id",
+        "mcp-protocol-version",
+      ],
+      exposeHeaders: ["Last-Event-ID", "mcp-session-id", "mcp-protocol-version"],
       allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
       maxAge: 600,
     }),
@@ -102,6 +109,9 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
     app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
   }
   app.route("/", uploadRoutes);
+
+  // Control-plane MCP (Streamable HTTP) — before SPA catch-all.
+  app.route(MCP_PREFIX, mcpRoutes);
 
   // SPA catch-all — must be last so every prefixed router above wins. In
   // production this serves the built `apps/web` bundle from `../web/dist`

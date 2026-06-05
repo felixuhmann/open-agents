@@ -278,6 +278,11 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 - **MCP runs on the orchestrator**: Platform tools and third-party
   MCP servers are wired into the Pi loop via
   [`apps/api/src/mcp/piTools.ts`](apps/api/src/mcp/piTools.ts) (host-side).
+- **Control-plane MCP server**: The deployment also **hosts** a Streamable
+  HTTP MCP endpoint at `/mcp` so external clients (Claude Desktop, etc.) can
+  manage agents and settings. It proxies through the same REST handlers via
+  `api_request` — see [`docs/mcp-server.md`](docs/mcp-server.md). Auth uses
+  the better-auth `bearer()` plugin (`Authorization: Bearer <session_token>`).
 - **Run attachments use `attach_run_file`**: The Pi loop exposes
   `attach_run_file`, which pulls
   bytes from the sandbox on the orchestrator and stores `AgentAttachment` rows.

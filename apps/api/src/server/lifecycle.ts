@@ -12,6 +12,7 @@ import { stopRunEventsListener } from "../runs/events.js";
 import { stopWorkflowEventsListener } from "../runs/workflowEvents.js";
 import { seedToolCatalog } from "../services/seedToolCatalog.js";
 import { buildApp } from "./app.js";
+import { setAppInstance } from "./appHolder.js";
 
 /**
  * Process bootstrap. Order matters:
@@ -46,6 +47,7 @@ export async function bootstrap(): Promise<void> {
   await registerSandboxReconcileWorker();
 
   const app = buildApp();
+  setAppInstance(app);
 
   const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
     log.info("listening", { port: info.port });

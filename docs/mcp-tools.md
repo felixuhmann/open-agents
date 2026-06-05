@@ -53,6 +53,12 @@ Append the handler to `PLATFORM_HANDLERS` in `apps/api/src/mcp/platform/index.ts
 
 There is no manual SQL or seed step. Just register the handler and restart.
 
+## Control-plane MCP server
+
+The platform also **hosts** an MCP server at `/mcp` for external clients (Claude Desktop, Cursor, etc.) to manage the deployment — create agents, run chats, configure settings. See [`mcp-server.md`](mcp-server.md).
+
+Unlike platform tools and third-party MCP servers (used during agent runs), the control-plane server proxies into the same Hono REST handlers via `api_request`, so there is no duplicate business logic.
+
 ## Pi / Daytona execution
 
 Implementation lives under `apps/api/src/mcp/`:
