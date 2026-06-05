@@ -114,44 +114,25 @@ export default function McpConnectionPage() {
         </AlertDescription>
       </Alert>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheckIcon weight="duotone" />
-              OAuth connector (recommended)
-            </CardTitle>
-            <CardDescription>
-              Claude Desktop and other OAuth-native MCP clients connect through the
-              standard OAuth discovery flow — no manual token copy required.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {info.isLoading ? (
-              <Skeleton className="h-32 w-full" />
-            ) : info.data ? (
-              <OAuthConnectorPanel info={info.data} />
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Server endpoint</CardTitle>
-            <CardDescription>
-              MCP clients connect to this URL. OAuth connectors discover authorization
-              settings automatically.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {info.isLoading ? (
-              <Skeleton className="h-10 w-full" />
-            ) : info.data ? (
-              <EndpointPanel info={info.data} />
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheckIcon weight="duotone" />
+            OAuth connector (recommended)
+          </CardTitle>
+          <CardDescription>
+            Claude Desktop and other OAuth-native MCP clients connect through the standard
+            OAuth discovery flow — no manual token copy required.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {info.isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : info.data ? (
+            <OAuthConnectorPanel info={info.data} />
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -293,34 +274,10 @@ function OAuthConnectorPanel({ info }: { info: McpConnectionInfo }) {
   return (
     <div className="flex flex-col gap-3 text-sm">
       <CopyableCode value={info.mcpUrl} label="MCP URL" />
-      <CopyableCode
-        value={info.oauthProtectedResourceUrl}
-        label="Protected resource metadata"
-      />
-      <CopyableCode
-        value={info.oauthAuthorizationServerUrl}
-        label="Authorization server metadata"
-      />
       <p className="text-muted-foreground">
         When you add a custom MCP connector in Claude Desktop, paste the MCP URL above.
-        Claude discovers OAuth settings from the protected-resource metadata endpoint and
-        opens a browser sign-in window for this deployment.
-      </p>
-    </div>
-  );
-}
-
-function EndpointPanel({ info }: { info: McpConnectionInfo }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <CopyableCode value={info.mcpUrl} label="MCP URL" />
-      <p className="text-xs text-muted-foreground">
-        In local development, MCP clients should point at the API origin (
-        <span className="font-mono">{info.mcpUrl}</span>
-        ), not the Vite dev server port.
-      </p>
-      <p className="text-xs text-muted-foreground">
-        Authorization server: <span className="font-mono">{info.authServerUrl}</span>
+        Claude discovers OAuth settings automatically and opens a browser sign-in window
+        for this deployment.
       </p>
     </div>
   );
