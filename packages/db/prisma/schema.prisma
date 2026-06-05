@@ -772,6 +772,8 @@ model WorkflowMessage {
   content        String
   /// FK to the producing WorkflowRun (set on assistant messages).
   workflowRunId  String?
+  /// FK to the final step's AgentRun — powers attachment downloads in the UI.
+  agentRunId     String?
   createdAt      DateTime             @default(now())
   conversation   WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

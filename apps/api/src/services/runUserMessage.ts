@@ -6,6 +6,6 @@ export function buildRunUserMessage(userText: string): string {
   return [
     userText,
     "",
-    "To return downloadable files in chat or email, call the attach_run_file tool with the sandbox file path.",
+    "To return downloadable files to the user, call the attach_run_file tool with the sandbox file path. Do not use sandbox: links in your reply — attachments are the download mechanism.",
   ].join("\n");
 }

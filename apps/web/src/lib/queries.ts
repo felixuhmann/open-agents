@@ -194,6 +194,8 @@ export type WorkflowChatMessage = {
   role: "user" | "assistant";
   content: string;
   workflowRunId: string | null;
+  /** Final pipeline step's AgentRun — used for attachment downloads. */
+  agentRunId: string | null;
   createdAt: string;
 };
 
