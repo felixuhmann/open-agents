@@ -57,7 +57,7 @@ There is no manual SQL or seed step. Just register the handler and restart.
 
 The platform also **hosts** an MCP server at `/mcp` for external clients (Claude Desktop, Cursor, etc.) to manage the deployment — create agents, run chats, configure settings. See [`mcp-server.md`](mcp-server.md).
 
-Unlike platform tools and third-party MCP servers (used during agent runs), the control-plane server proxies into the same Hono REST handlers via `api_request`, so there is no duplicate business logic.
+Unlike platform tools and third-party MCP servers (used during agent runs), the control-plane server exposes one typed MCP tool per REST operation (for example `agents_create`) and proxies into the same Hono REST handlers, so there is no duplicate business logic.
 
 ## Pi / Daytona execution
 

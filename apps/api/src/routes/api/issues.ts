@@ -1,5 +1,9 @@
+import {
+  CreateIssueInput,
+  EmailIssueReportInput,
+  UpdateIssueInput,
+} from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
 import {
   HttpError,
   canOperateAgents,
@@ -19,28 +23,6 @@ import {
 import { verifyIssueReportToken } from "../../services/issueReportSigning.js";
 
 export const issuesRoutes = new Hono<{ Variables: AppVariables }>();
-
-const EmailReportBody = z.object({
-  token: z.string().min(1),
-  description: z.string().min(1).max(4000),
-});
-
-const CreateIssueBody = z
-  .object({
-    conversationId: z.string().min(1).optional(),
-    workflowConversationId: z.string().min(1).optional(),
-    description: z.string().min(1).max(4000),
-  })
-  .refine(
-    (body) => Boolean(body.conversationId) !== Boolean(body.workflowConversationId),
-    {
-      message: "provide exactly one conversation id",
-    },
-  );
-
-const PatchIssueBody = z.object({
-  status: z.enum(["open", "resolved"]),
-});
 
 /**
  * Members file issues against their own chat conversations; admins see
@@ -65,7 +47,7 @@ issuesRoutes.get("/email-report", async (c) => {
 });
 
 issuesRoutes.post("/email-report", async (c) => {
-  const body = EmailReportBody.parse(await c.req.json());
+  const body = EmailIssueReportInput.parse(await c.req.json());
   const verified = verifyIssueReportToken(body.token);
   if (!verified) throw new HttpError(400, "invalid or expired report link");
   const created = await createEmailIssue({
@@ -78,7 +60,7 @@ issuesRoutes.post("/email-report", async (c) => {
 
 issuesRoutes.post("/", async (c) => {
   const user = requireUser(c);
-  const body = CreateIssueBody.parse(await c.req.json());
+  const body = CreateIssueInput.parse(await c.req.json());
   if (body.conversationId) {
     const conv = await prisma.chatConversation.findUnique({
       where: { id: body.conversationId },
@@ -134,7 +116,7 @@ issuesRoutes.get("/:id", async (c) => {
 issuesRoutes.patch("/:id", async (c) => {
   const user = requireAgentOperator(c);
   const id = c.req.param("id");
-  const body = PatchIssueBody.parse(await c.req.json());
+  const body = UpdateIssueInput.parse(await c.req.json());
   await setIssueStatus({ id, status: body.status, resolverUserId: user.id });
   const detail = await getIssueDetail(id);
   return c.json(detail);

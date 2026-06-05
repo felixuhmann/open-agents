@@ -1,5 +1,5 @@
+import { ListSandboxesQuery } from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
 import { requireAdmin } from "../../auth/middleware.js";
 import type { AppVariables } from "../../server/types.js";
 import {
@@ -19,17 +19,9 @@ import {
 
 export const sandboxesRoutes = new Hono<{ Variables: AppVariables }>();
 
-const ListQuery = z.object({
-  agentId: z.string().optional(),
-  state: z.string().optional(),
-  surface: z.enum(["chat", "email"]).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  offset: z.coerce.number().int().min(0).optional(),
-});
-
 sandboxesRoutes.get("/", async (c) => {
   requireAdmin(c);
-  const query = ListQuery.parse({
+  const query = ListSandboxesQuery.parse({
     agentId: c.req.query("agentId"),
     state: c.req.query("state"),
     surface: c.req.query("surface"),

@@ -1,0 +1,70 @@
+import { z } from "zod";
+import {
+  CreateIssueInput,
+  EmailIssueReportInput,
+  EmailIssueReportPrefillQuery,
+  ListIssuesQuery,
+  UpdateIssueInput,
+} from "@open-agents/types";
+import { defineControlPlaneTool, idParam } from "../defineTool.js";
+
+export const issueControlPlaneTools = [
+  defineControlPlaneTool({
+    name: "issues_email_report_prefill",
+    title: "Email issue report prefill",
+    description: "Load prefill data for the public email issue report form.",
+    auth: "public",
+    method: "GET",
+    path: "/api/issues/email-report",
+    queryFields: ["token"],
+    input: EmailIssueReportPrefillQuery,
+  }),
+  defineControlPlaneTool({
+    name: "issues_email_report_submit",
+    title: "Submit email issue report",
+    description: "Submit an issue from the email report link (token-authenticated).",
+    auth: "public",
+    method: "POST",
+    path: "/api/issues/email-report",
+    input: EmailIssueReportInput,
+  }),
+  defineControlPlaneTool({
+    name: "issues_create",
+    title: "Create issue",
+    description: "File an issue against a chat or workflow conversation.",
+    auth: "user",
+    method: "POST",
+    path: "/api/issues",
+    input: CreateIssueInput,
+  }),
+  defineControlPlaneTool({
+    name: "issues_list",
+    title: "List issues",
+    description: "List operator issues (optionally filter by status).",
+    auth: "operator",
+    method: "GET",
+    path: "/api/issues",
+    queryFields: ["status"],
+    input: ListIssuesQuery,
+  }),
+  defineControlPlaneTool({
+    name: "issues_get",
+    title: "Get issue",
+    description: "Get issue detail by id.",
+    auth: "operator",
+    method: "GET",
+    path: "/api/issues/:id",
+    pathParams: ["id"],
+    input: z.object(idParam),
+  }),
+  defineControlPlaneTool({
+    name: "issues_update",
+    title: "Update issue",
+    description: "Update issue status (open or resolved).",
+    auth: "operator",
+    method: "PATCH",
+    path: "/api/issues/:id",
+    pathParams: ["id"],
+    input: UpdateIssueInput.extend(idParam),
+  }),
+];

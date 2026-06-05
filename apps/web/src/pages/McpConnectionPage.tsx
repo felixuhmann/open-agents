@@ -259,9 +259,10 @@ export default function McpConnectionPage() {
         <CardHeader>
           <CardTitle>What you can do</CardTitle>
           <CardDescription>
-            The MCP server exposes <code className="text-xs">api_request</code> and{" "}
-            <code className="text-xs">api_catalog</code> tools that proxy into the same
-            REST API as this UI.
+            The MCP server exposes typed tools (for example{" "}
+            <code className="text-xs">agents_create</code>,{" "}
+            <code className="text-xs">conversations_send_message</code>) that call the
+            same REST API as this UI, with JSON Schema for every argument.
           </CardDescription>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
@@ -356,10 +357,10 @@ function ClaudeOAuthInstructions() {
       <div>
         <p className="font-medium">4. Use the connector in chat</p>
         <p className="mt-1 text-muted-foreground">
-          After connecting, ask Claude to call{" "}
-          <code className="text-xs">api_catalog</code> to discover endpoints, then use{" "}
-          <code className="text-xs">api_request</code> — for example,{" "}
-          <code className="text-xs">POST /api/agents</code> to create an agent.
+          After connecting, ask Claude to use typed tools such as{" "}
+          <code className="text-xs">agents_create</code> or{" "}
+          <code className="text-xs">agents_list</code> — each tool includes the request
+          schema in its description.
         </p>
       </div>
     </div>

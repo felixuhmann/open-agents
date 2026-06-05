@@ -4,14 +4,9 @@ The platform exposes a **Streamable HTTP** MCP server at `/mcp` that lets extern
 
 ## Design: zero drift from the REST API
 
-The MCP server does **not** re-implement business logic. Its primary tool, `api_request`, forwards calls into the same Hono app the SPA uses (`app.request(...)`). Auth guards, Zod validation, Prisma writes, and job enqueueing all run through existing route handlers.
+The MCP server does **not** re-implement business logic. Each MCP tool maps to one REST endpoint and forwards the call into the same Hono app the SPA uses (`app.request(...)`). Auth guards, Zod validation, Prisma writes, and job enqueueing all run through existing route handlers.
 
-| Tool          | Purpose                                                      |
-| ------------- | ------------------------------------------------------------ |
-| `api_request` | Call any allowed REST endpoint (method, path, query, body)   |
-| `api_catalog` | Discover available endpoints (maintained in `apiCatalog.ts`) |
-
-When you add a new REST route, add a catalog row in `apps/api/src/mcp/controlPlane/apiCatalog.ts` so MCP clients can discover it. The proxy itself needs no code changes — new `/api/*` routes work immediately.
+Tool `inputSchema` values are derived from the same Zod types as the REST API (`@open-agents/types` and route handlers). Models see per-operation tools (for example `agents_create`, `conversations_send_message`) with full JSON Schema for arguments — not a generic HTTP proxy.
 
 ## Authentication
 
@@ -105,37 +100,41 @@ For local development with the API on port 3000:
 
 ## Example: create an agent via MCP
 
-Use the `api_request` tool (or ask Claude to do it):
+Call the typed tool `agents_create` (the client receives JSON Schema for all fields):
 
 ```json
 {
-  "method": "POST",
-  "path": "/api/agents",
-  "body": {
-    "slug": "research-bot",
-    "displayName": "Research Bot",
-    "systemPrompt": "You are a helpful research assistant.",
-    "modelProvider": "anthropic",
-    "modelId": "claude-sonnet-4-20250514",
-    "webEnabled": true,
-    "emailEnabled": false
-  }
+  "slug": "research-bot",
+  "displayName": "Research Bot",
+  "systemPrompt": "You are a helpful research assistant."
 }
 ```
 
-Then publish:
+Then publish with `agents_publish`:
 
 ```json
 {
-  "method": "POST",
-  "path": "/api/agents/research-bot/publish"
+  "slug": "research-bot"
 }
 ```
+
+To attach tools, skills, or MCP servers, use `agents_update` with `toolBindings`, `skillBindings`, and `mcpServerIds` (see the tool schema in your MCP client).
+
+## Adding a new REST route
+
+When you add a REST handler under `/api/*`:
+
+1. Add or extend Zod input types in `@open-agents/types` when the body/query is shared.
+2. Register a matching tool in `apps/api/src/mcp/controlPlane/tools/` via `defineControlPlaneTool()`.
+3. Append it to the appropriate module export consumed by `tools/index.ts`.
+
+The proxy (`apiProxy.ts`) needs no changes for new `/api/*` paths.
 
 ## Limitations
 
-- **Multipart uploads** (agent avatars, chat attachments, skill bundles) are not supported through `api_request`. Use the web UI or direct HTTP with `multipart/form-data`.
-- **SSE streams** (`/api/runs/:id/events`) return the raw stream; for chat history prefer `GET /api/conversations/:id`.
+- **Multipart uploads** (agent avatars, chat attachments, skill bundles, branding images) have no MCP tools. Use the web UI or direct HTTP with `multipart/form-data`.
+- **SSE streams** (`runs_events`, `workflow_runs_events`) return raw `text/event-stream` bodies. For chat history prefer `conversations_get`.
+- **Binary downloads** (`runs_download_attachment`) return raw bytes, not JSON.
 - **Webhooks** (`/mailgun/inbound`) and the MCP endpoint itself are blocked from the proxy.
 - **Setup wizard** (`POST /api/setup`) is only available before the first admin exists.
 
@@ -146,9 +145,10 @@ Then publish:
 | `apps/api/src/routes/mcp.ts`                  | Hono route, auth gate, Streamable HTTP transport |
 | `apps/api/src/routes/wellKnown.ts`            | Root OAuth discovery for MCP clients             |
 | `apps/api/src/auth/mcpAuth.ts`                | OAuth + bearer session resolution for `/mcp`     |
-| `apps/api/src/mcp/controlPlane/server.ts`     | MCP tool registration                            |
+| `apps/api/src/mcp/controlPlane/server.ts`     | MCP server factory                               |
+| `apps/api/src/mcp/controlPlane/defineTool.ts` | Tool registration + REST proxy helper            |
+| `apps/api/src/mcp/controlPlane/tools/`        | Per-operation tool definitions                   |
 | `apps/api/src/mcp/controlPlane/apiProxy.ts`   | Internal `app.request` proxy                     |
-| `apps/api/src/mcp/controlPlane/apiCatalog.ts` | Endpoint discovery manifest                      |
 | `apps/api/src/auth/index.ts`                  | `bearer()` + `mcp()` plugins                     |
 | `apps/web/src/pages/OAuthConsentPage.tsx`     | OAuth consent UI during connector setup          |
 
