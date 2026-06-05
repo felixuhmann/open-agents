@@ -118,7 +118,6 @@ export default function IssuesListPage() {
                             avatar={targetAvatar}
                             displayName={targetName}
                             className="size-7"
-                            logoClassName="size-[62%]"
                           />
                         ) : (
                           <Avatar className="size-7">

@@ -256,7 +256,6 @@ function ConversationRow({
               avatar={conversation.agent.avatar}
               displayName={conversation.agent.displayName}
               size="sm"
-              logoClassName="size-[62%]"
             />
           ) : (
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">

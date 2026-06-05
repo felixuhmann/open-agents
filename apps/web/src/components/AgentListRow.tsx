@@ -49,7 +49,6 @@ export function AgentListRow({ agent: a, canManageAgents, onDelete }: AgentListR
                 avatar={a.avatar}
                 displayName={a.displayName}
                 size="sm"
-                logoClassName="size-[62%]"
               />
               {a.displayName}
             </Link>

@@ -417,7 +417,6 @@ export default function AgentChatPage() {
           avatar={agent.data.avatar}
           displayName={agent.data.displayName}
           className="size-9 border border-border"
-          logoClassName="size-[58%]"
         />
         <div className="min-w-0 flex-1">
           <h1 className="font-heading text-base font-semibold leading-tight">
@@ -495,7 +494,6 @@ export default function AgentChatPage() {
                       avatar={agent.data.avatar}
                       displayName={agent.data.displayName}
                       className="mt-0.5 size-7 shrink-0 border border-border"
-                      logoClassName="size-[62%]"
                     />
                     <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
                       <span className="text-xs font-medium text-muted-foreground">

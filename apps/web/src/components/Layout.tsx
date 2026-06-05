@@ -155,7 +155,7 @@ export function Layout({ user, children }: Props) {
                         className="max-h-full max-w-full object-contain"
                       />
                     ) : (
-                      <FallbackLogo className="size-5" />
+                      <FallbackLogo className="size-full" />
                     )}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">

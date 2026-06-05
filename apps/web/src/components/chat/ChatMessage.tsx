@@ -67,7 +67,6 @@ export function ChatMessage({
         avatar={agentAvatar}
         displayName={agentDisplayName}
         className="mt-0.5 size-7 shrink-0 border border-border"
-        logoClassName="size-[62%]"
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-hidden">
         <span className="text-xs font-medium text-muted-foreground">

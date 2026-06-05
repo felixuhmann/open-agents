@@ -27,7 +27,6 @@ export function ChatEmptyState({
         avatar={agentAvatar}
         displayName={agentDisplayName}
         className="size-14 border border-border"
-        logoClassName="size-[58%]"
       />
       <div className="space-y-1.5">
         <h2 className="font-heading text-lg font-semibold">{agentDisplayName}</h2>

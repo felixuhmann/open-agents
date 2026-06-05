@@ -106,7 +106,6 @@ function AgentContextCard({
             avatar={agent.avatar}
             displayName={agent.displayName}
             className="size-7"
-            logoClassName="size-[62%]"
           />
           <span>{agent.displayName}</span>
           <span className="text-xs text-muted-foreground font-mono">{agent.slug}</span>
@@ -529,7 +528,6 @@ function MessageBubble({
             avatar={agentAvatar}
             displayName={agentDisplayName}
             className="size-7 shrink-0"
-            logoClassName="size-[62%]"
           />
         )}
         <div
@@ -577,7 +575,6 @@ function MessageBubble({
           avatar={agentAvatar}
           displayName={agentDisplayName}
           className="size-7 shrink-0"
-          logoClassName="size-[62%]"
         />
       )}
       <div
