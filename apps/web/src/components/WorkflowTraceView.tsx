@@ -9,6 +9,7 @@ import {
   TerminalWindowIcon,
 } from "@phosphor-icons/react";
 import type { IssueDetailRunEvent, WorkflowTrace, WorkflowTraceRun } from "@/lib/queries";
+import { filterDebugTraceEvents } from "@/lib/traceEventVisibility";
 import { Markdown } from "@/components/Markdown";
 import {
   Accordion,
@@ -29,12 +30,17 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function WorkflowTracePanel({ data }: { data: WorkflowTrace }) {
-  const pipelineEventCount = data.runs.reduce((acc, run) => acc + run.events.length, 0);
+  const pipelineEventCount = data.runs.reduce(
+    (acc, run) => acc + filterDebugTraceEvents(run.events).length,
+    0,
+  );
   const agentEventCount = data.runs.reduce(
     (acc, run) =>
       acc +
       run.stepRuns.reduce(
-        (stepAcc, step) => stepAcc + (step.agentRun?.events.length ?? 0),
+        (stepAcc, step) =>
+          stepAcc +
+          (step.agentRun ? filterDebugTraceEvents(step.agentRun.events).length : 0),
         0,
       ),
     0,
@@ -150,7 +156,7 @@ function PipelineEvents({ runs }: { runs: WorkflowTraceRun[] }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {runs.flatMap((run) =>
-          run.events.map((event) => (
+          filterDebugTraceEvents(run.events).map((event) => (
             <TraceEventEntry
               key={`${run.id}-${event.seq}`}
               event={event}
@@ -176,38 +182,45 @@ function StepRuns({ runs }: { runs: WorkflowTraceRun[] }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {run.stepRuns.map((step) => (
-              <div key={step.id} className="flex flex-col gap-2 border bg-muted/20 p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">Step {step.position + 1}</Badge>
-                  <span className="font-medium">{step.agentDisplayName}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {step.agentSlug}
-                  </span>
-                  <Badge variant={step.status === "failed" ? "destructive" : "secondary"}>
-                    {step.status}
-                  </Badge>
-                </div>
-                {step.inputText ? (
-                  <CollapsibleText label="Input" value={step.inputText} />
-                ) : null}
-                {step.agentRun?.events.length ? (
-                  <div className="flex flex-col gap-1.5">
-                    {step.agentRun.events.map((event) => (
-                      <TraceEventEntry
-                        key={`${step.runId}-${event.seq}`}
-                        event={event}
-                        context={`agent run ${step.runId ?? ""}`}
-                      />
-                    ))}
+            {run.stepRuns.map((step) => {
+              const agentEvents = step.agentRun
+                ? filterDebugTraceEvents(step.agentRun.events)
+                : [];
+              return (
+                <div key={step.id} className="flex flex-col gap-2 border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">Step {step.position + 1}</Badge>
+                    <span className="font-medium">{step.agentDisplayName}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {step.agentSlug}
+                    </span>
+                    <Badge
+                      variant={step.status === "failed" ? "destructive" : "secondary"}
+                    >
+                      {step.status}
+                    </Badge>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">
-                    No agent run events recorded for this step.
-                  </p>
-                )}
-              </div>
-            ))}
+                  {step.inputText ? (
+                    <CollapsibleText label="Input" value={step.inputText} />
+                  ) : null}
+                  {agentEvents.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {agentEvents.map((event) => (
+                        <TraceEventEntry
+                          key={`${step.runId}-${event.seq}`}
+                          event={event}
+                          context={`agent run ${step.runId ?? ""}`}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">
+                      No agent run events recorded for this step.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       ))}
