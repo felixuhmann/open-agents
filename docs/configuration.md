@@ -79,7 +79,7 @@ These values are returned as plaintext by `/api/settings` and edited from
 | Key in `AppSetting.key` | Used by                                                                                                                                                  |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `product_name`          | Browser title, setup/sign-in screens, and sidebar header.                                                                                                |
-| `favicon_url`           | Browser tab icon.                                                                                                                                        |
+| `favicon_url`           | Browser tab icon. Falls back to the bundled `/favicon.svg` (Open Agents mark) when unset.                                                                |
 | `sidebar_logo_url`      | Sidebar brand mark.                                                                                                                                      |
 | `email_footer_logo_url` | Outbound email footer image.                                                                                                                             |
 | `email_disclaimer`      | Outbound email footer paragraph.                                                                                                                         |

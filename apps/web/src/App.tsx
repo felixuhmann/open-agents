@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, type ReactElement } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { FALLBACK_FAVICON_URL } from "./components/FallbackLogo";
 import { Layout } from "./components/Layout";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -239,15 +240,16 @@ export function App() {
   }, [productName]);
 
   useEffect(() => {
-    const favicon = assetSrc(branding.data?.faviconUrl);
+    const favicon = assetSrc(branding.data?.faviconUrl) ?? FALLBACK_FAVICON_URL;
     const existing = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
-    if (!favicon) {
-      existing?.remove();
-      return;
-    }
     const link = existing ?? document.createElement("link");
     link.rel = "icon";
     link.href = favicon;
+    if (favicon.endsWith(".svg")) {
+      link.type = "image/svg+xml";
+    } else {
+      link.removeAttribute("type");
+    }
     if (!existing) document.head.appendChild(link);
   }, [branding.data?.faviconUrl]);
 

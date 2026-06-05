@@ -33,7 +33,7 @@ const LABELS: Record<string, { title: string; description: string }> = {
   favicon_url: {
     title: "Favicon",
     description:
-      "Browser tab icon for this deployment. Upload a file or paste an image URL.",
+      "Browser tab icon for this deployment. Upload a file or paste an image URL. Leave empty to use the bundled Open Agents mark.",
   },
   sidebar_logo_url: {
     title: "Sidebar logo",

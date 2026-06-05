@@ -23,3 +23,6 @@ export function FallbackLogo({ className, ...props }: SVGProps<SVGSVGElement>) {
 
 /** Bundled email/static fallback served at `/static/fallback.png`. */
 export const FALLBACK_AVATAR_URL = "/static/fallback.png";
+
+/** Bundled SPA favicon in `apps/web/public/`. */
+export const FALLBACK_FAVICON_URL = "/favicon.svg";
