@@ -11,6 +11,7 @@ import { runsRoutes } from "../routes/api/runs.js";
 import { sandboxesRoutes } from "../routes/api/sandboxes.js";
 import { secretsRoutes } from "../routes/api/secrets.js";
 import { settingsRoutes } from "../routes/api/settings.js";
+import { mcpConnectionRoutes } from "../routes/api/mcpConnection.js";
 import { mcpServersRoutes } from "../routes/api/mcpServers.js";
 import { skillsRoutes } from "../routes/api/skills.js";
 import { toolsRoutes } from "../routes/api/tools.js";
@@ -27,6 +28,7 @@ import {
   shouldMountLegacyIssueReportRoutes,
 } from "../routes/issueReport.js";
 import { mailgunRoutes } from "../routes/mailgun.js";
+import { mcpRoutes, MCP_PREFIX } from "../routes/mcp.js";
 import {
   APP_ROUTE_PREFIXES,
   AUTH_PREFIX,
@@ -65,8 +67,14 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
     cors({
       origin: [config.WEB_BASE_URL, config.PUBLIC_BASE_URL],
       credentials: true,
-      allowHeaders: ["Content-Type", "Authorization", "Last-Event-ID"],
-      exposeHeaders: ["Last-Event-ID"],
+      allowHeaders: [
+        "Content-Type",
+        "Authorization",
+        "Last-Event-ID",
+        "mcp-session-id",
+        "mcp-protocol-version",
+      ],
+      exposeHeaders: ["Last-Event-ID", "mcp-session-id", "mcp-protocol-version"],
       allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
       maxAge: 600,
     }),
@@ -85,6 +93,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/sandboxes", sandboxesRoutes);
   app.route("/api/secrets", secretsRoutes);
   app.route("/api/settings", settingsRoutes);
+  app.route("/api/mcp-connection", mcpConnectionRoutes);
   app.route("/api/mcp-servers", mcpServersRoutes);
   app.route("/api/skills", skillsRoutes);
   app.route("/api/tools", toolsRoutes);
@@ -102,6 +111,9 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
     app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
   }
   app.route("/", uploadRoutes);
+
+  // Control-plane MCP (Streamable HTTP) — before SPA catch-all.
+  app.route(MCP_PREFIX, mcpRoutes);
 
   // SPA catch-all — must be last so every prefixed router above wins. In
   // production this serves the built `apps/web` bundle from `../web/dist`

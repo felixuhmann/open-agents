@@ -1,5 +1,6 @@
 export * from "./agentVersion.js";
 export * from "./agents.js";
+export * from "./mcpConnection.js";
 export * from "./mcpServers.js";
 export * from "./modelCatalog.js";
 export * from "./runEvents.js";

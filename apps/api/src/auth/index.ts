@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { hashPassword } from "better-auth/crypto";
+import { bearer } from "better-auth/plugins/bearer";
 import type { UserRole } from "@open-agents/types";
 import { config } from "../config.js";
 import { prisma } from "../db.js";
@@ -46,6 +47,7 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: "open-agents",
   },
+  plugins: [bearer()],
 });
 
 export type Auth = typeof auth;

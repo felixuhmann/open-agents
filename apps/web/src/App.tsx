@@ -46,6 +46,7 @@ const SandboxesSettingsPage = lazy(() => import("./pages/SandboxesSettingsPage")
 const UsersSettingsPage = lazy(() => import("./pages/UsersSettingsPage"));
 const GeneralSettingsPage = lazy(() => import("./pages/GeneralSettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const McpConnectionPage = lazy(() => import("./pages/McpConnectionPage"));
 const EmailIssueReportPage = lazy(() => import("./pages/EmailIssueReportPage"));
 
 function canAccessRoute(user: CurrentUser, roles: Array<UserRole> | "operator") {
@@ -197,6 +198,7 @@ function ProtectedRoutes() {
             }
           />
           <Route path="/settings/profile" element={<ProfilePage />} />
+          <Route path="/settings/mcp-connection" element={<McpConnectionPage />} />
           <Route
             path="/settings/users"
             element={
