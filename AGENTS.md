@@ -282,7 +282,8 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   HTTP MCP endpoint at `/mcp` so external clients (Claude Desktop, etc.) can
   manage agents and settings. It proxies through the same REST handlers via
   `api_request` — see [`docs/mcp-server.md`](docs/mcp-server.md). Auth uses
-  the better-auth `bearer()` plugin (`Authorization: Bearer <session_token>`).
+  OAuth discovery (recommended for Claude Desktop connectors) or the
+  better-auth `bearer()` plugin for manual session tokens.
 - **Run attachments use `attach_run_file`**: The Pi loop exposes
   `attach_run_file`, which pulls
   bytes from the sandbox on the orchestrator and stores `AgentAttachment` rows.
