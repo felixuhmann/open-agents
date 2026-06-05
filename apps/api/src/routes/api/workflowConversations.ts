@@ -1,5 +1,8 @@
+import {
+  CreateWorkflowConversationInput,
+  SendConversationMessageInput,
+} from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
 import {
   HttpError,
   canOperateAgents,
@@ -22,14 +25,6 @@ function titleFromPrompt(text: string): string {
   if (!singleLine) return DEFAULT_TITLE;
   return singleLine.slice(0, 120);
 }
-
-const CreateBody = z.object({
-  workflowSlug: z.string(),
-  title: z.string().min(1).max(120).optional(),
-  firstMessage: z.string().min(1).max(20000).optional(),
-});
-
-const SendBody = z.object({ text: z.string().min(1).max(20000) });
 
 workflowConversationsRoutes.get("/", async (c) => {
   const user = requireUser(c);
@@ -59,7 +54,7 @@ workflowConversationsRoutes.get("/", async (c) => {
 
 workflowConversationsRoutes.post("/", async (c) => {
   const user = requireUser(c);
-  const body = CreateBody.parse(await c.req.json());
+  const body = CreateWorkflowConversationInput.parse(await c.req.json());
   const workflow = await getWorkflowBySlug(body.workflowSlug);
   if (!workflow) throw new HttpError(404, "workflow not found");
   if (!workflow.webEnabled) throw new HttpError(400, "workflow web chat is disabled");
@@ -173,7 +168,7 @@ workflowConversationsRoutes.get("/:id", async (c) => {
 workflowConversationsRoutes.post("/:id/messages", async (c) => {
   const user = requireUser(c);
   const id = c.req.param("id");
-  const body = SendBody.parse(await c.req.json());
+  const body = SendConversationMessageInput.parse(await c.req.json());
   const conv = await prisma.workflowConversation.findUnique({
     where: { id },
     include: { workflow: true },

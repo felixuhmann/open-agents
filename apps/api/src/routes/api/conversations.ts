@@ -1,5 +1,8 @@
+import {
+  CreateConversationInput,
+  SendConversationMessageInput,
+} from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
 import { getAgentBySlug } from "../../agents/service.js";
 import {
   HttpError,
@@ -22,16 +25,6 @@ function titleFromPrompt(text: string): string {
   if (!singleLine) return DEFAULT_CONVERSATION_TITLE;
   return singleLine.slice(0, 120);
 }
-
-const CreateConversationBody = z.object({
-  agentSlug: z.string(),
-  title: z.string().min(1).max(120).optional(),
-  firstMessage: z.string().min(1).max(20000).optional(),
-});
-
-const SendMessageBody = z.object({
-  text: z.string().min(1).max(20000),
-});
 
 conversationsRoutes.get("/", async (c) => {
   const user = requireUser(c);
@@ -63,7 +56,7 @@ conversationsRoutes.get("/", async (c) => {
 
 conversationsRoutes.post("/", async (c) => {
   const user = requireUser(c);
-  const body = CreateConversationBody.parse(await c.req.json());
+  const body = CreateConversationInput.parse(await c.req.json());
   const agent = await getAgentBySlug(body.agentSlug);
   if (!agent) throw new HttpError(404, "agent not found");
   if (!agent.webEnabled) throw new HttpError(400, "agent web chat is disabled");
@@ -141,7 +134,7 @@ conversationsRoutes.get("/:id", async (c) => {
 conversationsRoutes.post("/:id/messages", async (c) => {
   const user = requireUser(c);
   const id = c.req.param("id");
-  const body = SendMessageBody.parse(await c.req.json());
+  const body = SendConversationMessageInput.parse(await c.req.json());
   const conv = await prisma.chatConversation.findUnique({
     where: { id },
     include: { agent: true },

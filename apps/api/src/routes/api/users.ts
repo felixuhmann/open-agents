@@ -1,6 +1,5 @@
+import { CreateUserInput, UpdateUserInput } from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
-import { UserRole } from "@open-agents/types";
 import { createUserWithPassword } from "../../auth/index.js";
 import { HttpError, requireAdmin } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
@@ -8,18 +7,6 @@ import { log } from "../../log.js";
 import type { AppVariables } from "../../server/types.js";
 
 export const usersRoutes = new Hono<{ Variables: AppVariables }>();
-
-const CreateUserBody = z.object({
-  email: z.string().email(),
-  name: z.string().min(1).max(120).optional(),
-  password: z.string().min(8).max(200),
-  role: UserRole.default("member"),
-});
-
-const UpdateUserBody = z.object({
-  name: z.string().min(1).max(120).optional(),
-  role: UserRole.optional(),
-});
 
 usersRoutes.get("/", async (c) => {
   requireAdmin(c);
@@ -39,7 +26,7 @@ usersRoutes.get("/", async (c) => {
 
 usersRoutes.post("/", async (c) => {
   requireAdmin(c);
-  const body = CreateUserBody.parse(await c.req.json());
+  const body = CreateUserInput.parse(await c.req.json());
   const created = await createUserWithPassword({
     email: body.email,
     name: body.name ?? body.email,
@@ -61,7 +48,7 @@ usersRoutes.post("/", async (c) => {
 usersRoutes.patch("/:id", async (c) => {
   requireAdmin(c);
   const id = c.req.param("id");
-  const body = UpdateUserBody.parse(await c.req.json());
+  const body = UpdateUserInput.parse(await c.req.json());
   const user = await prisma.user.update({
     where: { id },
     data: {

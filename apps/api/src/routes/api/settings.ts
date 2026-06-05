@@ -1,6 +1,6 @@
 import { File } from "node:buffer";
+import { SetAppSettingInput } from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
 import { HttpError, requireAdmin, requireUser } from "../../auth/middleware.js";
 import {
   APP_SETTING_KEYS,
@@ -61,17 +61,13 @@ settingsRoutes.get("/", async (c) => {
   return c.json({ settings: await listAppSettings() });
 });
 
-const PutBody = z.object({
-  value: z.string(),
-});
-
 settingsRoutes.put("/:key", async (c) => {
   requireAdmin(c);
   const key = c.req.param("key") as AppSettingKey;
   if (!ALLOWED.includes(key)) {
     return c.json({ error: "unknown setting key" }, 400);
   }
-  const body = PutBody.parse(await c.req.json());
+  const body = SetAppSettingInput.parse(await c.req.json());
   const trimmed = body.value.trim();
   if (trimmed.length === 0) {
     await deleteAppSetting(key);

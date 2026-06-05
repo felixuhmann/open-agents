@@ -1,5 +1,5 @@
+import { SetServiceSecretInput } from "@open-agents/types";
 import { Hono } from "hono";
-import { z } from "zod";
 import { resetAgentBackend } from "../../agent-backend/instance.js";
 import { requireAdmin } from "../../auth/middleware.js";
 import {
@@ -39,17 +39,13 @@ secretsRoutes.get("/", async (c) => {
   return c.json({ secrets: out });
 });
 
-const PutBody = z.object({
-  value: z.string().min(1),
-});
-
 secretsRoutes.put("/:key", async (c) => {
   requireAdmin(c);
   const key = c.req.param("key") as ServiceKey;
   if (!ALLOWED.includes(key)) {
     return c.json({ error: "unknown secret key" }, 400);
   }
-  const body = PutBody.parse(await c.req.json());
+  const body = SetServiceSecretInput.parse(await c.req.json());
   await setServiceSecret(key, body.value);
   invalidateServiceSecret(key);
   if (

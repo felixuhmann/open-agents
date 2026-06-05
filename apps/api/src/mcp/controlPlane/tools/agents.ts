@@ -1,0 +1,86 @@
+import { z } from "zod";
+import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
+import { defineControlPlaneTool, slugParam } from "../defineTool.js";
+
+export const agentControlPlaneTools = [
+  defineControlPlaneTool({
+    name: "agents_list",
+    title: "List agents",
+    description:
+      "List agents visible to the caller (operators see all; members see granted agents).",
+    auth: "user",
+    method: "GET",
+    path: "/api/agents",
+    input: z.object({}),
+  }),
+  defineControlPlaneTool({
+    name: "agents_create",
+    title: "Create agent",
+    description: "Create a new agent draft.",
+    auth: "operator",
+    method: "POST",
+    path: "/api/agents",
+    input: CreateAgentInput,
+  }),
+  defineControlPlaneTool({
+    name: "agents_get",
+    title: "Get agent",
+    description: "Get full agent configuration by slug.",
+    auth: "user",
+    method: "GET",
+    path: "/api/agents/:slug",
+    pathParams: ["slug"],
+    input: z.object(slugParam),
+  }),
+  defineControlPlaneTool({
+    name: "agents_update",
+    title: "Update agent",
+    description:
+      "Patch agent draft fields (system prompt, model, tool bindings, skills, MCP servers, access).",
+    auth: "operator",
+    method: "PATCH",
+    path: "/api/agents/:slug",
+    pathParams: ["slug"],
+    input: UpdateAgentInput.extend(slugParam),
+  }),
+  defineControlPlaneTool({
+    name: "agents_publish",
+    title: "Publish agent",
+    description: "Freeze the current draft into a new published agent version.",
+    auth: "operator",
+    method: "POST",
+    path: "/api/agents/:slug/publish",
+    pathParams: ["slug"],
+    input: z.object(slugParam),
+  }),
+  defineControlPlaneTool({
+    name: "agents_delete",
+    title: "Delete agent",
+    description: "Permanently delete an agent.",
+    auth: "operator",
+    method: "DELETE",
+    path: "/api/agents/:slug",
+    pathParams: ["slug"],
+    input: z.object(slugParam),
+  }),
+  defineControlPlaneTool({
+    name: "agents_list_access",
+    title: "List agent access",
+    description: "List users with explicit access when access mode is specific.",
+    auth: "operator",
+    method: "GET",
+    path: "/api/agents/:slug/access",
+    pathParams: ["slug"],
+    input: z.object(slugParam),
+  }),
+  defineControlPlaneTool({
+    name: "agents_delete_avatar",
+    title: "Clear agent avatar",
+    description: "Remove the agent avatar (revert to default).",
+    auth: "operator",
+    method: "DELETE",
+    path: "/api/agents/:slug/avatar",
+    pathParams: ["slug"],
+    input: z.object(slugParam),
+  }),
+];
