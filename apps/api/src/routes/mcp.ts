@@ -1,6 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Hono } from "hono";
-import { auth } from "../auth/index.js";
+import { mcpUnauthorizedResponse, resolveMcpAuth } from "../auth/mcpAuth.js";
 import { createControlPlaneMcpServer } from "../mcp/controlPlane/server.js";
 import { log } from "../log.js";
 import { getAppInstance } from "../server/appHolder.js";
@@ -11,18 +11,15 @@ export const MCP_PREFIX = "/mcp";
 export const mcpRoutes = new Hono<{ Variables: AppVariables }>();
 
 /**
- * Control-plane MCP server (Streamable HTTP). Authenticate with the same
- * better-auth session token the SPA uses, passed as `Authorization: Bearer`.
+ * Control-plane MCP server (Streamable HTTP). Authenticate with OAuth (recommended
+ * for Claude Desktop connectors) or a better-auth session bearer token.
  *
  * Stateless mode: each request spins up a fresh transport + server instance.
  */
 mcpRoutes.all("/*", async (c) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session?.user) {
-    return c.json(
-      { error: "unauthorized — provide Authorization: Bearer <session_token>" },
-      401,
-    );
+  const authCtx = await resolveMcpAuth(c.req.raw);
+  if (!authCtx) {
+    return mcpUnauthorizedResponse();
   }
 
   if (c.req.method === "OPTIONS") {
@@ -35,7 +32,7 @@ mcpRoutes.all("/*", async (c) => {
     });
     const server = createControlPlaneMcpServer({
       app: getAppInstance(),
-      authHeaders: c.req.raw.headers,
+      authHeaders: authCtx.authHeaders,
     });
     await server.connect(transport);
     return await transport.handleRequest(c.req.raw);

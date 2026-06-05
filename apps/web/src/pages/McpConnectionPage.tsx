@@ -6,6 +6,7 @@ import {
   ClipboardIcon,
   KeyIcon,
   PlugsConnectedIcon,
+  ShieldCheckIcon,
   WarningIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -23,6 +24,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -111,67 +118,20 @@ export default function McpConnectionPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <KeyIcon weight="duotone" />
-              Auth token
+              <ShieldCheckIcon weight="duotone" />
+              OAuth connector (recommended)
             </CardTitle>
             <CardDescription>
-              Generate a bearer token for MCP clients. Tokens are separate from your
-              browser session and can be revoked individually.
+              Claude Desktop and other OAuth-native MCP clients connect through the
+              standard OAuth discovery flow — no manual token copy required.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <Button
-              type="button"
-              onClick={() => generateToken.mutate()}
-              disabled={generateToken.isPending}
-              className="w-fit"
-            >
-              {generateToken.isPending ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <KeyIcon data-icon="inline-start" />
-              )}
-              Generate auth token
-            </Button>
-
-            {revealedToken ? (
-              <Alert variant="default" className="border-amber-500/40 bg-amber-500/5">
-                <WarningIcon className="size-4 text-amber-600" />
-                <AlertTitle>Copy your token now</AlertTitle>
-                <AlertDescription className="flex flex-col gap-3">
-                  <p>
-                    This token is shown only once. Store it securely — you cannot view it
-                    again after leaving this page.
-                  </p>
-                  <CopyableCode value={revealedToken.token} label="Token" />
-                  <p className="text-xs text-muted-foreground">
-                    Expires {formatDateTime(revealedToken.expiresAt)}
-                  </p>
-                </AlertDescription>
-              </Alert>
+            {info.isLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : info.data ? (
+              <OAuthConnectorPanel info={info.data} />
             ) : null}
-
-            {tokens.isLoading ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (tokens.data?.length ?? 0) > 0 ? (
-              <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">Active tokens</p>
-                <div className="divide-y border">
-                  {tokens.data?.map((token) => (
-                    <TokenRow
-                      key={token.id}
-                      token={token}
-                      isPending={revokeToken.isPending}
-                      onRevoke={() => revokeToken.mutate(token.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No MCP tokens yet. Generate one to connect an external client.
-              </p>
-            )}
           </CardContent>
         </Card>
 
@@ -179,7 +139,8 @@ export default function McpConnectionPage() {
           <CardHeader>
             <CardTitle>Server endpoint</CardTitle>
             <CardDescription>
-              MCP clients connect to this URL with your bearer token.
+              MCP clients connect to this URL. OAuth connectors discover authorization
+              settings automatically.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -196,23 +157,103 @@ export default function McpConnectionPage() {
         <CardHeader>
           <CardTitle>Claude Desktop setup</CardTitle>
           <CardDescription>
-            Add the block below to your Claude Desktop MCP config, then restart Claude.
+            Use the OAuth connector flow built into Claude Desktop — no config file
+            editing required.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium">claude_desktop_config.json</p>
-              <CopyConfigButton value={configJson} disabled={!info.data} />
-            </div>
-            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all border bg-muted/40 p-4 font-mono text-xs leading-relaxed">
-              {configJson || "Loading…"}
-            </pre>
-          </div>
-
-          <SetupInstructions />
+          <ClaudeOAuthInstructions />
         </CardContent>
       </Card>
+
+      <Accordion type="single" collapsible className="rounded-lg border">
+        <AccordionItem value="bearer" className="border-0">
+          <AccordionTrigger className="px-6 py-4 hover:no-underline">
+            <div className="text-left">
+              <p className="flex items-center gap-2 font-semibold">
+                <KeyIcon weight="duotone" />
+                Advanced: bearer token
+              </p>
+              <p className="mt-1 text-sm font-normal text-muted-foreground">
+                For clients that support manual Streamable HTTP config with a static
+                bearer token (for example Cursor). Claude Desktop now prefers OAuth
+                connectors.
+              </p>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <div className="flex flex-col gap-6 border-t pt-6">
+              <div className="flex flex-col gap-4">
+                <Button
+                  type="button"
+                  onClick={() => generateToken.mutate()}
+                  disabled={generateToken.isPending}
+                  className="w-fit"
+                >
+                  {generateToken.isPending ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <KeyIcon data-icon="inline-start" />
+                  )}
+                  Generate auth token
+                </Button>
+
+                {revealedToken ? (
+                  <Alert variant="default" className="border-amber-500/40 bg-amber-500/5">
+                    <WarningIcon className="size-4 text-amber-600" />
+                    <AlertTitle>Copy your token now</AlertTitle>
+                    <AlertDescription className="flex flex-col gap-3">
+                      <p>
+                        This token is shown only once. Store it securely — you cannot view
+                        it again after leaving this page.
+                      </p>
+                      <CopyableCode value={revealedToken.token} label="Token" />
+                      <p className="text-xs text-muted-foreground">
+                        Expires {formatDateTime(revealedToken.expiresAt)}
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {tokens.isLoading ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : (tokens.data?.length ?? 0) > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm font-medium">Active tokens</p>
+                    <div className="divide-y border">
+                      {tokens.data?.map((token) => (
+                        <TokenRow
+                          key={token.id}
+                          token={token}
+                          isPending={revokeToken.isPending}
+                          onRevoke={() => revokeToken.mutate(token.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No bearer tokens yet. Generate one for manual MCP client
+                    configuration.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">claude_desktop_config.json</p>
+                  <CopyConfigButton value={configJson} disabled={!info.data} />
+                </div>
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all border bg-muted/40 p-4 font-mono text-xs leading-relaxed">
+                  {configJson || "Loading…"}
+                </pre>
+              </div>
+
+              <BearerSetupInstructions />
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       <Card>
         <CardHeader>
@@ -247,24 +288,89 @@ export default function McpConnectionPage() {
   );
 }
 
-function EndpointPanel({ info }: { info: McpConnectionInfo }) {
+function OAuthConnectorPanel({ info }: { info: McpConnectionInfo }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 text-sm">
       <CopyableCode value={info.mcpUrl} label="MCP URL" />
-      <p className="text-xs text-muted-foreground">
-        In local development, Claude Desktop should point at the API origin (
-        <span className="font-mono">{info.mcpUrl}</span>
-        ), not the Vite dev server port.
+      <CopyableCode
+        value={info.oauthProtectedResourceUrl}
+        label="Protected resource metadata"
+      />
+      <CopyableCode
+        value={info.oauthAuthorizationServerUrl}
+        label="Authorization server metadata"
+      />
+      <p className="text-muted-foreground">
+        When you add a custom MCP connector in Claude Desktop, paste the MCP URL above.
+        Claude discovers OAuth settings from the protected-resource metadata endpoint and
+        opens a browser sign-in window for this deployment.
       </p>
     </div>
   );
 }
 
-function SetupInstructions() {
+function EndpointPanel({ info }: { info: McpConnectionInfo }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <CopyableCode value={info.mcpUrl} label="MCP URL" />
+      <p className="text-xs text-muted-foreground">
+        In local development, MCP clients should point at the API origin (
+        <span className="font-mono">{info.mcpUrl}</span>
+        ), not the Vite dev server port.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Authorization server: <span className="font-mono">{info.authServerUrl}</span>
+      </p>
+    </div>
+  );
+}
+
+function ClaudeOAuthInstructions() {
   return (
     <div className="flex flex-col gap-4 text-sm">
       <div>
-        <p className="font-medium">1. Open your config file</p>
+        <p className="font-medium">1. Open Claude Desktop settings</p>
+        <p className="mt-1 text-muted-foreground">
+          Go to Settings → Connectors (or Integrations) and choose to add a custom MCP
+          server / OAuth connector.
+        </p>
+      </div>
+      <div>
+        <p className="font-medium">2. Enter the MCP server URL</p>
+        <p className="mt-1 text-muted-foreground">
+          Paste the MCP URL from above (for example{" "}
+          <code className="text-xs">https://your-deployment.example.com/mcp</code>).
+          Claude fetches OAuth metadata from{" "}
+          <code className="text-xs">/.well-known/oauth-protected-resource</code>{" "}
+          automatically.
+        </p>
+      </div>
+      <div>
+        <p className="font-medium">3. Sign in when prompted</p>
+        <p className="mt-1 text-muted-foreground">
+          Claude opens a browser window to this deployment&apos;s login page. Use the same
+          email and password as the web UI. If consent is requested, approve access on the
+          consent screen.
+        </p>
+      </div>
+      <div>
+        <p className="font-medium">4. Use the connector in chat</p>
+        <p className="mt-1 text-muted-foreground">
+          After connecting, ask Claude to call{" "}
+          <code className="text-xs">api_catalog</code> to discover endpoints, then use{" "}
+          <code className="text-xs">api_request</code> — for example,{" "}
+          <code className="text-xs">POST /api/agents</code> to create an agent.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BearerSetupInstructions() {
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div>
+        <p className="font-medium">Manual config file locations</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
           <li>
             <strong>macOS:</strong>{" "}
@@ -278,33 +384,10 @@ function SetupInstructions() {
           </li>
         </ul>
       </div>
-      <div>
-        <p className="font-medium">2. Merge the JSON block above</p>
-        <p className="mt-1 text-muted-foreground">
-          If you already have other <code className="text-xs">mcpServers</code>, add the{" "}
-          <code className="text-xs">open-agents</code> entry alongside them. Generate a
-          token above and replace <code className="text-xs">PASTE_YOUR_TOKEN_HERE…</code>{" "}
-          in the Authorization header.
-        </p>
-      </div>
-      <div>
-        <p className="font-medium">3. Restart Claude Desktop</p>
-        <p className="mt-1 text-muted-foreground">
-          Fully quit and reopen Claude so it reloads MCP servers. You should see{" "}
-          <code className="text-xs">open-agents</code> in the connector list with{" "}
-          <code className="text-xs">api_request</code> and{" "}
-          <code className="text-xs">api_catalog</code> tools.
-        </p>
-      </div>
-      <div>
-        <p className="font-medium">4. Edit your agent from Claude</p>
-        <p className="mt-1 text-muted-foreground">
-          Ask Claude to call <code className="text-xs">api_catalog</code> to discover
-          endpoints, then use <code className="text-xs">api_request</code> — for example,{" "}
-          <code className="text-xs">POST /api/agents</code> to create an agent and{" "}
-          <code className="text-xs">POST /api/agents/:slug/publish</code> to publish it.
-        </p>
-      </div>
+      <p className="text-muted-foreground">
+        Merge the JSON block above into your client config, generate a token, and restart
+        the client. Prefer the OAuth connector flow for Claude Desktop when available.
+      </p>
     </div>
   );
 }
@@ -363,7 +446,7 @@ function TokenRow({
     <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">MCP token</Badge>
+          <Badge variant="secondary">Bearer token</Badge>
           <span className="font-mono text-xs text-muted-foreground">
             {token.id.slice(0, 8)}…
           </span>

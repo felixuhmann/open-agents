@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   AgentSummaryDto,
+  McpConnectionInfo,
   ModelCatalogDto,
   WorkflowDto,
   WorkflowSummaryDto,
@@ -891,7 +892,7 @@ export type McpConnectionTokenSummary = {
 export function useMcpConnectionInfo() {
   return useQuery({
     queryKey: ["mcp-connection", "info"],
-    queryFn: () => api<{ mcpUrl: string; docsPath: string }>("/api/mcp-connection/info"),
+    queryFn: () => api<McpConnectionInfo>("/api/mcp-connection/info"),
     staleTime: 60_000,
   });
 }

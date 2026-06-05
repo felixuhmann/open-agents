@@ -10,6 +10,9 @@ export function getMcpConnectionInfo(): McpConnectionInfo {
   return {
     mcpUrl: `${base}/mcp`,
     docsPath: "/settings/mcp-connection",
+    oauthAuthorizationServerUrl: `${base}/.well-known/oauth-authorization-server`,
+    oauthProtectedResourceUrl: `${base}/.well-known/oauth-protected-resource`,
+    authServerUrl: `${base}/api/auth`,
   };
 }
 

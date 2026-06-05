@@ -23,6 +23,7 @@ export default function LoginPage({ productName }: { productName: string }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get("next") ?? "/";
+  const isOAuthLogin = params.has("client_id") && params.has("redirect_uri");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +34,11 @@ export default function LoginPage({ productName }: { productName: string }) {
       toast.error("Sign-in failed", {
         description: res.error.message ?? "Check your email and password.",
       });
+      return;
+    }
+    if (isOAuthLogin) {
+      // Continue the MCP OAuth authorization flow after sign-in.
+      window.location.assign(`/api/auth/mcp/authorize?${params.toString()}`);
       return;
     }
     void navigate(next, { replace: true });
@@ -48,7 +54,9 @@ export default function LoginPage({ productName }: { productName: string }) {
           </div>
           <CardTitle>Sign in to {productName}</CardTitle>
           <CardDescription>
-            Welcome back. Enter your credentials to access your agents.
+            {isOAuthLogin
+              ? "Sign in to authorize an external MCP client."
+              : "Welcome back. Enter your credentials to access your agents."}
           </CardDescription>
         </CardHeader>
         <CardContent>

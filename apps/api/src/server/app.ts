@@ -29,6 +29,7 @@ import {
 } from "../routes/issueReport.js";
 import { mailgunRoutes } from "../routes/mailgun.js";
 import { mcpRoutes, MCP_PREFIX } from "../routes/mcp.js";
+import { wellKnownRoutes } from "../routes/wellKnown.js";
 import {
   APP_ROUTE_PREFIXES,
   AUTH_PREFIX,
@@ -74,7 +75,12 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
         "mcp-session-id",
         "mcp-protocol-version",
       ],
-      exposeHeaders: ["Last-Event-ID", "mcp-session-id", "mcp-protocol-version"],
+      exposeHeaders: [
+        "Last-Event-ID",
+        "mcp-session-id",
+        "mcp-protocol-version",
+        "WWW-Authenticate",
+      ],
       allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
       maxAge: 600,
     }),
@@ -111,6 +117,9 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
     app.route(ISSUE_REPORT_PREFIX, issueReportRoutes);
   }
   app.route("/", uploadRoutes);
+
+  // OAuth discovery for MCP clients — before SPA catch-all.
+  app.route("/.well-known", wellKnownRoutes);
 
   // Control-plane MCP (Streamable HTTP) — before SPA catch-all.
   app.route(MCP_PREFIX, mcpRoutes);

@@ -4,6 +4,17 @@ import { prisma } from "../db.js";
 import type { AppVariables } from "../server/types.js";
 import { auth } from "./index.js";
 
+async function loadAuthUser(userId: string): Promise<AuthUser | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId } });
+  if (!u) return null;
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: normalizeRole(u.role),
+  };
+}
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -26,19 +37,22 @@ export function attachUser(): MiddlewareHandler<{ Variables: AppVariables }> {
     try {
       const session = await auth.api.getSession({ headers: c.req.raw.headers });
       if (session?.user) {
-        const u = await prisma.user.findUnique({ where: { id: session.user.id } });
-        if (u) {
-          c.set("user", {
-            id: u.id,
-            email: u.email,
-            name: u.name,
-            role: normalizeRole(u.role),
-          });
+        c.set("user", (await loadAuthUser(session.user.id)) ?? null);
+      } else {
+        const oauth = await auth.api.getMcpSession({ headers: c.req.raw.headers });
+        if (oauth?.userId) {
+          const expiresAt =
+            oauth.accessTokenExpiresAt instanceof Date
+              ? oauth.accessTokenExpiresAt
+              : new Date(String(oauth.accessTokenExpiresAt));
+          if (!Number.isNaN(expiresAt.getTime()) && expiresAt > new Date()) {
+            c.set("user", (await loadAuthUser(oauth.userId)) ?? null);
+          } else {
+            c.set("user", null);
+          }
         } else {
           c.set("user", null);
         }
-      } else {
-        c.set("user", null);
       }
     } catch {
       c.set("user", null);
