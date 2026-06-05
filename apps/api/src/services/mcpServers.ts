@@ -1,7 +1,13 @@
 import type { McpServer } from "@open-agents/db";
-import type { CreateMcpServerInput, UpdateMcpServerInput } from "@open-agents/types";
+import type {
+  CreateMcpServerInput,
+  McpProbeResult,
+  ProbeMcpServerInput,
+  UpdateMcpServerInput,
+} from "@open-agents/types";
 import { HttpError } from "../auth/middleware.js";
-import { sealMcpServerBearer } from "../mcp/mcpServerSecrets.js";
+import { decryptMcpServerBearer, sealMcpServerBearer } from "../mcp/mcpServerSecrets.js";
+import { probeMcpServer } from "../mcp/probeMcpServer.js";
 import { prisma } from "../db.js";
 
 export type McpServerListRow = McpServer & { _count: { bindings: number } };
@@ -103,4 +109,29 @@ export function toMcpServerDto(row: McpServerListRow) {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+export async function probeStoredMcpServer(
+  id: string,
+  bearerOverride?: string,
+): Promise<McpProbeResult> {
+  const row = await getMcpServerById(id);
+  if (!row) throw new HttpError(404, "MCP server not found");
+
+  const bearer =
+    bearerOverride !== undefined
+      ? bearerOverride.trim() || null
+      : decryptMcpServerBearer(row);
+
+  return probeMcpServer({
+    serverUrl: row.serverUrl,
+    bearer,
+  });
+}
+
+export function probeMcpServerDraft(input: ProbeMcpServerInput): Promise<McpProbeResult> {
+  return probeMcpServer({
+    serverUrl: input.serverUrl,
+    bearer: input.bearer?.trim() ?? null,
+  });
 }

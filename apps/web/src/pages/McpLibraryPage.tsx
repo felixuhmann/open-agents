@@ -1,16 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  FileArrowUpIcon,
   PencilSimpleIcon,
   PlugsConnectedIcon,
   PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
-import { CreateMcpServerInput, UpdateMcpServerInput } from "@open-agents/types";
+import {
+  CreateMcpServerInput,
+  McpConnectorManifest,
+  type McpProbeResult,
+  UpdateMcpServerInput,
+} from "@open-agents/types";
 import { ApiError, api } from "@/lib/api";
-import { type McpServerDto, useMcpServers } from "@/lib/queries";
+import { type McpServerDto, useCurrentUser, useMcpServers } from "@/lib/queries";
+import { McpProbeResultPanel, McpProbeStatusBadge } from "@/components/McpProbePanel";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,6 +92,7 @@ function McpServerForm({
   initial,
   submitLabel,
   pending,
+  serverId,
   onSubmit,
   onCancel,
 }: {
@@ -93,10 +101,73 @@ function McpServerForm({
   initial: McpFormState;
   submitLabel: string;
   pending: boolean;
+  serverId?: string;
   onSubmit: (values: McpFormState) => void;
   onCancel: () => void;
 }) {
   const [values, setValues] = useState(initial);
+  const [manifestText, setManifestText] = useState("");
+  const [probeResult, setProbeResult] = useState<McpProbeResult | null>(null);
+
+  const probe = useMutation({
+    mutationFn: async () => {
+      const url = values.serverUrl.trim();
+      if (!url) throw new ApiError(400, "Enter a server URL first.");
+      if (serverId) {
+        return api<McpProbeResult>(`/api/mcp-servers/${serverId}/probe`, {
+          method: "POST",
+          json: values.bearer.trim() ? { bearer: values.bearer.trim() } : {},
+        });
+      }
+      return api<McpProbeResult>("/api/mcp-servers/probe", {
+        method: "POST",
+        json: {
+          serverUrl: url,
+          ...(values.bearer.trim() ? { bearer: values.bearer.trim() } : {}),
+        },
+      });
+    },
+    onSuccess: (result) => {
+      setProbeResult(result);
+      if (result.ok) {
+        toast.success("Connection successful", { description: result.message });
+      } else {
+        toast.error("Connection failed", { description: result.message });
+      }
+    },
+    onError: (e) =>
+      toast.error("Probe failed", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+
+  const importManifest = () => {
+    try {
+      const parsed = JSON.parse(manifestText) as unknown;
+      const result = McpConnectorManifest.safeParse(parsed);
+      if (!result.success) {
+        toast.error("Invalid manifest", {
+          description: result.error.issues.map((i) => i.message).join("; "),
+        });
+        return;
+      }
+      const m = result.data;
+      setValues((v) => ({
+        ...v,
+        name: m.name,
+        label: m.label,
+        description: m.description ?? "",
+        serverUrl: m.serverUrl,
+      }));
+      setManifestText("");
+      toast.success("Manifest imported", {
+        description: "Review the fields and add a bearer token if required.",
+      });
+    } catch {
+      toast.error("Invalid JSON", { description: "Paste a valid connector manifest." });
+    }
+  };
+
   return (
     <>
       <DialogHeader>
@@ -110,6 +181,32 @@ function McpServerForm({
         }}
       >
         <FieldGroup className="py-2">
+          <Field>
+            <FieldLabel htmlFor="mcp-manifest">Import from manifest</FieldLabel>
+            <Textarea
+              id="mcp-manifest"
+              rows={3}
+              className="font-mono text-xs"
+              placeholder='{"manifestVersion":1,"name":"acme-crm","label":"Acme CRM","serverUrl":"https://…"}'
+              value={manifestText}
+              onChange={(e) => setManifestText(e.target.value)}
+            />
+            <FieldDescription>
+              Paste JSON from a deployment-specific MCP connector repo. Bearer tokens are
+              not included in manifests — enter them below.
+            </FieldDescription>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-1"
+              disabled={!manifestText.trim()}
+              onClick={importManifest}
+            >
+              <FileArrowUpIcon data-icon="inline-start" />
+              Import manifest
+            </Button>
+          </Field>
           <Field>
             <FieldLabel htmlFor="mcp-name">Name</FieldLabel>
             <Input
@@ -175,6 +272,28 @@ function McpServerForm({
               clear.
             </FieldDescription>
           </Field>
+          <div className="flex flex-col gap-3 border-t pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={probe.isPending || !values.serverUrl.trim()}
+                onClick={() => probe.mutate()}
+              >
+                {probe.isPending ? <Spinner data-icon="inline-start" /> : null}
+                <PlugsConnectedIcon data-icon="inline-start" />
+                Test connection
+              </Button>
+              {probeResult ? <McpProbeStatusBadge result={probeResult} /> : null}
+            </div>
+            {probeResult ? (
+              <McpProbeResultPanel
+                result={probeResult}
+                onRetest={() => probe.mutate()}
+                retestPending={probe.isPending}
+              />
+            ) : null}
+          </div>
         </FieldGroup>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onCancel}>
@@ -200,15 +319,201 @@ function formFromServer(server: McpServerDto): McpFormState {
   };
 }
 
+function McpServerCard({
+  server,
+  probeResult,
+  probePending,
+  isAdmin,
+  onEdit,
+  onDelete,
+  onProbe,
+  deletePending,
+}: {
+  server: McpServerDto;
+  probeResult?: McpProbeResult | null;
+  probePending?: boolean;
+  isAdmin: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  onProbe: () => void;
+  deletePending: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <PlugsConnectedIcon className="size-4" weight="duotone" />
+          {server.label}
+        </CardTitle>
+        <CardDescription className="font-mono">{server.name}</CardDescription>
+        <CardAction className="flex gap-1">
+          {isAdmin ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              aria-label={`Test ${server.label}`}
+              disabled={probePending}
+              onClick={onProbe}
+            >
+              {probePending ? <Spinner /> : <PlugsConnectedIcon />}
+            </Button>
+          ) : null}
+          {isAdmin ? (
+            <>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                aria-label={`Edit ${server.label}`}
+                onClick={onEdit}
+              >
+                <PencilSimpleIcon />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="destructive"
+                aria-label={`Delete ${server.label}`}
+                disabled={server.agentCount > 0 || deletePending}
+                onClick={onDelete}
+              >
+                <TrashIcon />
+              </Button>
+            </>
+          ) : null}
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {server.description ? (
+          <p className="text-xs/relaxed text-foreground">{server.description}</p>
+        ) : null}
+        <p className="truncate font-mono text-xs text-muted-foreground">
+          {server.serverUrl}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {isAdmin ? (
+            <McpProbeStatusBadge result={probeResult} pending={probePending} />
+          ) : null}
+          {server.hasBearer ? <Badge variant="secondary">bearer configured</Badge> : null}
+          <Badge variant="outline">
+            {server.agentCount} agent{server.agentCount === 1 ? "" : "s"}
+          </Badge>
+        </div>
+        {probeResult && isAdmin ? (
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto justify-start px-0 text-xs"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? "Hide" : "Show"} probe details
+              {probeResult.toolCount !== undefined
+                ? ` · ${probeResult.toolCount} tools`
+                : ""}
+            </Button>
+            {expanded ? (
+              <McpProbeResultPanel
+                result={probeResult}
+                onRetest={onProbe}
+                retestPending={probePending}
+              />
+            ) : null}
+          </div>
+        ) : null}
+        {server.agentCount > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Detach from all agents before deleting.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function McpLibraryPage() {
   const servers = useMcpServers();
+  const user = useCurrentUser();
+  const isAdmin = user.data?.role === "admin";
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<McpServerDto | null>(null);
+  const [autoProbe, setAutoProbe] = useState(false);
+
+  const probeQueries = useQueries({
+    queries: (servers.data ?? []).map((server) => ({
+      queryKey: ["mcp-servers", server.id, "probe"] as const,
+      queryFn: () =>
+        api<McpProbeResult>(`/api/mcp-servers/${server.id}/probe`, {
+          method: "POST",
+          json: {},
+        }),
+      enabled: Boolean(isAdmin && autoProbe && servers.data?.length),
+      staleTime: 120_000,
+      retry: false,
+    })),
+  });
+
+  useEffect(() => {
+    if (isAdmin && servers.data?.length) {
+      setAutoProbe(true);
+    }
+  }, [isAdmin, servers.data?.length]);
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["mcp-servers"] });
   };
+
+  const probeServer = useMutation({
+    mutationFn: (id: string) =>
+      api<McpProbeResult>(`/api/mcp-servers/${id}/probe`, { method: "POST", json: {} }),
+    onSuccess: (result, id) => {
+      qc.setQueryData(["mcp-servers", id, "probe"], result);
+      if (result.ok) {
+        toast.success("Connection successful", { description: result.message });
+      } else {
+        toast.error("Connection failed", { description: result.message });
+      }
+    },
+    onError: (e) =>
+      toast.error("Probe failed", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
+
+  const probeAll = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const result = await api<McpProbeResult>(`/api/mcp-servers/${id}/probe`, {
+            method: "POST",
+            json: {},
+          });
+          return { id, result };
+        }),
+      );
+      return results;
+    },
+    onSuccess: (results) => {
+      for (const { id, result } of results) {
+        qc.setQueryData(["mcp-servers", id, "probe"], result);
+      }
+      const failed = results.filter((r) => !r.result.ok).length;
+      if (failed === 0) {
+        toast.success("All servers connected");
+      } else {
+        toast.warning(`${failed} of ${results.length} server(s) failed the health check`);
+      }
+    },
+    onError: (e) =>
+      toast.error("Health check failed", {
+        description: e instanceof ApiError ? e.message : String(e),
+      }),
+  });
 
   const create = useMutation({
     mutationFn: (values: McpFormState) => {
@@ -268,16 +573,48 @@ export default function McpLibraryPage() {
       }),
   });
 
+  const probeByServerId = new Map(
+    (servers.data ?? []).map((server, index) => [
+      server.id,
+      {
+        result:
+          probeQueries[index]?.data ??
+          qc.getQueryData<McpProbeResult>(["mcp-servers", server.id, "probe"]),
+        pending:
+          probeQueries[index]?.isFetching ||
+          (probeServer.isPending && probeServer.variables === server.id),
+      },
+    ]),
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="MCP servers"
         description="Register third-party Model Context Protocol servers once, then attach them to any agent."
         actions={
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            <PlusIcon data-icon="inline-start" />
-            Add server
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && servers.data?.length ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={probeAll.isPending}
+                onClick={() => {
+                  const ids = servers.data?.map((s) => s.id) ?? [];
+                  if (ids.length) probeAll.mutate(ids);
+                }}
+              >
+                {probeAll.isPending ? <Spinner data-icon="inline-start" /> : null}
+                Check all
+              </Button>
+            ) : null}
+            {isAdmin ? (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                <PlusIcon data-icon="inline-start" />
+                Add server
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
@@ -302,63 +639,23 @@ export default function McpLibraryPage() {
         </Empty>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
-          {servers.data.map((server) => (
-            <li key={server.id}>
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <PlugsConnectedIcon className="size-4" weight="duotone" />
-                    {server.label}
-                  </CardTitle>
-                  <CardDescription className="font-mono">{server.name}</CardDescription>
-                  <CardAction className="flex gap-1">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      aria-label={`Edit ${server.label}`}
-                      onClick={() => setEditing(server)}
-                    >
-                      <PencilSimpleIcon />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="destructive"
-                      aria-label={`Delete ${server.label}`}
-                      disabled={server.agentCount > 0 || remove.isPending}
-                      onClick={() => remove.mutate(server.id)}
-                    >
-                      <TrashIcon />
-                    </Button>
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  {server.description ? (
-                    <p className="text-xs/relaxed text-foreground">
-                      {server.description}
-                    </p>
-                  ) : null}
-                  <p className="truncate font-mono text-xs text-muted-foreground">
-                    {server.serverUrl}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {server.hasBearer ? (
-                      <Badge variant="secondary">bearer configured</Badge>
-                    ) : null}
-                    <Badge variant="outline">
-                      {server.agentCount} agent{server.agentCount === 1 ? "" : "s"}
-                    </Badge>
-                  </div>
-                  {server.agentCount > 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      Detach from all agents before deleting.
-                    </p>
-                  ) : null}
-                </CardContent>
-              </Card>
-            </li>
-          ))}
+          {servers.data.map((server) => {
+            const probe = probeByServerId.get(server.id);
+            return (
+              <li key={server.id}>
+                <McpServerCard
+                  server={server}
+                  isAdmin={Boolean(isAdmin)}
+                  probeResult={probe?.result}
+                  probePending={probe?.pending}
+                  onEdit={() => setEditing(server)}
+                  onDelete={() => remove.mutate(server.id)}
+                  onProbe={() => probeServer.mutate(server.id)}
+                  deletePending={remove.isPending}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -368,10 +665,13 @@ export default function McpLibraryPage() {
           edit page
         </Link>
         . With Daytona, the orchestrator connects to external MCP servers on each run.
+        {isAdmin
+          ? " Use Test connection to verify URL and bearer credentials, preview discovered tools, and surface auth failures before attaching a server to agents."
+          : null}
       </p>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <McpServerForm
             title="Add MCP server"
             description="Credentials are encrypted at rest. Bearer tokens are never returned to the browser."
@@ -385,7 +685,7 @@ export default function McpLibraryPage() {
       </Dialog>
 
       <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           {editing ? (
             <McpServerForm
               key={editing.id}
@@ -394,6 +694,7 @@ export default function McpLibraryPage() {
               initial={formFromServer(editing)}
               submitLabel="Save"
               pending={update.isPending}
+              serverId={editing.id}
               onCancel={() => setEditing(null)}
               onSubmit={(values) => update.mutate({ id: editing.id, values })}
             />
