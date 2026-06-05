@@ -68,7 +68,7 @@ export type UploadFileInput = {
 
 export type AgentRunContext = {
   runId: string;
-  surface: "chat" | "email";
+  surface: "chat" | "email" | "workflow";
   agentId: string;
   /** Frozen config version this run executes against. */
   agentVersionId?: string;

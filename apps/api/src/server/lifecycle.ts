@@ -3,11 +3,13 @@ import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { getBoss, stopBoss } from "../jobs/queue.js";
 import { registerRunAgentWorker } from "../jobs/runAgent.js";
+import { registerRunWorkflowWorker } from "../jobs/runWorkflow.js";
 import { registerSandboxReconcileWorker } from "../jobs/sandboxReconcile.js";
 import { registerSendEmailWorker } from "../jobs/sendEmail.js";
 import { backfillSandboxesFromSessions } from "../services/sandboxes.js";
 import { log } from "../log.js";
 import { stopRunEventsListener } from "../runs/events.js";
+import { stopWorkflowEventsListener } from "../runs/workflowEvents.js";
 import { seedToolCatalog } from "../services/seedToolCatalog.js";
 import { buildApp } from "./app.js";
 
@@ -33,6 +35,7 @@ export async function bootstrap(): Promise<void> {
   await seedToolCatalog();
   await getBoss();
   await registerRunAgentWorker();
+  await registerRunWorkflowWorker();
   await registerSendEmailWorker();
   const backfilled = await backfillSandboxesFromSessions();
   if (backfilled > 0) {
@@ -55,6 +58,11 @@ export async function bootstrap(): Promise<void> {
       await stopRunEventsListener();
     } catch (err) {
       log.warn("error stopping run-events listener", { err: String(err) });
+    }
+    try {
+      await stopWorkflowEventsListener();
+    } catch (err) {
+      log.warn("error stopping workflow-events listener", { err: String(err) });
     }
     try {
       await stopBoss();

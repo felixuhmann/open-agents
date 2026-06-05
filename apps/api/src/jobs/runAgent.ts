@@ -1,15 +1,11 @@
 import type { Job } from "pg-boss";
-import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
 import { getAgentById } from "../agents/service.js";
 import { loadAgentForRun } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
-import {
-  redactToolArgs,
-  summarizeToolResultForRunLog,
-} from "../services/runObservability.js";
+import { streamRunWithEvents } from "../services/runStream.js";
 import { uploadPendingChatAttachments } from "../services/chatAttachments.js";
 import { uploadPendingAttachments } from "../services/attachments.js";
 import {
@@ -273,116 +269,4 @@ async function appendRunStarted(runId: string, resolved: ResolvedSession): Promi
       },
     });
   }
-}
-
-/**
- * Stream one Daytona agent turn into RunEvent rows + NOTIFY.
- */
-async function streamRunWithEvents(
-  runId: string,
-  sessionId: string,
-  userMessage: string,
-  context: {
-    runId: string;
-    surface: "chat" | "email";
-    agentId: string;
-    agentVersionId?: string;
-    chatMessageId?: string;
-    emailMessageId?: string;
-  },
-): Promise<string> {
-  const backend = await getAgentBackend();
-  return backend.streamUntilIdle(
-    sessionId,
-    userMessage,
-    (event) => {
-      if (event.kind === "delta") {
-        void appendEvent({
-          runId,
-          type: "agent.delta",
-          payload: {
-            type: "agent.delta",
-            text: event.text,
-            rawType: event.rawType,
-          },
-        }).catch(() => undefined);
-      } else if (event.kind === "message") {
-        void appendEvent({
-          runId,
-          type: "agent.message",
-          payload: {
-            type: "agent.message",
-            text: event.text,
-            rawType: event.rawType,
-          },
-        }).catch(() => undefined);
-      } else if (event.kind === "tool_use") {
-        void appendEvent({
-          runId,
-          type: "tool.use",
-          payload: {
-            type: "tool.use",
-            toolName: event.toolName,
-            rawType: event.rawType,
-            ...(event.callId ? { callId: event.callId } : {}),
-            ...(event.args !== undefined ? { args: redactToolArgs(event.args) } : {}),
-          },
-        }).catch(() => undefined);
-      } else if (event.kind === "tool_output") {
-        void appendEvent({
-          runId,
-          type: "tool.output",
-          payload: {
-            type: "tool.output",
-            toolName: event.toolName,
-            stream: event.stream,
-            text: event.text,
-            rawType: event.rawType,
-            ...(event.callId ? { callId: event.callId } : {}),
-          },
-        }).catch(() => undefined);
-      } else if (event.kind === "tool_result") {
-        void appendEvent({
-          runId,
-          type: "tool.result",
-          payload: {
-            type: "tool.result",
-            toolName: event.toolName,
-            rawType: event.rawType,
-            ...(event.callId ? { callId: event.callId } : {}),
-            ...(event.result !== undefined
-              ? { result: summarizeToolResultForRunLog(event.result) }
-              : {}),
-            ...(event.isError !== undefined ? { isError: event.isError } : {}),
-          },
-        }).catch(() => undefined);
-      } else if (event.kind === "model_request") {
-        void appendEvent({
-          runId,
-          type: "model.request",
-          payload: {
-            type: "model.request",
-            model: event.model,
-            provider: event.provider,
-            stopReason: event.stopReason,
-            isError: event.isError,
-            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
-            rawType: event.rawType,
-            usage: event.usage,
-          },
-        }).catch(() => undefined);
-      } else if (event.kind === "session_error") {
-        void appendEvent({
-          runId,
-          type: "session.error",
-          payload: {
-            type: "session.error",
-            message: event.message,
-            rawType: event.rawType,
-          },
-        }).catch(() => undefined);
-      }
-    },
-    context,
-  );
 }

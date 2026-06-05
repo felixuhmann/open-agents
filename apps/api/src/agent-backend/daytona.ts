@@ -528,6 +528,43 @@ async function loadPriorMessages(
     stopReason: "stop",
     timestamp: Date.now(),
   });
+  if (context.surface === "workflow") {
+    // A workflow step's memory is its own prior turns in the same conversation
+    // slot (position). Reconstruct user/assistant pairs from prior step runs.
+    const stepRun = await prisma.workflowStepRun.findUnique({
+      where: { runId: context.runId },
+      include: { workflowRun: { select: { conversationId: true } } },
+    });
+    if (!stepRun) return [];
+    const priorSteps = await prisma.workflowStepRun.findMany({
+      where: {
+        position: stepRun.position,
+        status: "succeeded",
+        id: { not: stepRun.id },
+        workflowRun: { conversationId: stepRun.workflowRun.conversationId },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    return priorSteps.flatMap((row): Message[] => {
+      const messages: Message[] = [];
+      if (row.inputText) {
+        messages.push({
+          role: "user",
+          content: row.inputText,
+          timestamp: row.createdAt.getTime(),
+        });
+      }
+      if (row.output) {
+        messages.push({
+          ...assistantStub(),
+          content: [{ type: "text", text: row.output }],
+          timestamp: row.createdAt.getTime(),
+        });
+      }
+      return messages;
+    });
+  }
+
   if (context.surface === "chat") {
     const run = await prisma.agentRun.findUnique({ where: { id: context.runId } });
     if (!run?.conversationId) return [];

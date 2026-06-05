@@ -5,6 +5,7 @@
  */
 
 export const JOB_RUN_AGENT = "run-agent";
+export const JOB_RUN_WORKFLOW = "run-workflow";
 export const JOB_SEND_EMAIL = "send-email";
 export const JOB_SANDBOX_RECONCILE = "sandbox-reconcile";
 
@@ -34,3 +35,12 @@ export type SendEmailJobData = {
 };
 
 export type SandboxReconcileJobData = Record<string, never>;
+
+/**
+ * One pipeline run for a single workflow chat turn. The worker resolves the
+ * ordered steps from the pinned WorkflowVersion, runs each agent in sequence,
+ * and chains each step's text + file outputs into the next step's input.
+ */
+export type RunWorkflowJobData = {
+  workflowRunId: string;
+};

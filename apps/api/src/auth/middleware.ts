@@ -93,6 +93,27 @@ export async function requireAgentAccess(c: AppCtx, agentId: string): Promise<Au
   throw new HttpError(403, "no access to this agent");
 }
 
+/**
+ * Authorize that the current user can use a given workflow. Mirrors
+ * `requireAgentAccess`: operators always pass; members pass when the
+ * workflow is org-wide OR they have a WorkflowAccess row.
+ */
+export async function requireWorkflowAccess(
+  c: AppCtx,
+  workflowId: string,
+): Promise<AuthUser> {
+  const u = requireUser(c);
+  if (canOperateAgents(u)) return u;
+  const workflow = await prisma.workflow.findUnique({
+    where: { id: workflowId },
+    select: { accessMode: true, access: { where: { userId: u.id } } },
+  });
+  if (!workflow) throw new HttpError(404, "workflow not found");
+  if (workflow.accessMode === "everyone") return u;
+  if (workflow.access.length > 0) return u;
+  throw new HttpError(403, "no access to this workflow");
+}
+
 function normalizeRole(role: string): UserRole {
   return role === "admin" || role === "contributor" ? role : "member";
 }

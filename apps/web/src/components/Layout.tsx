@@ -9,6 +9,7 @@ import {
 import {
   ChartLineIcon,
   CloudIcon,
+  FlowArrowIcon,
   HouseIcon,
   KeyIcon,
   PlugsConnectedIcon,
@@ -75,6 +76,7 @@ type NavItem = {
 const NAV_BASE: Array<NavItem> = [
   { to: "/", label: "Dashboard", icon: HouseIcon, end: true },
   { to: "/agents", label: "Agents", icon: RobotIcon },
+  { to: "/workflows", label: "Workflows", icon: FlowArrowIcon },
 ];
 
 const NAV_LIBRARY: Array<NavItem> = [
@@ -99,6 +101,7 @@ const PATH_LABELS: Record<string, string> = {
   "/": "Dashboard",
   "/analytics": "Analytics",
   "/agents": "Agents",
+  "/workflows": "Workflows",
   "/library/tools": "Tools",
   "/library/skills": "Skills",
   "/library/mcp": "MCP",

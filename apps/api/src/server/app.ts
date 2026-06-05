@@ -16,6 +16,9 @@ import { skillsRoutes } from "../routes/api/skills.js";
 import { toolsRoutes } from "../routes/api/tools.js";
 import { modelsRoutes } from "../routes/api/models.js";
 import { usersRoutes } from "../routes/api/users.js";
+import { workflowsRoutes } from "../routes/api/workflows.js";
+import { workflowConversationsRoutes } from "../routes/api/workflowConversations.js";
+import { workflowRunsRoutes } from "../routes/api/workflowRuns.js";
 import { authRoutes } from "../routes/auth.js";
 import { healthRoutes } from "../routes/health.js";
 import {
@@ -87,6 +90,9 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/tools", toolsRoutes);
   app.route("/api/models", modelsRoutes);
   app.route("/api/users", usersRoutes);
+  app.route("/api/workflows", workflowsRoutes);
+  app.route("/api/workflow-conversations", workflowConversationsRoutes);
+  app.route("/api/workflow-runs", workflowRunsRoutes);
 
   app.route(SETUP_PREFIX, setupRoutes);
   app.route(HEALTH_PREFIX, healthRoutes);

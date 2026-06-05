@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import type { AgentSummaryDto, ModelCatalogDto } from "@open-agents/types";
+import type {
+  AgentSummaryDto,
+  ModelCatalogDto,
+  WorkflowDto,
+  WorkflowSummaryDto,
+} from "@open-agents/types";
 import { api } from "./api";
 
 export type SetupStatus = { complete: boolean; userCount: number };
@@ -136,6 +141,74 @@ export function useAgents() {
     queryKey: ["agents"],
     queryFn: () =>
       api<{ agents: AgentSummaryDto[] }>("/api/agents").then((r) => r.agents),
+  });
+}
+
+export function useWorkflows() {
+  return useQuery({
+    queryKey: ["workflows"],
+    queryFn: () =>
+      api<{ workflows: WorkflowSummaryDto[] }>("/api/workflows").then((r) => r.workflows),
+  });
+}
+
+export function useWorkflow(slug: string | undefined) {
+  return useQuery({
+    enabled: Boolean(slug),
+    queryKey: ["workflows", slug],
+    queryFn: () => api<WorkflowDto>(`/api/workflows/${slug}`),
+  });
+}
+
+export function useWorkflowAccess(slug: string | undefined, enabled = true) {
+  return useQuery({
+    enabled: Boolean(slug) && enabled,
+    queryKey: ["workflows", slug, "access"],
+    queryFn: () => api<AgentAccessDto>(`/api/workflows/${slug}/access`),
+  });
+}
+
+export type WorkflowConversationListItem = {
+  id: string;
+  title: string;
+  workflow: { id: string; slug: string; displayName: string };
+  updatedAt: string;
+};
+
+export function useWorkflowConversations(workflowSlug?: string) {
+  return useQuery({
+    queryKey: ["workflow-conversations", { workflowSlug: workflowSlug ?? null }],
+    queryFn: () => {
+      const url = workflowSlug
+        ? `/api/workflow-conversations?workflowSlug=${encodeURIComponent(workflowSlug)}`
+        : "/api/workflow-conversations";
+      return api<{ conversations: WorkflowConversationListItem[] }>(url).then(
+        (r) => r.conversations,
+      );
+    },
+  });
+}
+
+export type WorkflowChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  workflowRunId: string | null;
+  createdAt: string;
+};
+
+export type WorkflowConversationDetail = {
+  id: string;
+  title: string;
+  workflow: { id: string; slug: string; displayName: string };
+  messages: WorkflowChatMessage[];
+};
+
+export function useWorkflowConversation(id: string | undefined) {
+  return useQuery({
+    enabled: Boolean(id),
+    queryKey: ["workflow-conversations", id],
+    queryFn: () => api<WorkflowConversationDetail>(`/api/workflow-conversations/${id}`),
   });
 }
 
