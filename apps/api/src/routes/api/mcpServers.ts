@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { CreateMcpServerInput, UpdateMcpServerInput } from "@open-agents/types";
+import {
+  CreateMcpServerInput,
+  ProbeMcpServerInput,
+  ProbeStoredMcpServerInput,
+  UpdateMcpServerInput,
+} from "@open-agents/types";
 import { HttpError, requireAdmin, requireUser } from "../../auth/middleware.js";
 import type { AppVariables } from "../../server/types.js";
 import {
@@ -7,16 +12,33 @@ import {
   deleteMcpServer,
   getMcpServerById,
   listMcpServers,
+  probeMcpServerDraft,
+  probeStoredMcpServer,
   toMcpServerDto,
   updateMcpServer,
 } from "../../services/mcpServers.js";
 
 export const mcpServersRoutes = new Hono<{ Variables: AppVariables }>();
 
+mcpServersRoutes.post("/probe", async (c) => {
+  requireAdmin(c);
+  const body = ProbeMcpServerInput.parse(await c.req.json());
+  const result = await probeMcpServerDraft(body);
+  return c.json(result);
+});
+
 mcpServersRoutes.get("/", async (c) => {
   requireUser(c);
   const servers = await listMcpServers();
   return c.json({ servers: servers.map(toMcpServerDto) });
+});
+
+mcpServersRoutes.post("/:id/probe", async (c) => {
+  requireAdmin(c);
+  const id = c.req.param("id");
+  const body = ProbeStoredMcpServerInput.parse(await c.req.json().catch(() => ({})));
+  const result = await probeStoredMcpServer(id, body.bearer);
+  return c.json(result);
 });
 
 mcpServersRoutes.get("/:id", async (c) => {

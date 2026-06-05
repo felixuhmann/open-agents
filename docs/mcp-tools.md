@@ -65,6 +65,36 @@ Third-party MCP tools are exposed to the model as `<server-slug>_<tool-name>` (f
 
 Platform tool secrets never enter the Daytona sandbox. External MCP bearer tokens are decrypted on the API host and used only by the orchestrator-side MCP client.
 
+## MCP library operator UX
+
+The SPA **MCP** library (`/library/mcp`) is where admins register deployment-wide third-party MCP servers. Each card shows a health badge after a probe; admins can **Check all** or test individual servers.
+
+| Action                                       | API                               | Notes                                                                                                                                           |
+| -------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test unsaved URL + bearer (create/edit form) | `POST /api/mcp-servers/probe`     | Body: `{ serverUrl, bearer? }`. Admin only.                                                                                                     |
+| Test stored server                           | `POST /api/mcp-servers/:id/probe` | Uses the encrypted stored bearer unless `bearer` is sent in the body to try a new token before save.                                            |
+| Import connector manifest                    | (client-side)                     | Paste JSON matching `McpConnectorManifest` in the create dialog; fills name, label, description, and URL. Bearer tokens are never in manifests. |
+
+Probe responses (`McpProbeResult`) include connection status (`connected`, `auth_failure`, `unreachable`, `timeout`, `protocol_error`, `error`), latency, auth diagnostics (HTTP status, whether a bearer was sent), and a tool discovery preview (name, description, input schema per tool).
+
+Implementation: `apps/api/src/mcp/probeMcpServer.ts` connects with the same Streamable HTTP transport as runtime (`thirdPartyClient.ts`), lists tools, classifies failures, and always closes the client.
+
+### Connector manifests
+
+Deployment-specific MCP connector repos can export a small JSON manifest for fast registration:
+
+```json
+{
+  "manifestVersion": 1,
+  "name": "acme-crm",
+  "label": "Acme CRM",
+  "description": "Read/write customer records via the on-prem connector.",
+  "serverUrl": "https://mcp.internal.example.com/mcp"
+}
+```
+
+`manifestVersion` may be omitted (defaults to `1`). Operators paste the manifest in the UI, then add the bearer token separately.
+
 `RunEvent` payloads for `tool.use` / `tool.result` include `callId`, `args`, and truncated `result` text where available for debugging.
 
 ## The shipped catalog
