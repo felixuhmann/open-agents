@@ -41,9 +41,9 @@ model User {
 
   sessions              Session[]
   accounts              Account[]
-  oauthApplications     OAuthApplication[]
-  oauthAccessTokens     OAuthAccessToken[]
-  oauthConsents         OAuthConsent[]
+  oauthApplications     OauthApplication[]
+  oauthAccessTokens     OauthAccessToken[]
+  oauthConsents         OauthConsent[]
   agentAccess           AgentAccess[]
   conversations         ChatConversation[]
   createdAgents         Agent[]                @relation("AgentCreatedBy")
@@ -106,30 +106,32 @@ model Verification {
 
 // ---------------------------------------------------------------------------
 // better-auth MCP / OIDC provider tables (OAuth connectors for external clients).
+// Model names use `Oauth*` (not `OAuth*`) so the Prisma client exposes
+// `prisma.oauthApplication` — matching better-auth's expected adapter keys.
 // ---------------------------------------------------------------------------
 
-model OAuthApplication {
-  id           String             @id
+model OauthApplication {
+  id           String            @id
   name         String
   icon         String?
   metadata     String?
-  clientId     String             @unique
+  clientId     String            @unique
   clientSecret String?
   redirectUrls String
   type         String
-  disabled     Boolean            @default(false)
+  disabled     Boolean           @default(false)
   userId       String?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accessTokens OAuthAccessToken[]
-  consents     OAuthConsent[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  user         User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessTokens OauthAccessToken[]
+  consents     OauthConsent[]
 
   @@index([userId])
   @@map("oauthApplication")
 }
 
-model OAuthAccessToken {
+model OauthAccessToken {
   id                    String           @id
   accessToken           String           @unique
   refreshToken          String           @unique
@@ -140,7 +142,7 @@ model OAuthAccessToken {
   scopes                String
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
-  client                OAuthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  client                OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
   user                  User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
@@ -148,7 +150,7 @@ model OAuthAccessToken {
   @@map("oauthAccessToken")
 }
 
-model OAuthConsent {
+model OauthConsent {
   id           String           @id
   clientId     String
   userId       String
@@ -156,7 +158,7 @@ model OAuthConsent {
   consentGiven Boolean
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  client       OAuthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  client       OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
