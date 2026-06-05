@@ -55,6 +55,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FallbackLogo } from "@/components/FallbackLogo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { authClient } from "@/lib/auth";
 import {
@@ -146,7 +147,7 @@ export function Layout({ user, children }: Props) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild size="lg" tooltip={productName}>
                 <Link to="/" className="flex items-center gap-2">
-                  <div className="flex size-8 items-center justify-center bg-sidebar-primary text-sidebar-primary-foreground">
+                  <div className="flex size-8 items-center justify-center text-sidebar-foreground">
                     {sidebarLogo ? (
                       <img
                         src={sidebarLogo}
@@ -154,7 +155,7 @@ export function Layout({ user, children }: Props) {
                         className="max-h-full max-w-full object-contain"
                       />
                     ) : (
-                      <ChartLineIcon className="size-4" weight="fill" />
+                      <FallbackLogo className="size-5" />
                     )}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">

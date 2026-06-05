@@ -426,7 +426,6 @@ export default function WorkflowChatPage() {
     sendMessage.isPending ||
     uploadingCount > 0 ||
     Boolean(activeRunId);
-  const initials = workflow.data.displayName.slice(0, 2).toUpperCase();
   const empty = messages.length === 0 && steps.length === 0 && !optimistic && !sending;
   const notPublished = !workflow.data.currentVersionId;
 

@@ -23,8 +23,12 @@ practice).
 
 ## Files expected here
 
-- `fallback.png` — default agent avatar shown in the email header when
-  an `Agent` row doesn't declare its own `avatar`. Square PNG.
+- `fallback.svg` — source vector for the default agent mark (broken ring
+  with stylised “A”). Regenerate `fallback.png` from this when the mark
+  changes.
+- `fallback.png` — rasterised email-safe avatar shown in the email header
+  when an `Agent` row doesn't declare its own `avatar`. Transparent
+  background, dark ink on light email bodies. Square PNG.
 
 Per-agent profile pictures and the footer logo are uploaded through the
 SPA and stored under `apps/api/data/uploads/`; nothing per-customer

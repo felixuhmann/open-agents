@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
-import { PaperclipIcon, RobotIcon } from "@phosphor-icons/react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PaperclipIcon } from "@phosphor-icons/react";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { Markdown } from "@/components/Markdown";
 import { CopyButton } from "@/components/chat/CopyButton";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { formatBytes, formatTime } from "@/components/chat/utils";
-import { avatarSrc, type ChatAttachmentSummary } from "@/lib/queries";
+import type { ChatAttachmentSummary } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export type ChatMessageRole = "user" | "assistant" | "system";
@@ -61,17 +61,14 @@ export function ChatMessage({
     );
   }
 
-  const showAvatar = Boolean(agentAvatar);
   return (
     <div className="group/msg flex w-full items-start gap-3">
-      <Avatar className="mt-0.5 size-7 shrink-0 border border-border">
-        {showAvatar ? (
-          <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
-        ) : null}
-        <AvatarFallback className="bg-muted text-foreground">
-          <RobotIcon className="size-3.5" />
-        </AvatarFallback>
-      </Avatar>
+      <AgentAvatar
+        avatar={agentAvatar}
+        displayName={agentDisplayName}
+        className="mt-0.5 size-7 shrink-0 border border-border"
+        logoClassName="size-[62%]"
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 overflow-hidden">
         <span className="text-xs font-medium text-muted-foreground">
           {agentDisplayName}

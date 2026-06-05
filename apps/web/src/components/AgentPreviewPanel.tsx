@@ -6,8 +6,8 @@ import {
   RobotIcon,
 } from "@phosphor-icons/react";
 import type { AgentSummaryDto } from "@open-agents/types";
-import { avatarSrc, useAgent } from "@/lib/queries";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAgent } from "@/lib/queries";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,14 +37,7 @@ export function AgentPreviewPanel({
     <div className="flex flex-col">
       <div className="flex flex-col gap-2 p-4">
         <div className="flex items-start gap-3">
-          <Avatar>
-            {summary.avatar ? (
-              <AvatarImage src={avatarSrc(summary.avatar)} alt={summary.displayName} />
-            ) : null}
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              {summary.displayName.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <AgentAvatar avatar={summary.avatar} displayName={summary.displayName} />
           <div className="min-w-0 flex-1">
             <p className="font-medium leading-snug">{summary.displayName}</p>
             <p className="font-mono text-[11px] text-muted-foreground">{summary.slug}</p>

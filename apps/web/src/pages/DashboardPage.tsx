@@ -8,14 +8,9 @@ import {
   RobotIcon,
 } from "@phosphor-icons/react";
 import type { AgentSummaryDto } from "@open-agents/types";
-import {
-  avatarSrc,
-  useAgents,
-  useConversations,
-  useWorkflowConversations,
-} from "@/lib/queries";
+import { useAgents, useConversations, useWorkflowConversations } from "@/lib/queries";
 import { PageHeader, SectionHeading } from "@/components/PageHeader";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -124,14 +119,7 @@ export default function DashboardPage() {
                 <Card className="h-full transition-colors hover:bg-accent/30">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-3">
-                      <Avatar>
-                        {a.avatar ? (
-                          <AvatarImage src={avatarSrc(a.avatar)} alt={a.displayName} />
-                        ) : null}
-                        <AvatarFallback className="bg-primary text-primary-foreground">
-                          {a.displayName.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <AgentAvatar avatar={a.avatar} displayName={a.displayName} />
                       <Link
                         to={`/agents/${a.slug}`}
                         className="underline-offset-4 hover:underline"
@@ -260,17 +248,11 @@ function ConversationRow({
       >
         <div className="flex min-w-0 items-center gap-3">
           {conversation.kind === "agent" ? (
-            <Avatar size="sm">
-              {conversation.agent.avatar ? (
-                <AvatarImage
-                  src={avatarSrc(conversation.agent.avatar)}
-                  alt={conversation.agent.displayName}
-                />
-              ) : null}
-              <AvatarFallback className="bg-primary text-primary-foreground">
-                {conversation.agent.displayName.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <AgentAvatar
+              avatar={conversation.agent.avatar}
+              displayName={conversation.agent.displayName}
+              size="sm"
+            />
           ) : (
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <FlowArrowIcon className="size-4" />

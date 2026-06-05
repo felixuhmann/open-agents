@@ -14,8 +14,8 @@ import {
   type IssueStatus,
 } from "@/lib/queries";
 import { PageHeader } from "@/components/PageHeader";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { avatarSrc } from "@/lib/queries";
+import { AgentAvatar } from "@/components/AgentAvatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Empty,
@@ -113,14 +113,20 @@ export default function IssuesListPage() {
                         to={`/issues/${i.id}`}
                         className="flex items-center gap-2 hover:underline"
                       >
-                        <Avatar className="size-7">
-                          {targetAvatar ? (
-                            <AvatarImage src={avatarSrc(targetAvatar)} alt={targetName} />
-                          ) : null}
-                          <AvatarFallback className="bg-muted text-foreground text-[10px]">
-                            {initials}
-                          </AvatarFallback>
-                        </Avatar>
+                        {i.surface !== "workflow" ? (
+                          <AgentAvatar
+                            avatar={targetAvatar}
+                            displayName={targetName}
+                            className="size-7"
+                            logoClassName="size-[62%]"
+                          />
+                        ) : (
+                          <Avatar className="size-7">
+                            <AvatarFallback className="bg-muted text-foreground text-[10px]">
+                              {initials}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
                         <span className="font-medium">{targetName}</span>
                       </Link>
                     </TableCell>

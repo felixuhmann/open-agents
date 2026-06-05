@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  ChartLineIcon,
   CheckCircleIcon,
   WarningCircleIcon,
   WarningOctagonIcon,
 } from "@phosphor-icons/react";
+import { FallbackLogo } from "@/components/FallbackLogo";
 import { ApiError, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,11 +75,11 @@ export default function EmailIssueReportPage({ productName }: { productName: str
     <div className="grid min-h-screen place-items-center bg-background p-6">
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <div className="mb-2 flex size-9 items-center justify-center bg-primary text-primary-foreground">
+          <div className="mb-2 flex size-9 items-center justify-center text-foreground">
             {done ? (
               <CheckCircleIcon className="size-4" weight="fill" />
             ) : (
-              <ChartLineIcon className="size-4" weight="fill" />
+              <FallbackLogo className="size-6" />
             )}
           </div>
           <CardTitle>{title}</CardTitle>

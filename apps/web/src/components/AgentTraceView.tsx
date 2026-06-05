@@ -8,13 +8,11 @@ import {
   EnvelopeSimpleIcon,
   GearIcon,
   PuzzlePieceIcon,
-  RobotIcon,
   TerminalWindowIcon,
   UserIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
 import {
-  avatarSrc,
   type IssueDetailAgent,
   type IssueDetailMessage,
   type IssueDetailRun,
@@ -28,7 +26,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/AgentAvatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -95,19 +94,16 @@ function AgentContextCard({
   session: SessionTrace["session"];
   runs: IssueDetailRun[];
 }) {
-  const initials = agent.displayName.slice(0, 2).toUpperCase();
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Avatar className="size-7">
-            {agent.avatar ? (
-              <AvatarImage src={avatarSrc(agent.avatar)} alt={agent.displayName} />
-            ) : null}
-            <AvatarFallback className="bg-muted text-foreground text-[10px]">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <AgentAvatar
+            avatar={agent.avatar}
+            displayName={agent.displayName}
+            className="size-7"
+            logoClassName="size-[62%]"
+          />
           <span>{agent.displayName}</span>
           <span className="text-xs text-muted-foreground font-mono">{agent.slug}</span>
         </CardTitle>
@@ -518,23 +514,20 @@ function MessageBubble({
           mine ? "flex-row-reverse" : "flex-row",
         )}
       >
-        <Avatar className="size-7 shrink-0">
-          {!mine && !isSystem && agentAvatar ? (
-            <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
-          ) : null}
-          <AvatarFallback
-            className={cn(
-              "text-[10px]",
-              mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-            )}
-          >
-            {mine ? (
-              <UserIcon className="size-3.5" />
-            ) : (
-              <RobotIcon className="size-3.5" />
-            )}
-          </AvatarFallback>
-        </Avatar>
+        {mine || isSystem ? (
+          <Avatar className="size-7 shrink-0">
+            <AvatarFallback className="bg-muted text-foreground text-[10px]">
+              {mine ? <UserIcon className="size-3.5" /> : null}
+            </AvatarFallback>
+          </Avatar>
+        ) : (
+          <AgentAvatar
+            avatar={agentAvatar}
+            displayName={agentDisplayName}
+            className="size-7 shrink-0"
+            logoClassName="size-[62%]"
+          />
+        )}
         <div
           className={cn(
             "flex max-w-[80%] flex-col gap-1",
@@ -569,18 +562,20 @@ function MessageBubble({
         inbound ? "flex-row" : "flex-row-reverse",
       )}
     >
-      <Avatar className="size-7 shrink-0">
-        {!inbound && agentAvatar ? (
-          <AvatarImage src={avatarSrc(agentAvatar)} alt={agentDisplayName} />
-        ) : null}
-        <AvatarFallback className="bg-muted text-foreground text-[10px]">
-          {inbound ? (
+      {inbound ? (
+        <Avatar className="size-7 shrink-0">
+          <AvatarFallback className="bg-muted text-foreground text-[10px]">
             <UserIcon className="size-3.5" />
-          ) : (
-            <RobotIcon className="size-3.5" />
-          )}
-        </AvatarFallback>
-      </Avatar>
+          </AvatarFallback>
+        </Avatar>
+      ) : (
+        <AgentAvatar
+          avatar={agentAvatar}
+          displayName={agentDisplayName}
+          className="size-7 shrink-0"
+          logoClassName="size-[62%]"
+        />
+      )}
       <div
         className={cn(
           "flex max-w-[80%] flex-col gap-1",
