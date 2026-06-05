@@ -107,6 +107,7 @@ const PATH_LABELS: Record<string, string> = {
   "/library/mcp": "MCP",
   "/issues": "Issues",
   "/settings/profile": "Profile",
+  "/settings/mcp-connection": "MCP connection",
   "/settings/secrets": "Secrets",
   "/settings/sandboxes": "Sandboxes",
   "/settings/users": "Users",
@@ -218,6 +219,12 @@ export function Layout({ user, children }: Props) {
                     <Link to="/settings/profile">
                       <UserCircleIcon data-icon="inline-start" />
                       Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings/mcp-connection">
+                      <PlugsConnectedIcon data-icon="inline-start" />
+                      MCP connection
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

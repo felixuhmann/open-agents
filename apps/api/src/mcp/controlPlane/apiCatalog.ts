@@ -192,6 +192,24 @@ export const API_CATALOG: ApiCatalogEntry[] = [
     description: "Probe MCP server URL",
     auth: "admin",
   },
+  {
+    method: "GET",
+    path: "/api/mcp-connection/info",
+    description: "MCP server URL for external clients",
+    auth: "user",
+  },
+  {
+    method: "POST",
+    path: "/api/mcp-connection/tokens",
+    description: "Generate MCP bearer token",
+    auth: "user",
+  },
+  {
+    method: "GET",
+    path: "/api/mcp-connection/tokens",
+    description: "List active MCP bearer tokens",
+    auth: "user",
+  },
 
   // Admin
   { method: "GET", path: "/api/users", description: "List users", auth: "admin" },

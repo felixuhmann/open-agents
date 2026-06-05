@@ -880,6 +880,34 @@ export function useSandboxOrphans() {
   });
 }
 
+export type McpConnectionTokenSummary = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  updatedAt: string;
+  ipAddress: string | null;
+};
+
+export function useMcpConnectionInfo() {
+  return useQuery({
+    queryKey: ["mcp-connection", "info"],
+    queryFn: () => api<{ mcpUrl: string; docsPath: string }>("/api/mcp-connection/info"),
+    staleTime: 60_000,
+  });
+}
+
+export function useMcpConnectionTokens() {
+  return useQuery({
+    queryKey: ["mcp-connection", "tokens"],
+    queryFn: async (): Promise<McpConnectionTokenSummary[]> => {
+      const body = await api<{ tokens: McpConnectionTokenSummary[] }>(
+        "/api/mcp-connection/tokens",
+      );
+      return body.tokens;
+    },
+  });
+}
+
 export function useConversationSandbox(conversationId: string | undefined) {
   return useQuery({
     enabled: Boolean(conversationId),

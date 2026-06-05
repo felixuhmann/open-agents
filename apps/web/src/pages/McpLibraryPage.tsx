@@ -594,6 +594,12 @@ export default function McpLibraryPage() {
         description="Register third-party Model Context Protocol servers once, then attach them to any agent."
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link to="/settings/mcp-connection">
+                <PlugsConnectedIcon data-icon="inline-start" />
+                Connect external agents
+              </Link>
+            </Button>
             {isAdmin && servers.data?.length ? (
               <Button
                 type="button"

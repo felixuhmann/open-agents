@@ -23,7 +23,9 @@ Authorization: Bearer <session_token>
 
 ### Getting a token
 
-1. Sign in through the web UI or via the auth API:
+**Recommended:** open **Settings → MCP connection** in the web UI (`/settings/mcp-connection`), click **Generate auth token**, and copy the ready-made `claude_desktop_config.json` block.
+
+Alternatively, sign in through the web UI or via the auth API:
 
 ```bash
 curl -s -X POST "$PUBLIC_BASE_URL/api/auth/sign-in/email" \

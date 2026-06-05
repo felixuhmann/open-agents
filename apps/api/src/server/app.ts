@@ -11,6 +11,7 @@ import { runsRoutes } from "../routes/api/runs.js";
 import { sandboxesRoutes } from "../routes/api/sandboxes.js";
 import { secretsRoutes } from "../routes/api/secrets.js";
 import { settingsRoutes } from "../routes/api/settings.js";
+import { mcpConnectionRoutes } from "../routes/api/mcpConnection.js";
 import { mcpServersRoutes } from "../routes/api/mcpServers.js";
 import { skillsRoutes } from "../routes/api/skills.js";
 import { toolsRoutes } from "../routes/api/tools.js";
@@ -92,6 +93,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/sandboxes", sandboxesRoutes);
   app.route("/api/secrets", secretsRoutes);
   app.route("/api/settings", settingsRoutes);
+  app.route("/api/mcp-connection", mcpConnectionRoutes);
   app.route("/api/mcp-servers", mcpServersRoutes);
   app.route("/api/skills", skillsRoutes);
   app.route("/api/tools", toolsRoutes);
