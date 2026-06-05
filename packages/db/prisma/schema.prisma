@@ -484,7 +484,7 @@ model AgentRun {
   /// Frozen config this run executed against (`Agent.currentVersionId` at enqueue).
   agentVersionId String?
   agentVersion   AgentVersion?     @relation(fields: [agentVersionId], references: [id], onDelete: SetNull)
-  /// `email` | `chat`.
+  /// `email` | `chat` | `workflow`.
   surface        String
   /// Set when surface = `email`.
   threadId       String?
@@ -602,24 +602,29 @@ model EmailAttachment {
 }
 
 // ---------------------------------------------------------------------------
-// User-filed issues. A reporter (chat user or email recipient) flags a
-// session where the agent misbehaved; admins triage the issue and review
-// the full conversation + raw run trace from the SPA.
+// User-filed issues. A reporter flags a session where an agent or workflow
+// misbehaved; admins triage the issue and review the full conversation + raw
+// run trace from the SPA.
 //
-// Exactly one of `conversationId` (surface = chat) or `threadId`
-// (surface = email) is set — `surface` mirrors `AgentRun.surface`.
+// Exactly one of `conversationId` (surface = chat), `threadId`
+// (surface = email), or `workflowConversationId` (surface = workflow) is set.
 // ---------------------------------------------------------------------------
 
 model Issue {
   id             String    @id @default(cuid())
-  agentId        String
-  /// `chat` | `email`. Mirrors AgentRun.surface — drives which session
-  /// FK is consulted and how the SPA renders the conversation history.
+  /// Set for chat/email reports.
+  agentId        String?
+  /// Set for workflow reports.
+  workflowId     String?
+  /// `chat` | `email` | `workflow`. Drives which session FK is consulted and
+  /// how the SPA renders the conversation history.
   surface        String
   /// Set when surface = `chat`.
   conversationId String?
   /// Set when surface = `email`.
   threadId       String?
+  /// Set when surface = `workflow`.
+  workflowConversationId String?
   /// Reporter's User row. Set for chat reports (cookie-authed) and for
   /// email reports when the email matches a known User.
   reporterUserId String?
@@ -636,15 +641,19 @@ model Issue {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  agent        Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  conversation ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  thread       EmailThread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  reporter     User?             @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
-  resolvedBy   User?             @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  agent        Agent?                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workflow     Workflow?             @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  conversation ChatConversation?      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  thread       EmailThread?           @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  workflowConversation WorkflowConversation? @relation(fields: [workflowConversationId], references: [id], onDelete: Cascade)
+  reporter     User?                  @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  resolvedBy   User?                  @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([agentId])
+  @@index([workflowId])
   @@index([conversationId])
   @@index([threadId])
+  @@index([workflowConversationId])
   @@index([status])
   @@index([reporterUserId])
 }
@@ -683,6 +692,7 @@ model Workflow {
   access        WorkflowAccess[]
   conversations WorkflowConversation[]
   runs          WorkflowRun[]
+  issues        Issue[]
 
   @@index([createdById])
 }
@@ -746,6 +756,7 @@ model WorkflowConversation {
   messages      WorkflowMessage[]
   runs          WorkflowRun[]
   agentSessions WorkflowAgentSession[]
+  issues        Issue[]
 
   @@index([workflowId])
   @@index([userId])

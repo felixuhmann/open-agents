@@ -31,7 +31,7 @@ export type IssueDetailSandbox = {
 
 export type IssueDetailRun = {
   id: string;
-  surface: "chat" | "email";
+  surface: "chat" | "email" | "workflow";
   sessionId: string | null;
   runtimeBackend: string | null;
   providerSandboxId: string | null;
@@ -229,7 +229,7 @@ function toIssueDetailAgent(agent: AgentWithBindings): IssueDetailAgent {
   };
 }
 
-function collectSessionIds(runs: IssueDetailRun[]): string[] {
+export function collectSessionIds(runs: IssueDetailRun[]): string[] {
   const sessionIds: string[] = [];
   for (const r of runs) {
     if (r.sessionId && !sessionIds.includes(r.sessionId)) {
@@ -239,7 +239,7 @@ function collectSessionIds(runs: IssueDetailRun[]): string[] {
   return sessionIds;
 }
 
-async function loadSandboxes(args: {
+export async function loadSandboxes(args: {
   conversationId: string | null;
   threadId: string | null;
   sessionIds: string[];
@@ -455,7 +455,7 @@ function providerSandboxIdFromSessionId(sessionId: string | null): string | null
   }
 }
 
-function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
+export function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
   const events = r.events.map((e) => ({
     seq: e.seq,
     type: e.type,
@@ -468,7 +468,7 @@ function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
     sandboxMeta.providerSandboxId ?? providerSandboxIdFromSessionId(sessionId);
   return {
     id: r.id,
-    surface: r.surface as "chat" | "email",
+    surface: r.surface as "chat" | "email" | "workflow",
     sessionId,
     runtimeBackend: runtimeBackendFromVersion(r.agentVersion?.payload),
     providerSandboxId,

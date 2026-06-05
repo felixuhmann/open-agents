@@ -39,7 +39,9 @@ export function buildWorkflowConfigSnapshot(
   return WorkflowConfigSnapshot.parse({ schemaVersion: 1, steps });
 }
 
-export function parseWorkflowConfigSnapshot(payload: unknown): WorkflowConfigSnapshotType {
+export function parseWorkflowConfigSnapshot(
+  payload: unknown,
+): WorkflowConfigSnapshotType {
   return WorkflowConfigSnapshot.parse(payload);
 }
 

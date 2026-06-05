@@ -66,7 +66,10 @@ export const UpdateWorkflowInput = z.object({
   webEnabled: z.boolean().optional(),
   accessMode: AgentAccessMode.optional(),
   /** Replace-semantics: the ordered list of agent ids the pipeline runs. */
-  steps: z.array(z.object({ agentId: z.string() })).max(20).optional(),
+  steps: z
+    .array(z.object({ agentId: z.string() }))
+    .max(20)
+    .optional(),
   accessUserIds: z.array(z.string()).optional(),
 });
 export type UpdateWorkflowInput = z.infer<typeof UpdateWorkflowInput>;

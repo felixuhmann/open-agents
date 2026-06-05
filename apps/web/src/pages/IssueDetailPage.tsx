@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import { AgentTracePanel } from "@/components/AgentTraceView";
+import { WorkflowTracePanel } from "@/components/WorkflowTraceView";
 import {
   canOperateAgents,
   useCurrentUser,
@@ -16,6 +17,7 @@ import {
   type IssueDetail,
 } from "@/lib/queries";
 import { buildSessionTraceExport } from "@/lib/sessionTraceExport";
+import { buildWorkflowTraceExport } from "@/lib/workflowTraceExport";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge, SurfaceBadge } from "./IssuesListPage";
 import { Button } from "@/components/ui/button";
@@ -80,7 +82,11 @@ export default function IssueDetailPage() {
           </Link>
         </Button>
         <PageHeader
-          title={`Issue against ${data.agent.displayName}`}
+          title={`Issue against ${
+            data.surface === "workflow"
+              ? data.workflow.displayName
+              : data.agent.displayName
+          }`}
           description={`Filed ${new Date(data.createdAt).toLocaleString()} by ${data.reporterEmail}.`}
           actions={
             <div className="flex items-center gap-2">
@@ -125,7 +131,11 @@ export default function IssueDetailPage() {
 
       <ReportSummaryCard data={data} />
 
-      <AgentTracePanel data={data} />
+      {data.surface === "workflow" ? (
+        <WorkflowTracePanel data={data} />
+      ) : (
+        <AgentTracePanel data={data} />
+      )}
     </div>
   );
 }
@@ -148,7 +158,16 @@ function ReportSummaryCard({ data }: { data: IssueDetail }) {
       </CardHeader>
       <CardContent>
         <p className="whitespace-pre-wrap text-sm">{data.description}</p>
-        {data.session.conversationId ? (
+        {data.surface === "workflow" ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            <Link
+              className="underline hover:text-foreground"
+              to={`/workflows/${data.workflow.slug}/chat/${data.session.conversationId}`}
+            >
+              Open the live workflow conversation →
+            </Link>
+          </p>
+        ) : data.session.conversationId ? (
           <p className="mt-3 text-xs text-muted-foreground">
             <Link
               className="underline hover:text-foreground"
@@ -164,7 +183,10 @@ function ReportSummaryCard({ data }: { data: IssueDetail }) {
 }
 
 function buildFullExport(data: IssueDetail): unknown {
-  const sessionExport = buildSessionTraceExport(data) as Record<string, unknown>;
+  const sessionExport =
+    data.surface === "workflow"
+      ? (buildWorkflowTraceExport(data) as Record<string, unknown>)
+      : (buildSessionTraceExport(data) as Record<string, unknown>);
   return {
     issue: {
       id: data.id,

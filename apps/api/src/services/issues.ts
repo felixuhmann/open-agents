@@ -13,7 +13,9 @@ import {
   type IssueDetailSkillBinding,
   type IssueDetailThirdPartyMcp,
   type IssueDetailToolBinding,
+  type SessionTrace,
 } from "./sessionTrace.js";
+import { getWorkflowConversationTrace, type WorkflowTrace } from "./workflowTrace.js";
 
 export type {
   IssueDetailAgent,
@@ -35,7 +37,7 @@ export type {
 
 export type IssueListRow = {
   id: string;
-  surface: "chat" | "email";
+  surface: "chat" | "email" | "workflow";
   status: "open" | "resolved";
   description: string;
   reporterEmail: string;
@@ -46,9 +48,15 @@ export type IssueListRow = {
     slug: string;
     displayName: string;
     avatar: string | null;
-  };
+  } | null;
+  workflow: {
+    id: string;
+    slug: string;
+    displayName: string;
+  } | null;
   conversationId: string | null;
   threadId: string | null;
+  workflowConversationId: string | null;
   sessionLabel: string;
   createdAt: string;
   resolvedAt: string | null;
@@ -141,6 +149,38 @@ export async function createEmailIssue(args: {
   return { id: issue.id };
 }
 
+export async function createWorkflowIssue(args: {
+  conversationId: string;
+  reporterUserId: string;
+  reporterEmail: string;
+  description: string;
+}): Promise<{ id: string }> {
+  const description = normaliseDescription(args.description);
+  const conv = await prisma.workflowConversation.findUnique({
+    where: { id: args.conversationId },
+    select: { id: true, workflowId: true, userId: true },
+  });
+  if (!conv) throw new HttpError(404, "workflow conversation not found");
+  const issue = await prisma.issue.create({
+    data: {
+      workflowId: conv.workflowId,
+      surface: "workflow",
+      workflowConversationId: conv.id,
+      reporterUserId: args.reporterUserId,
+      reporterEmail: args.reporterEmail,
+      description,
+      status: "open",
+    },
+  });
+  log.info("issues: workflow issue filed", {
+    issueId: issue.id,
+    workflowConversationId: conv.id,
+    workflowId: conv.workflowId,
+    reporterUserId: args.reporterUserId,
+  });
+  return { id: issue.id };
+}
+
 export async function listIssues(args: {
   status?: "open" | "resolved";
 }): Promise<IssueListRow[]> {
@@ -150,39 +190,52 @@ export async function listIssues(args: {
     take: 500,
     include: {
       agent: { select: { id: true, slug: true, displayName: true, avatar: true } },
+      workflow: { select: { id: true, slug: true, displayName: true } },
       reporter: { select: { id: true, name: true } },
       conversation: { select: { title: true } },
       thread: { select: { subject: true } },
+      workflowConversation: { select: { title: true } },
     },
   });
   return rows.map((r) => ({
     id: r.id,
-    surface: r.surface as "chat" | "email",
+    surface: r.surface as "chat" | "email" | "workflow",
     status: r.status as "open" | "resolved",
     description: r.description,
     reporterEmail: r.reporterEmail,
     reporterUserId: r.reporterUserId,
     reporterName: r.reporter?.name ?? null,
-    agent: {
-      id: r.agent.id,
-      slug: r.agent.slug,
-      displayName: r.agent.displayName,
-      avatar: r.agent.avatar,
-    },
+    agent: r.agent
+      ? {
+          id: r.agent.id,
+          slug: r.agent.slug,
+          displayName: r.agent.displayName,
+          avatar: r.agent.avatar,
+        }
+      : null,
+    workflow: r.workflow
+      ? {
+          id: r.workflow.id,
+          slug: r.workflow.slug,
+          displayName: r.workflow.displayName,
+        }
+      : null,
     conversationId: r.conversationId,
     threadId: r.threadId,
+    workflowConversationId: r.workflowConversationId,
     sessionLabel:
       r.surface === "chat"
         ? (r.conversation?.title ?? "Conversation")
-        : (r.thread?.subject ?? "Email thread"),
+        : r.surface === "email"
+          ? (r.thread?.subject ?? "Email thread")
+          : (r.workflowConversation?.title ?? "Workflow conversation"),
     createdAt: r.createdAt.toISOString(),
     resolvedAt: r.resolvedAt?.toISOString() ?? null,
   }));
 }
 
-export type IssueDetail = {
+type IssueMetadata = {
   id: string;
-  surface: "chat" | "email";
   status: "open" | "resolved";
   description: string;
   reporterEmail: string;
@@ -193,18 +246,9 @@ export type IssueDetail = {
   resolvedByEmail: string | null;
   createdAt: string;
   updatedAt: string;
-  agent: IssueDetailAgent;
-  session: {
-    conversationId: string | null;
-    threadId: string | null;
-    label: string;
-    userEmail: string | null;
-    backendSessionIds: string[];
-    sandboxes: IssueDetailSandbox[];
-  };
-  messages: IssueDetailMessage[];
-  runs: IssueDetailRun[];
 };
+
+export type IssueDetail = IssueMetadata & (SessionTrace | WorkflowTrace);
 
 export async function getIssueDetail(id: string): Promise<IssueDetail> {
   const issue = await prisma.issue.findUnique({
@@ -221,7 +265,9 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
       ? await getConversationTrace(issue.conversationId)
       : issue.surface === "email" && issue.threadId
         ? await getEmailThreadTrace(issue.threadId)
-        : null;
+        : issue.surface === "workflow" && issue.workflowConversationId
+          ? await getWorkflowConversationTrace(issue.workflowConversationId)
+          : null;
 
   if (!trace) {
     throw new HttpError(404, "issue session not found");
@@ -229,7 +275,6 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
 
   return {
     id: issue.id,
-    surface: issue.surface as "chat" | "email",
     status: issue.status as "open" | "resolved",
     description: issue.description,
     reporterEmail: issue.reporterEmail,
@@ -240,10 +285,7 @@ export async function getIssueDetail(id: string): Promise<IssueDetail> {
     resolvedByEmail: issue.resolvedBy?.email ?? null,
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
-    agent: trace.agent,
-    session: trace.session,
-    messages: trace.messages,
-    runs: trace.runs,
+    ...trace,
   };
 }
 

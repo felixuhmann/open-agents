@@ -90,8 +90,7 @@ export default function WorkflowsListPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (slug: string) =>
-      api(`/api/workflows/${slug}`, { method: "DELETE" }),
+    mutationFn: (slug: string) => api(`/api/workflows/${slug}`, { method: "DELETE" }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["workflows"] });
       toast.success("Workflow deleted");

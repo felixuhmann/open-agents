@@ -114,7 +114,8 @@ export async function updateWorkflow(
   const scalarUpdate: Prisma.WorkflowUpdateInput = {};
   if (args.displayName !== undefined) scalarUpdate.displayName = args.displayName;
   if (args.description !== undefined) scalarUpdate.description = args.description;
-  if (args.starterPrompts !== undefined) scalarUpdate.starterPrompts = args.starterPrompts;
+  if (args.starterPrompts !== undefined)
+    scalarUpdate.starterPrompts = args.starterPrompts;
   if (args.webEnabled !== undefined) scalarUpdate.webEnabled = args.webEnabled;
   if (args.accessMode !== undefined) scalarUpdate.accessMode = args.accessMode;
 
