@@ -4,6 +4,9 @@ import {
   SandboxNetworkPolicySchema,
 } from "./sandboxPolicy.js";
 
+/** Reserved slug for the in-app assistant agent (widget chat). */
+export const APP_ASSISTANT_AGENT_SLUG = "app-assistant";
+
 export const AgentAccessMode = z.enum(["everyone", "specific"]);
 export type AgentAccessMode = z.infer<typeof AgentAccessMode>;
 
@@ -76,6 +79,16 @@ export const CreateAgentInput = z.object({
   systemPrompt: z.string().max(20000).optional(),
 });
 export type CreateAgentInput = z.infer<typeof CreateAgentInput>;
+
+export const AppAssistantDto = z.object({
+  agentSlug: z.string(),
+  displayName: z.string(),
+  avatar: z.string().nullable(),
+  /** False when the assistant agent is missing or has no published version. */
+  ready: z.boolean(),
+  canManageAgents: z.boolean(),
+});
+export type AppAssistantDto = z.infer<typeof AppAssistantDto>;
 
 export const UpdateAgentInput = z.object({
   displayName: z.string().min(1).max(120).optional(),

@@ -72,6 +72,8 @@ export type AgentRunContext = {
   agentId: string;
   /** Frozen config version this run executes against. */
   agentVersionId?: string;
+  /** Web chat user driving ACL-sensitive platform tools. */
+  actingUserId?: string;
   chatMessageId?: string;
   emailMessageId?: string;
 };

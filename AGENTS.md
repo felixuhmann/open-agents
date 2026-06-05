@@ -179,6 +179,14 @@ Append the handler to `PLATFORM_HANDLERS`. A boot-time
 upserts a `Tool` row (with `runtime = platform`) and also seeds the
 Daytona-managed sandbox tool rows. Don't insert `Tool` rows by hand.
 
+The built-in **app assistant** (`app-assistant` slug) is seeded on boot via
+[`ensureAppAssistantAgent()`](apps/api/src/services/appAssistant.ts). It
+binds the `open_agents` platform handler so the SPA widget can create/update/delete
+agents through the same service layer as `/api/agents` (not a separate MCP HTTP
+server). Extend `open_agents_*` tools in
+[`mcp/platform/openAgents.ts`](apps/api/src/mcp/platform/openAgents.ts) to expose
+more of the API surface over time.
+
 ### Database (Prisma 7)
 
 The schema lives at

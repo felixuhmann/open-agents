@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   AgentSummaryDto,
+  AppAssistantDto,
   ModelCatalogDto,
   WorkflowDto,
   WorkflowSummaryDto,
@@ -141,6 +142,14 @@ export function useAgents() {
     queryKey: ["agents"],
     queryFn: () =>
       api<{ agents: AgentSummaryDto[] }>("/api/agents").then((r) => r.agents),
+  });
+}
+
+export function useAppAssistant() {
+  return useQuery({
+    queryKey: ["app-assistant"],
+    queryFn: () => api<AppAssistantDto>("/api/app-assistant"),
+    staleTime: 60_000,
   });
 }
 

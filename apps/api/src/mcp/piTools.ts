@@ -47,7 +47,7 @@ function platformToolLabel(handlerName: string, toolName: string): string {
  */
 export function buildPlatformPiTools(
   agent: HydratedAgent,
-  runtime?: { sandbox?: PlatformSandboxCtx },
+  runtime?: { sandbox?: PlatformSandboxCtx; actingUserId?: string },
 ): AgentTool[] {
   const tools: AgentTool[] = [];
 
@@ -164,7 +164,7 @@ export async function buildThirdPartyPiTools(
 export async function buildMcpPiTools(
   agent: HydratedAgent,
   thirdPartyBearer: ReadonlyMap<string, string>,
-  runtime?: { sandbox?: PlatformSandboxCtx },
+  runtime?: { sandbox?: PlatformSandboxCtx; actingUserId?: string },
 ): Promise<{ tools: AgentTool[]; connections: ThirdPartyMcpConnection[] }> {
   const platform = buildPlatformPiTools(agent, runtime);
   const third = await buildThirdPartyPiTools(agent, thirdPartyBearer);

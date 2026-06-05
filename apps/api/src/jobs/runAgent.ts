@@ -218,6 +218,7 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     surface: "chat",
     agentId: agent.id,
     agentVersionId: agent.agentVersionId,
+    actingUserId: conversation.userId,
     chatMessageId: data.chatMessageId,
   });
 

@@ -21,7 +21,7 @@ export async function invokePlatformTool(
   toolName: string,
   args: Record<string, unknown>,
   configJson: Record<string, unknown>,
-  runtime?: { sandbox?: PlatformSandboxCtx },
+  runtime?: { sandbox?: PlatformSandboxCtx; actingUserId?: string },
 ): Promise<PlatformToolInvokeResult> {
   const handler = getPlatformHandler(handlerKey);
   if (!handler) {
@@ -36,6 +36,7 @@ export async function invokePlatformTool(
   const ctx: PlatformHandlerCtx = {
     agentId: agent.id,
     agentSlug: agent.slug,
+    actingUserId: runtime?.actingUserId,
     configJson,
     secrets: await getToolSecrets(bindingId),
     sandbox: runtime?.sandbox,

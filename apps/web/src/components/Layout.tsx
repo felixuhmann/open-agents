@@ -64,6 +64,7 @@ import {
   type CurrentUser,
   usePublicBranding,
 } from "@/lib/queries";
+import { AppAssistantWidget } from "@/components/AppAssistantWidget";
 import { Badge } from "./ui/badge";
 
 type NavItem = {
@@ -261,6 +262,7 @@ export function Layout({ user, children }: Props) {
           <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       </SidebarInset>
+      <AppAssistantWidget />
     </SidebarProvider>
   );
 }

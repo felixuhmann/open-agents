@@ -10,6 +10,7 @@ import { backfillSandboxesFromSessions } from "../services/sandboxes.js";
 import { log } from "../log.js";
 import { stopRunEventsListener } from "../runs/events.js";
 import { stopWorkflowEventsListener } from "../runs/workflowEvents.js";
+import { ensureAppAssistantAgent } from "../services/appAssistant.js";
 import { seedToolCatalog } from "../services/seedToolCatalog.js";
 import { buildApp } from "./app.js";
 
@@ -33,6 +34,7 @@ export async function bootstrap(): Promise<void> {
 
   await prisma.$connect();
   await seedToolCatalog();
+  await ensureAppAssistantAgent();
   await getBoss();
   await registerRunAgentWorker();
   await registerRunWorkflowWorker();

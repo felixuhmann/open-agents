@@ -1,6 +1,10 @@
 import { File } from "node:buffer";
 import { Hono } from "hono";
-import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
+import {
+  APP_ASSISTANT_AGENT_SLUG,
+  CreateAgentInput,
+  UpdateAgentInput,
+} from "@open-agents/types";
 import { resolveDraftSandboxPolicy } from "../../services/sandboxPolicy.js";
 import { parseStarterPrompts } from "../../agents/starterPrompts.js";
 import {
@@ -115,12 +119,14 @@ function toDto(
 agentsRoutes.get("/", async (c) => {
   const user = requireUser(c);
   const all = await listAgents();
-  const visible = canOperateAgents(user)
-    ? all
-    : all.filter(
-        (a) =>
-          a.accessMode === "everyone" || a.access.some((acc) => acc.userId === user.id),
-      );
+  const visible = (
+    canOperateAgents(user)
+      ? all
+      : all.filter(
+          (a) =>
+            a.accessMode === "everyone" || a.access.some((acc) => acc.userId === user.id),
+        )
+  ).filter((a) => a.slug !== APP_ASSISTANT_AGENT_SLUG);
   return c.json({ agents: visible.map(toSummary) });
 });
 
@@ -174,6 +180,9 @@ agentsRoutes.post("/:slug/publish", async (c) => {
 agentsRoutes.delete("/:slug", async (c) => {
   requireAgentOperator(c);
   const slug = c.req.param("slug");
+  if (slug === APP_ASSISTANT_AGENT_SLUG) {
+    throw new HttpError(403, "the app assistant agent cannot be deleted");
+  }
   const agent = await getAgentBySlug(slug);
   if (!agent) throw new HttpError(404, "agent not found");
   if (agent.avatar) {

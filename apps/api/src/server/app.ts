@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { attachUser } from "../auth/middleware.js";
 import { config } from "../config.js";
 import { agentsRoutes } from "../routes/api/agents.js";
+import { appAssistantRoutes } from "../routes/api/appAssistant.js";
 import { analyticsRoutes } from "../routes/api/analytics.js";
 import { conversationsRoutes } from "../routes/api/conversations.js";
 import { issuesRoutes } from "../routes/api/issues.js";
@@ -77,6 +78,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route(AUTH_PREFIX, authRoutes);
 
   app.route("/api/agents", agentsRoutes);
+  app.route("/api/app-assistant", appAssistantRoutes);
   app.route("/api/analytics", analyticsRoutes);
   app.route("/api/conversations", conversationsRoutes);
   app.route("/api/issues", issuesRoutes);

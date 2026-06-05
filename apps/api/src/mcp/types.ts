@@ -10,6 +10,11 @@ export type PlatformHandlerCtx = {
   agentId: string;
   /** Agent slug, useful for logging. */
   agentSlug: string;
+  /**
+   * User id for the human driving this run (web chat). Set for app-assistant
+   * and other in-app surfaces so platform tools can enforce ACLs.
+   */
+  actingUserId?: string;
   /** Per-binding config the admin set in the UI. Empty object if none. */
   configJson: Record<string, unknown>;
   /** Per-binding secrets (decrypted). Empty object if none. */
