@@ -488,7 +488,6 @@ export default function WorkflowChatPage() {
               <ChatEmptyState
                 agentDisplayName={workflow.data.displayName}
                 agentAvatar={null}
-                agentInitials={initials}
                 starterPrompts={workflow.data.starterPrompts}
                 onPick={(text) => setDraft(text)}
               />
