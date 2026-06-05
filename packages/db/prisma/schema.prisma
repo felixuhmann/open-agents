@@ -39,13 +39,16 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  sessions       Session[]
-  accounts       Account[]
-  agentAccess    AgentAccess[]
-  conversations  ChatConversation[]
-  createdAgents  Agent[]            @relation("AgentCreatedBy")
-  reportedIssues Issue[]            @relation("IssueReporter")
-  resolvedIssues Issue[]            @relation("IssueResolver")
+  sessions              Session[]
+  accounts              Account[]
+  agentAccess           AgentAccess[]
+  conversations         ChatConversation[]
+  createdAgents         Agent[]                @relation("AgentCreatedBy")
+  reportedIssues        Issue[]                @relation("IssueReporter")
+  resolvedIssues        Issue[]                @relation("IssueResolver")
+  createdWorkflows      Workflow[]             @relation("WorkflowCreatedBy")
+  workflowAccess        WorkflowAccess[]
+  workflowConversations WorkflowConversation[]
 
   @@map("user")
 }
@@ -200,6 +203,7 @@ model Agent {
   runs          AgentRun[]
   issues        Issue[]
   sandboxes     AgentSandbox[]
+  workflowSteps WorkflowStep[]
 
   @@index([createdById])
 }
@@ -500,6 +504,7 @@ model AgentRun {
   conversation   ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   events         RunEvent[]
   attachments    AgentAttachment[]
+  workflowStepRun WorkflowStepRun?
 
   @@index([agentId])
   @@index([agentVersionId])
@@ -642,4 +647,201 @@ model Issue {
   @@index([threadId])
   @@index([status])
   @@index([reporterUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Workflows: an ordered pipeline of agents. The first step receives the
+// user's request; each step's text + file outputs feed the next step's
+// input; the last step's output is delivered back to the user. Mirrors the
+// Agent model (draft config + published version snapshot), but a workflow
+// owns no runtime config of its own — it only references published agents.
+// ---------------------------------------------------------------------------
+
+model Workflow {
+  id          String  @id @default(cuid())
+  /// URL slug for the workflow chat + admin pages.
+  slug        String  @unique
+  displayName String
+  description String?
+  /// Suggested first messages shown in the workflow chat empty state.
+  starterPrompts Json @default("[]")
+  webEnabled  Boolean @default(true)
+  /// `everyone` (any deployment user can run it) or `specific` (WorkflowAccess).
+  accessMode  String  @default("everyone")
+
+  /// Latest published (frozen) pipeline snapshot. Runs pin a version.
+  currentVersionId String?          @unique
+  currentVersion   WorkflowVersion? @relation("WorkflowCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?    @relation("WorkflowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  versions      WorkflowVersion[]      @relation("WorkflowVersions")
+  steps         WorkflowStep[]
+  access        WorkflowAccess[]
+  conversations WorkflowConversation[]
+  runs          WorkflowRun[]
+
+  @@index([createdById])
+}
+
+/// Immutable snapshot of the ordered pipeline at publish time. `payload`
+/// freezes each step's agent slug + pinned agent version for auditing.
+model WorkflowVersion {
+  id                 String    @id @default(cuid())
+  workflowId         String
+  workflow           Workflow  @relation("WorkflowVersions", fields: [workflowId], references: [id], onDelete: Cascade)
+  currentForWorkflow Workflow? @relation("WorkflowCurrentVersion")
+  versionNumber      Int
+  payload            Json
+  createdAt          DateTime  @default(now())
+
+  runs WorkflowRun[]
+
+  @@unique([workflowId, versionNumber])
+  @@index([workflowId])
+}
+
+/// Draft ordered step. `position` is 0-based; the pipeline runs in ascending
+/// order. References a catalog Agent; the agent's published version is frozen
+/// into the WorkflowVersion payload at publish time.
+model WorkflowStep {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  agentId    String
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  position   Int
+  createdAt  DateTime @default(now())
+
+  @@unique([workflowId, position])
+  @@index([workflowId])
+  @@index([agentId])
+}
+
+/// Per-workflow ACL row. Only consulted when Workflow.accessMode = `specific`.
+model WorkflowAccess {
+  workflowId String
+  userId     String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workflowId, userId])
+  @@index([userId])
+}
+
+/// Web chat surface for a workflow (mirrors ChatConversation).
+model WorkflowConversation {
+  id         String   @id @default(cuid())
+  workflowId String
+  userId     String
+  title      String   @default("New chat")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  messages      WorkflowMessage[]
+  runs          WorkflowRun[]
+  agentSessions WorkflowAgentSession[]
+
+  @@index([workflowId])
+  @@index([userId])
+}
+
+/// User + final-assistant messages shown in the workflow chat. Intermediate
+/// step outputs live on WorkflowStepRun, not here.
+model WorkflowMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  /// `user` | `assistant`.
+  role           String
+  content        String
+  /// FK to the producing WorkflowRun (set on assistant messages).
+  workflowRunId  String?
+  createdAt      DateTime             @default(now())
+  conversation   WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+/// One Daytona session per (workflow conversation, agent) so each agent keeps
+/// its own memory + sandbox across turns within the conversation.
+model WorkflowAgentSession {
+  id             String               @id @default(cuid())
+  conversationId String
+  agentId        String
+  sessionId      String               @unique
+  createdAt      DateTime             @default(now())
+  conversation   WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, agentId])
+  @@index([conversationId])
+}
+
+/// One run of the whole pipeline for a single user turn.
+model WorkflowRun {
+  id                String               @id @default(cuid())
+  workflowId        String
+  /// Frozen pipeline this run executed against (`Workflow.currentVersionId` at enqueue).
+  workflowVersionId String?
+  conversationId    String
+  /// `pending` | `running` | `succeeded` | `failed`.
+  status            String               @default("pending")
+  error             String?
+  /// Final (last step) aggregated text delivered to the user.
+  output            String?
+  startedAt         DateTime             @default(now())
+  completedAt       DateTime?
+  workflow          Workflow             @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion   WorkflowVersion?     @relation(fields: [workflowVersionId], references: [id], onDelete: SetNull)
+  conversation      WorkflowConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events            WorkflowRunEvent[]
+  stepRuns          WorkflowStepRun[]
+
+  @@index([workflowId])
+  @@index([conversationId])
+  @@index([status])
+}
+
+/// One step (agent turn) within a WorkflowRun. Links to the backing AgentRun
+/// so the existing trace / attachment tooling keeps working per step.
+model WorkflowStepRun {
+  id             String      @id @default(cuid())
+  workflowRunId  String
+  position       Int
+  agentId        String
+  agentSlug      String
+  agentVersionId String?
+  /// FK to the backing AgentRun (surface = `workflow`).
+  runId          String?     @unique
+  /// `pending` | `running` | `succeeded` | `failed`.
+  status         String      @default("pending")
+  /// Text fed into this step (user request for step 0, prior output otherwise).
+  inputText      String?
+  output         String?
+  error          String?
+  createdAt      DateTime    @default(now())
+  workflowRun    WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  run            AgentRun?   @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([workflowRunId])
+  @@index([runId])
+}
+
+/// Append-only event log per WorkflowRun. Powers the workflow chat SSE
+/// (step timeline + forwarded token deltas) with Last-Event-ID replay.
+model WorkflowRunEvent {
+  id            BigInt      @id @default(autoincrement())
+  workflowRunId String
+  seq           Int
+  type          String
+  payload       Json
+  createdAt     DateTime    @default(now())
+  workflowRun   WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, seq])
+  @@index([workflowRunId, seq])
 }

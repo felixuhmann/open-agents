@@ -31,6 +31,9 @@ const AgentDetailPage = lazy(() => import("./pages/AgentDetailPage"));
 const AgentEditPage = lazy(() => import("./pages/AgentEditPage"));
 const AgentChatPage = lazy(() => import("./pages/AgentChatPage"));
 const AgentConversationsPage = lazy(() => import("./pages/AgentConversationsPage"));
+const WorkflowsListPage = lazy(() => import("./pages/WorkflowsListPage"));
+const WorkflowEditPage = lazy(() => import("./pages/WorkflowEditPage"));
+const WorkflowChatPage = lazy(() => import("./pages/WorkflowChatPage"));
 const ToolsLibraryPage = lazy(() => import("./pages/ToolsLibraryPage"));
 const SkillsLibraryPage = lazy(() => import("./pages/SkillsLibraryPage"));
 const McpLibraryPage = lazy(() => import("./pages/McpLibraryPage"));
@@ -113,6 +116,20 @@ function ProtectedRoutes() {
                 <AgentConversationsPage />
               </RequirePermission>
             }
+          />
+          <Route path="/workflows" element={<WorkflowsListPage />} />
+          <Route
+            path="/workflows/:slug/edit"
+            element={
+              <RequirePermission user={user.data} roles="operator">
+                <WorkflowEditPage />
+              </RequirePermission>
+            }
+          />
+          <Route path="/workflows/:slug/chat" element={<WorkflowChatPage />} />
+          <Route
+            path="/workflows/:slug/chat/:conversationId"
+            element={<WorkflowChatPage />}
           />
           <Route
             path="/library/tools"

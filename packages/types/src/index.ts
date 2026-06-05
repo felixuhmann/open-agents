@@ -7,3 +7,5 @@ export * from "./sandboxPolicy.js";
 export * from "./sandboxes.js";
 export * from "./skills.js";
 export * from "./tools.js";
+export * from "./workflows.js";
+export * from "./workflowRunEvents.js";
