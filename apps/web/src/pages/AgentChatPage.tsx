@@ -5,8 +5,6 @@ import { toast } from "sonner";
 import {
   ArrowDownIcon,
   ClockCounterClockwiseIcon,
-  DownloadSimpleIcon,
-  FileIcon,
   TerminalWindowIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
@@ -15,11 +13,9 @@ import {
   canOperateAgents,
   type ChatAttachmentSummary,
   type ChatMessage as ChatMessageData,
-  runAttachmentDownloadUrl,
   useAgent,
   useConversation,
   useCurrentUser,
-  useRunAttachments,
 } from "@/lib/queries";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -32,7 +28,7 @@ import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
 import { ToolCallCard } from "@/components/chat/ToolCallCard";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
-import { formatBytes } from "@/components/chat/utils";
+import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
 
 type StreamEvent = {
   seq: number;
@@ -583,31 +579,6 @@ function StreamingMarkdown({ text }: { text: string }) {
   return (
     <div className="streaming-markdown">
       <Markdown>{text}</Markdown>
-    </div>
-  );
-}
-
-function AssistantRunAttachments({ runId }: { runId: string }) {
-  const q = useRunAttachments(runId);
-  const items = q.data ?? [];
-  if (items.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {items.map((a) => (
-        <a
-          key={a.id}
-          href={runAttachmentDownloadUrl(runId, a.id)}
-          download={a.filename}
-          className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
-        >
-          <FileIcon className="size-3.5" />
-          <span className="max-w-[18rem] truncate" title={a.filename}>
-            {a.filename}
-          </span>
-          <span className="text-muted-foreground">{formatBytes(a.sizeBytes)}</span>
-          <DownloadSimpleIcon className="size-3.5" />
-        </a>
-      ))}
     </div>
   );
 }

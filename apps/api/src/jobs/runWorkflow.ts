@@ -298,6 +298,7 @@ async function runPipeline(workflowRunId: string): Promise<void> {
         role: "assistant",
         content: lastOutput,
         workflowRunId,
+        agentRunId: finalRunId,
       },
     });
   }

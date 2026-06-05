@@ -111,6 +111,28 @@ workflowConversationsRoutes.get("/:id", async (c) => {
   if (conv.userId !== user.id && !canOperateAgents(user)) {
     throw new HttpError(403, "not your conversation");
   }
+  const workflowRunIds = conv.messages
+    .map((m) => m.workflowRunId)
+    .filter((id): id is string => id != null);
+  const finalStepRuns =
+    workflowRunIds.length > 0
+      ? await prisma.workflowStepRun.findMany({
+          where: {
+            workflowRunId: { in: workflowRunIds },
+            status: "succeeded",
+            runId: { not: null },
+          },
+          orderBy: { position: "desc" },
+          select: { workflowRunId: true, runId: true },
+        })
+      : [];
+  const agentRunIdByWorkflowRun = new Map<string, string>();
+  for (const step of finalStepRuns) {
+    if (step.runId && !agentRunIdByWorkflowRun.has(step.workflowRunId)) {
+      agentRunIdByWorkflowRun.set(step.workflowRunId, step.runId);
+    }
+  }
+
   return c.json({
     id: conv.id,
     title: conv.title,
@@ -121,6 +143,9 @@ workflowConversationsRoutes.get("/:id", async (c) => {
       role: m.role,
       content: m.content,
       workflowRunId: m.workflowRunId,
+      agentRunId:
+        m.agentRunId ??
+        (m.workflowRunId ? (agentRunIdByWorkflowRun.get(m.workflowRunId) ?? null) : null),
       createdAt: m.createdAt.toISOString(),
     })),
   });

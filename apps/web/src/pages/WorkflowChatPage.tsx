@@ -33,6 +33,7 @@ import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
 import { ToolCallCard } from "@/components/chat/ToolCallCard";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
+import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
 import { formatBytes } from "@/components/chat/utils";
 import { cn } from "@/lib/utils";
 
@@ -401,7 +402,11 @@ export default function WorkflowChatPage() {
                   m.role === "user" ? (
                     <UserBubble key={m.id} content={m.content} />
                   ) : (
-                    <AssistantBubble key={m.id} content={m.content} />
+                    <AssistantBubble
+                      key={m.id}
+                      content={m.content}
+                      agentRunId={m.agentRunId}
+                    />
                   ),
                 )}
 
@@ -459,7 +464,13 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
-function AssistantBubble({ content }: { content: string }) {
+function AssistantBubble({
+  content,
+  agentRunId,
+}: {
+  content: string;
+  agentRunId: string | null;
+}) {
   return (
     <div className="flex w-full items-start gap-3">
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground">
@@ -467,6 +478,7 @@ function AssistantBubble({ content }: { content: string }) {
       </span>
       <div className="min-w-0 flex-1 overflow-hidden text-sm">
         <Markdown>{content}</Markdown>
+        {agentRunId ? <AssistantRunAttachments runId={agentRunId} /> : null}
       </div>
     </div>
   );

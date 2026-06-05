@@ -740,7 +740,7 @@ function attachRunFileTool(
     name: "attach_run_file",
     label: "Attach run file",
     description:
-      "Upload a file from this sandbox to the current run as a downloadable attachment for chat or email. Prefer this over curl for returning artifacts.",
+      "Upload a file from this sandbox to the current run as a downloadable attachment for chat, email, or workflow. Prefer this over markdown sandbox: links or curl for returning artifacts.",
     parameters: Type.Object({
       path: Type.String({
         description: `Path in the sandbox (absolute or relative to ${workspaceDir}).`,
