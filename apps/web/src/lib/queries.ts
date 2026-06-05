@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
   AgentSummaryDto,
+  AnalyticsSummary,
   McpConnectionInfo,
   ModelCatalogDto,
   WorkflowDto,
@@ -224,41 +225,29 @@ export function useWorkflowConversation(id: string | undefined) {
   });
 }
 
-export type AnalyticsMetricRow = {
-  runs: number;
-  failedRuns: number;
-  errorRate: number;
-  avgDurationMs: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheCreationInputTokens: number;
-  cacheReadInputTokens: number;
-  totalTokens: number;
-  spendUsd: number;
-};
+export type {
+  AnalyticsAgentRow,
+  AnalyticsMetricRow,
+  AnalyticsSummary,
+} from "@open-agents/types";
 
-export type AnalyticsSummary = {
-  generatedAt: string;
-  window: { from: string; to: string; months: number };
-  totals: AnalyticsMetricRow;
-  monthly: Array<AnalyticsMetricRow & { month: string }>;
-  agents: Array<AnalyticsMetricRow & { id: string; slug: string; displayName: string }>;
-  models: Array<AnalyticsMetricRow & { model: string }>;
-  surfaces: Array<AnalyticsMetricRow & { surface: string }>;
-  notes: string[];
-};
+export type AnalyticsRange =
+  | { preset: "30d" }
+  | { preset: "12m" }
+  | { preset: "custom"; from: string; to: string };
 
-export function useAnalytics() {
-  return useQuery({
-    queryKey: ["analytics"],
-    queryFn: () => api<AnalyticsSummary>("/api/analytics"),
-  });
+function analyticsQueryPath(range: AnalyticsRange): string {
+  if (range.preset === "custom") {
+    const params = new URLSearchParams({ from: range.from, to: range.to });
+    return `/api/analytics?${params.toString()}`;
+  }
+  return `/api/analytics?window=${range.preset}`;
 }
 
-export function useAnalyticsWindow(window: "30d" | "12m") {
+export function useAnalyticsRange(range: AnalyticsRange) {
   return useQuery({
-    queryKey: ["analytics", window],
-    queryFn: () => api<AnalyticsSummary>(`/api/analytics?window=${window}`),
+    queryKey: ["analytics", range],
+    queryFn: () => api<AnalyticsSummary>(analyticsQueryPath(range)),
   });
 }
 
