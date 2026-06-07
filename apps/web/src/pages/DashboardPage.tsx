@@ -8,11 +8,7 @@ import {
   RobotIcon,
 } from "@phosphor-icons/react";
 import type { AgentSummaryDto } from "@open-agents/types";
-import {
-  useAgents,
-  useConversations,
-  useWorkflowConversations,
-} from "@/lib/queries";
+import { useAgents, useConversations, useWorkflowConversations } from "@/lib/queries";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { PageHeader, SectionHeading } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";

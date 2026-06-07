@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  CheckCircleIcon,
-  EnvelopeIcon,
-  KeyIcon,
-  UserIcon,
-} from "@phosphor-icons/react";
+import { CheckCircleIcon, EnvelopeIcon, KeyIcon, UserIcon } from "@phosphor-icons/react";
 import { FallbackLogo } from "@/components/FallbackLogo";
 import { ApiError, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
