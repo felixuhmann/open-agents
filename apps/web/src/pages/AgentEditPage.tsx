@@ -75,6 +75,7 @@ import { DeleteAgentTriggerButton } from "@/components/DeleteAgentDialog";
 type EditState = {
   displayName: string;
   description: string;
+  category: string;
   starterPrompts: string[];
   systemPrompt: string;
   modelProvider: string;
@@ -101,6 +102,7 @@ function fromDto(a: FullAgentDto): EditState {
   return {
     displayName: a.displayName,
     description: a.description ?? "",
+    category: a.category ?? "",
     starterPrompts: a.starterPrompts.length > 0 ? [...a.starterPrompts] : [""],
     systemPrompt: a.systemPrompt,
     modelProvider: a.modelProvider,
@@ -156,6 +158,7 @@ export default function AgentEditPage() {
         json: {
           displayName: s.displayName,
           description: s.description || null,
+          category: s.category || null,
           starterPrompts: s.starterPrompts.map((p) => p.trim()).filter(Boolean),
           systemPrompt: s.systemPrompt,
           modelProvider: s.modelProvider,
@@ -404,6 +407,18 @@ export default function AgentEditPage() {
                   value={state.displayName}
                   onChange={(e) => setS({ displayName: e.target.value })}
                 />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="category">Category</FieldLabel>
+                <Input
+                  id="category"
+                  value={state.category}
+                  onChange={(e) => setS({ category: e.target.value })}
+                  placeholder="Support"
+                />
+                <FieldDescription>
+                  Optional group label shown in the agents list.
+                </FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="local-part">Email slug</FieldLabel>

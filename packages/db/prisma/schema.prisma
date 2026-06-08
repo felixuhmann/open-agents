@@ -214,6 +214,8 @@ model Agent {
   slug         String  @unique
   displayName  String
   description  String?
+  /// Optional free-form category used to group and filter agents in the control plane.
+  category     String?
   /// Suggested first messages shown in the web chat empty state (JSON string array).
   starterPrompts Json @default("[]")
   /// Stored avatar reference. Three flavours are accepted:
@@ -271,6 +273,7 @@ model Agent {
   workflowSteps WorkflowStep[]
 
   @@index([createdById])
+  @@index([category])
 }
 
 /// Immutable snapshot of agent runtime config at publish time. `payload` is the

@@ -272,6 +272,7 @@ export type FullAgentDto = {
   slug: string;
   displayName: string;
   description: string | null;
+  category: string | null;
   starterPrompts: string[];
   systemPrompt: string;
   modelProvider: string;

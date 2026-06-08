@@ -4,10 +4,10 @@ This catalog summarizes the MCP tools exposed by `apps/api/src/mcp/controlPlane/
 
 ## Agents
 
-- `agents_list`: List visible agents.
-- `agents_create`: Create an agent draft. Follow with `agents_get`, configuration updates, `agents_publish`, and a chat test.
+- `agents_list`: List visible agents, including their categories for client-side filtering.
+- `agents_create`: Create an agent draft. Accepts optional `category`; follow with `agents_get`, configuration updates, `agents_publish`, and a chat test.
 - `agents_get`: Read full agent configuration by slug.
-- `agents_update`: Patch agent draft fields. Replacement arrays must be complete.
+- `agents_update`: Patch agent draft fields, including `category` (`null` clears it). Replacement arrays must be complete.
 - `agents_publish`: Freeze the current draft into a published `AgentVersion`.
 - `agents_delete`: Permanently delete an agent. Use only when explicitly requested.
 - `agents_list_access`: List explicit access users for restricted agents.

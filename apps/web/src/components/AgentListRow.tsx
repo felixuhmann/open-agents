@@ -58,6 +58,13 @@ export function AgentListRow({ agent: a, canManageAgents, onDelete }: AgentListR
             {a.slug}
           </TableCell>
           <TableCell>
+            {a.category ? (
+              <Badge variant="outline">{a.category}</Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+          </TableCell>
+          <TableCell>
             <div className="flex flex-wrap gap-1.5">
               {a.webEnabled ? (
                 <Badge variant="secondary">
