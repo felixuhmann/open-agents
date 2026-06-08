@@ -5,9 +5,10 @@
 1. Call `agents_list` to check whether the requested slug already exists.
 2. Call `models_catalog` and choose an available `modelProvider` and `modelId`. Prefer a configured provider.
 3. Call `tools_list`, `skills_list`, and `mcp_servers_list` if the user wants tools, skills, or external MCP.
-4. Call `agents_create` with `slug`, `displayName`, optional `description`, and initial `systemPrompt`.
+4. Call `agents_create` with `slug`, `displayName`, optional `description`, optional `category`, and initial `systemPrompt`.
 5. Call `agents_get` to read defaults and the new agent id.
 6. Call `agents_update` with the full desired draft:
+   - `category` if the user wants list-view grouping or filtering
    - `systemPrompt`
    - `modelProvider` and `modelId`
    - `webEnabled`, `emailEnabled`, and `inboundLocalPart`
@@ -36,7 +37,7 @@ Never stop after `agents_create` or `agents_update` when the user expects a usab
    - `skills_list` for skill and version ids
    - `mcp_servers_list` for third-party MCP ids
    - `models_catalog` for model ids
-4. Call `agents_update` with only the fields being changed, except arrays must be complete desired arrays.
+4. Call `agents_update` with only the fields being changed (including `category` when recategorizing or `null` to clear it), except arrays must be complete desired arrays.
 5. Call `agents_get` to verify draft state.
 6. Call `agents_publish` unless the user asked to save a draft only.
 7. Call `agents_get` again to confirm publication.

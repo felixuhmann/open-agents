@@ -106,6 +106,7 @@ Call the typed tool `agents_create` (the client receives JSON Schema for all fie
 {
   "slug": "research-bot",
   "displayName": "Research Bot",
+  "category": "Research",
   "systemPrompt": "You are a helpful research assistant."
 }
 ```
@@ -118,7 +119,7 @@ Then publish with `agents_publish`:
 }
 ```
 
-To attach tools, skills, or MCP servers, use `agents_update` with `toolBindings`, `skillBindings`, and `mcpServerIds` (see the tool schema in your MCP client).
+To change category later, call `agents_update` with `category` (or `null` to clear it). To attach tools, skills, or MCP servers, use `agents_update` with `toolBindings`, `skillBindings`, and `mcpServerIds` (see the tool schema in your MCP client).
 
 ## Adding a new REST route
 

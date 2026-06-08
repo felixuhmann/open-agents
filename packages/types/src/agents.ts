@@ -27,6 +27,7 @@ export const AgentDto = z.object({
   slug: z.string(),
   displayName: z.string(),
   description: z.string().nullable(),
+  category: z.string().nullable(),
   starterPrompts: StarterPromptsSchema,
   systemPrompt: z.string(),
   modelProvider: z.string(),
@@ -58,6 +59,7 @@ export const AgentSummaryDto = AgentDto.pick({
   slug: true,
   displayName: true,
   description: true,
+  category: true,
   avatar: true,
   emailEnabled: true,
   webEnabled: true,
@@ -73,6 +75,11 @@ export const CreateAgentInput = z.object({
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, "lowercase letters, digits, and dashes only"),
   displayName: z.string().min(1).max(120),
   description: z.string().max(1000).optional(),
+  category: z
+    .string()
+    .max(120)
+    .describe("Optional free-form category for grouping and filtering agents")
+    .optional(),
   systemPrompt: z.string().max(20000).optional(),
 });
 export type CreateAgentInput = z.infer<typeof CreateAgentInput>;
@@ -80,6 +87,14 @@ export type CreateAgentInput = z.infer<typeof CreateAgentInput>;
 export const UpdateAgentInput = z.object({
   displayName: z.string().min(1).max(120).optional(),
   description: z.string().max(1000).nullable().optional(),
+  category: z
+    .string()
+    .max(120)
+    .describe(
+      "Optional free-form category for grouping and filtering agents; set null to clear",
+    )
+    .nullable()
+    .optional(),
   /** Replace-semantics: prompts shown in the web chat empty state. */
   starterPrompts: StarterPromptsSchema.optional(),
   systemPrompt: z.string().max(20000).optional(),

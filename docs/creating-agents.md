@@ -4,7 +4,7 @@ Agents are created and configured entirely from the SPA. There is no code path f
 
 1. Sign in as an admin or contributor.
 2. Open `/agents` and create a new agent.
-3. Configure the system prompt, model provider/model, web/email surfaces, tools, skills, external MCP servers, ACL, and sandbox policies.
+3. Configure the category, system prompt, model provider/model, web/email surfaces, tools, skills, external MCP servers, ACL, and sandbox policies.
 4. Click **Publish new version** to freeze the current draft into `AgentVersion`.
 
 Publishing does not call an external agent API. The local `AgentVersion.payload` is the source of truth for future runs.

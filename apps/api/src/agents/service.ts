@@ -111,6 +111,7 @@ export type CreateAgentArgs = {
   slug: string;
   displayName: string;
   description?: string;
+  category?: string;
   systemPrompt?: string;
   createdById?: string | null;
 };
@@ -126,6 +127,7 @@ export async function createAgent(args: CreateAgentArgs): Promise<HydratedAgent>
       slug: args.slug,
       displayName: args.displayName,
       description: args.description ?? null,
+      category: args.category ?? null,
       systemPrompt: args.systemPrompt ?? "",
       inboundLocalPart,
       createdById: args.createdById ?? null,
@@ -146,6 +148,7 @@ export async function deleteAgent(id: string): Promise<void> {
 export type UpdateAgentArgs = {
   displayName?: string;
   description?: string | null;
+  category?: string | null;
   starterPrompts?: StarterPrompts;
   systemPrompt?: string;
   modelProvider?: string;
@@ -193,6 +196,7 @@ export async function updateAgent(
   const scalarUpdate: Prisma.AgentUpdateInput = {};
   if (args.displayName !== undefined) scalarUpdate.displayName = args.displayName;
   if (args.description !== undefined) scalarUpdate.description = args.description;
+  if (args.category !== undefined) scalarUpdate.category = args.category;
   if (args.starterPrompts !== undefined) {
     scalarUpdate.starterPrompts = args.starterPrompts;
   }

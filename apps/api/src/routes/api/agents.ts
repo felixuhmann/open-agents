@@ -30,11 +30,24 @@ import {
 
 export const agentsRoutes = new Hono<{ Variables: AppVariables }>();
 
+function nonEmptyTrimmed(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function nullableNonEmptyTrimmed(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  return nonEmptyTrimmed(value) ?? null;
+}
+
 function toSummary(agent: {
   id: string;
   slug: string;
   displayName: string;
   description: string | null;
+  category: string | null;
   avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;
@@ -45,6 +58,7 @@ function toSummary(agent: {
     slug: agent.slug,
     displayName: agent.displayName,
     description: agent.description,
+    category: agent.category,
     avatar: agent.avatar,
     emailEnabled: agent.emailEnabled,
     webEnabled: agent.webEnabled,
@@ -62,6 +76,7 @@ function toDto(
     slug: agent.slug,
     displayName: agent.displayName,
     description: agent.description,
+    category: agent.category,
     starterPrompts: parseStarterPrompts(agent.starterPrompts),
     systemPrompt: agent.systemPrompt,
     modelProvider: agent.modelProvider,
@@ -132,7 +147,8 @@ agentsRoutes.post("/", async (c) => {
   const agent = await createAgent({
     slug: body.slug,
     displayName: body.displayName,
-    description: body.description,
+    description: nonEmptyTrimmed(body.description),
+    category: nonEmptyTrimmed(body.category),
     systemPrompt: body.systemPrompt,
     createdById: user.id,
   });
@@ -156,7 +172,8 @@ agentsRoutes.patch("/:slug", async (c) => {
   const body = UpdateAgentInput.parse(await c.req.json());
   const updated = await updateAgent(agent.id, {
     ...body,
-    description: body.description ?? undefined,
+    description: nullableNonEmptyTrimmed(body.description),
+    category: nullableNonEmptyTrimmed(body.category),
   });
   const mailgunDomain = await getServiceSecret(SERVICE_KEYS.MAILGUN_DOMAIN);
   return c.json(toDto(updated, mailgunDomain));

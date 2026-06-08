@@ -30,7 +30,7 @@ Many update fields use replacement semantics. When patching `toolBindings`, `ski
 When creating or substantially changing an agent:
 
 - Choose a slug matching lowercase letters, digits, and dashes; max 60 characters.
-- Set a clear `displayName`, `description`, `systemPrompt`, and optional `starterPrompts`.
+- Set a clear `displayName`, `description`, `systemPrompt`, optional `category`, and optional `starterPrompts`.
 - Select a configured model from `models_catalog`. If the provider is not configured, tell the user which service secret is missing instead of guessing credentials.
 - Set `webEnabled` and `emailEnabled` intentionally. If email is enabled, set a valid `inboundLocalPart` and check Mailgun secrets if delivery matters.
 - Bind tools with `toolBindings` using `Tool.id` values from `tools_list`, not tool names.
