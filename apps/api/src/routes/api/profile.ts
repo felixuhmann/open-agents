@@ -1,26 +1,12 @@
 import { Hono } from "hono";
-import { z } from "zod";
+import { UpdateProfileInput } from "@open-agents/types";
 import { canOperateAgents, requireUser } from "../../auth/middleware.js";
 import { prisma } from "../../db.js";
 import type { AppVariables } from "../../server/types.js";
 
 export const profileRoutes = new Hono<{ Variables: AppVariables }>();
 
-const ProfileUpdateInput = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
-  phoneNumber: z.string().trim().max(80).nullable().optional(),
-  addressLine1: z.string().trim().max(200).nullable().optional(),
-  addressLine2: z.string().trim().max(200).nullable().optional(),
-  city: z.string().trim().max(120).nullable().optional(),
-  region: z.string().trim().max(120).nullable().optional(),
-  postalCode: z.string().trim().max(40).nullable().optional(),
-  country: z.string().trim().max(120).nullable().optional(),
-  company: z.string().trim().max(160).nullable().optional(),
-  jobTitle: z.string().trim().max(160).nullable().optional(),
-  department: z.string().trim().max(160).nullable().optional(),
-  website: z.string().trim().max(300).nullable().optional(),
-  timezone: z.string().trim().max(120).nullable().optional(),
-});
+const ProfileUpdateInput = UpdateProfileInput;
 
 function optionalText(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;

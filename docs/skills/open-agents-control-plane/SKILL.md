@@ -20,10 +20,11 @@ Many update fields use replacement semantics. When patching `toolBindings`, `ski
 1. Establish context with `profile_get` and, when availability matters, `health_ready`. Confirm the caller has the required role for the operation.
 2. Inspect the target with the relevant `*_list` or `*_get` tool. If creating, check for slug conflicts first.
 3. Inspect catalogs before binding dependencies: use `models_catalog` for model/provider ids, `tools_list` for managed/platform tool ids, `skills_list` for skill/version ids, and `mcp_servers_list` for third-party MCP server ids.
-4. Create or update the draft. Preserve replace-semantics arrays from the prior state unless intentionally changing them.
-5. Publish the draft with `agents_publish` or `workflows_publish` after configuration changes. Confirm `publishedAt`, `currentVersionId`, or `currentVersionNumber` changed.
-6. Test the published surface. For agents, create a chat with `conversations_create` or send with `conversations_send_message`, then read history with `conversations_get`. For workflows, use `workflow_conversations_create` or `workflow_conversations_send_message`, then `workflow_conversations_get`.
-7. If a run fails or behaves unexpectedly, use `conversations_trace` or `workflow_conversations_trace` as an operator. Use SSE tools only for live progress; prefer the `*_get` tools for completed history.
+4. When a user asks for requester/profile-aware behavior, set `profileAccessEnabled` via `agents_update`, then publish. This lets that agent receive the request author's profile fields at runtime, including when it is a later workflow step.
+5. Create or update the draft. Preserve replace-semantics arrays from the prior state unless intentionally changing them.
+6. Publish the draft with `agents_publish` or `workflows_publish` after configuration changes. Confirm `publishedAt`, `currentVersionId`, or `currentVersionNumber` changed.
+7. Test the published surface. For agents, create a chat with `conversations_create` or send with `conversations_send_message`, then read history with `conversations_get`. For workflows, use `workflow_conversations_create` or `workflow_conversations_send_message`, then `workflow_conversations_get`.
+8. If a run fails or behaves unexpectedly, use `conversations_trace` or `workflow_conversations_trace` as an operator. Use SSE tools only for live progress; prefer the `*_get` tools for completed history.
 
 ## Agent Checklist
 
@@ -33,6 +34,7 @@ When creating or substantially changing an agent:
 - Set a clear `displayName`, `description`, `systemPrompt`, optional `category`, and optional `starterPrompts`.
 - Select a configured model from `models_catalog`. If the provider is not configured, tell the user which service secret is missing instead of guessing credentials.
 - Set `webEnabled` and `emailEnabled` intentionally. If email is enabled, set a valid `inboundLocalPart` and check Mailgun secrets if delivery matters.
+- Set `profileAccessEnabled` only when the user wants the agent to receive requester profile data, then publish before testing.
 - Bind tools with `toolBindings` using `Tool.id` values from `tools_list`, not tool names.
 - Bind uploaded skills with `skillBindings` when a specific version is needed. Use `skillIds` only when the API/client schema makes that the intended shortcut.
 - Attach third-party MCP servers with `mcpServerIds` after probing or verifying the library entry.
