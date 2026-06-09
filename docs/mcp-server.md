@@ -53,7 +53,7 @@ The response body includes a `token` field (and the `set-auth-token` response he
 
 Tokens expire with the session (default 7 days). Sign in again to refresh.
 
-Role-based access is enforced exactly as in the SPA: admins can manage users/secrets, contributors can create agents, members see only agents they have access to.
+Role-based access is enforced exactly as in the SPA: admins can manage users/secrets, contributors can create agents, members see only agents they have access to. The `profile_get` and `profile_update` MCP tools expose the signed-in user's optional profile fields, and `agents_update` accepts `profileAccessEnabled` so MCP clients can configure requester-profile access before publishing an agent.
 
 ## Claude Desktop connector
 
@@ -119,7 +119,7 @@ Then publish with `agents_publish`:
 }
 ```
 
-To change category later, call `agents_update` with `category` (or `null` to clear it). To attach tools, skills, or MCP servers, use `agents_update` with `toolBindings`, `skillBindings`, and `mcpServerIds` (see the tool schema in your MCP client).
+To change category later, call `agents_update` with `category` (or `null` to clear it). To allow an agent to receive the requester profile at runtime, call `agents_update` with `profileAccessEnabled: true` and then `agents_publish`. To attach tools, skills, or MCP servers, use `agents_update` with `toolBindings`, `skillBindings`, and `mcpServerIds` (see the tool schema in your MCP client).
 
 ## Adding a new REST route
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "Open Agents Control Plane"
   short_description: "Operate Open Agents via MCP"
-  default_prompt: "Use $open-agents-control-plane to create, publish, test, and troubleshoot an Open Agents deployment through its MCP tools."
+  default_prompt: "Use $open-agents-control-plane to create, publish, test, and troubleshoot an Open Agents deployment through its MCP tools. When users need requester-aware agents, configure profileAccessEnabled and publish the affected agents."

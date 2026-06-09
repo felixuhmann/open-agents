@@ -6,8 +6,8 @@ This catalog summarizes the MCP tools exposed by `apps/api/src/mcp/controlPlane/
 
 - `agents_list`: List visible agents, including their categories for client-side filtering.
 - `agents_create`: Create an agent draft. Accepts optional `category`; follow with `agents_get`, configuration updates, `agents_publish`, and a chat test.
-- `agents_get`: Read full agent configuration by slug.
-- `agents_update`: Patch agent draft fields, including `category` (`null` clears it). Replacement arrays must be complete.
+- `agents_get`: Read full agent configuration by slug, including `profileAccessEnabled`.
+- `agents_update`: Patch agent draft fields, including `category` (`null` clears it) and `profileAccessEnabled` (requester profile access). Replacement arrays must be complete.
 - `agents_publish`: Freeze the current draft into a published `AgentVersion`.
 - `agents_delete`: Permanently delete an agent. Use only when explicitly requested.
 - `agents_list_access`: List explicit access users for restricted agents.
@@ -56,8 +56,9 @@ This catalog summarizes the MCP tools exposed by `apps/api/src/mcp/controlPlane/
 
 ## Users, Settings, Secrets, Sandboxes
 
-- `profile_get`: Read the signed-in user profile and role.
-- `users_list`, `users_create`, `users_update`, `users_delete`: Admin user management. Do not delete users unless explicitly requested.
+- `profile_get`: Read the signed-in user profile, role, and optional profile fields (phone, address, company/job details, website, timezone).
+- `profile_update`: Update the signed-in user's display name and optional profile fields.
+- `users_list`, `users_create`, `users_update`, `users_delete`: Admin user management. `users_list` and `users_update` include optional profile fields for admins. Do not delete users unless explicitly requested.
 - `settings_public`: Public branding settings.
 - `settings_list`: Deployment app settings with plaintext values.
 - `settings_upsert`: Set or clear an app setting by key. Empty string deletes the setting.

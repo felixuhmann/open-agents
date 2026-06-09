@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   AnalyticsQuery,
   AppSettingKey,
+  UpdateProfileInput,
   ListSandboxesQuery,
   ServiceSecretKey,
   SetAppSettingInput,
@@ -30,6 +31,16 @@ export const adminControlPlaneTools = [
     method: "GET",
     path: "/api/profile",
     input: z.object({}),
+  }),
+  defineControlPlaneTool({
+    name: "profile_update",
+    title: "Update profile",
+    description:
+      "Update the signed-in user's display name and optional profile fields that profile-aware agents may receive when enabled.",
+    auth: "user",
+    method: "PATCH",
+    path: "/api/profile",
+    input: UpdateProfileInput,
   }),
   defineControlPlaneTool({
     name: "mcp_connection_info",

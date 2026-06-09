@@ -12,6 +12,7 @@
    - `systemPrompt`
    - `modelProvider` and `modelId`
    - `webEnabled`, `emailEnabled`, and `inboundLocalPart`
+   - `profileAccessEnabled` when the agent should see the requester profile
    - `starterPrompts`
    - `toolBindings`
    - `skillBindings` or `skillIds`
@@ -37,7 +38,7 @@ Never stop after `agents_create` or `agents_update` when the user expects a usab
    - `skills_list` for skill and version ids
    - `mcp_servers_list` for third-party MCP ids
    - `models_catalog` for model ids
-4. Call `agents_update` with only the fields being changed (including `category` when recategorizing or `null` to clear it), except arrays must be complete desired arrays.
+4. Call `agents_update` with only the fields being changed (including `category` when recategorizing, `profileAccessEnabled` for requester profile access, or `null` to clear nullable fields), except arrays must be complete desired arrays.
 5. Call `agents_get` to verify draft state.
 6. Call `agents_publish` unless the user asked to save a draft only.
 7. Call `agents_get` again to confirm publication.
@@ -56,7 +57,7 @@ Never stop after `agents_create` or `agents_update` when the user expects a usab
 ## Create And Publish A Workflow
 
 1. Call `agents_list` and collect ids for the step agents.
-2. For each step agent, call `agents_get` if needed to verify `currentVersionId` or `currentVersionNumber` is present.
+2. For each step agent, call `agents_get` if needed to verify `currentVersionId` or `currentVersionNumber` is present. If a later step needs requester profile data, verify that step agent has `profileAccessEnabled` enabled and published.
 3. Call `workflows_create` with `slug`, `displayName`, and optional `description`.
 4. Call `workflows_update` with `steps` as the complete ordered list of `{ agentId }` objects. Set surfaces and access fields intentionally.
 5. Call `workflows_get` and verify all steps are present and `agentPublished` is true for every step.
