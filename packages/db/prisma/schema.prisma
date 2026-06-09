@@ -30,6 +30,19 @@ model User {
   name          String?
   emailVerified Boolean   @default(false)
   image         String?
+  /// Optional profile details users can share with profile-aware agents.
+  phoneNumber   String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  region        String?
+  postalCode    String?
+  country       String?
+  company       String?
+  jobTitle      String?
+  department    String?
+  website       String?
+  timezone      String?
   /// Application role: `admin`, `contributor`, or `member`.
   role          String    @default("member")
   /// `false` while the admin-created account hasn't yet set a password.
@@ -111,19 +124,19 @@ model Verification {
 // ---------------------------------------------------------------------------
 
 model OauthApplication {
-  id           String            @id
+  id           String             @id
   name         String
   icon         String?
   metadata     String?
-  clientId     String            @unique
+  clientId     String             @unique
   clientSecret String?
   redirectUrls String
   type         String
-  disabled     Boolean           @default(false)
+  disabled     Boolean            @default(false)
   userId       String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  user         User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessTokens OauthAccessToken[]
   consents     OauthConsent[]
 
@@ -209,15 +222,15 @@ model Secret {
 // ---------------------------------------------------------------------------
 
 model Agent {
-  id           String  @id @default(cuid())
+  id             String  @id @default(cuid())
   /// URL slug, also the local part of the agent's inbound email by default.
-  slug         String  @unique
-  displayName  String
-  description  String?
+  slug           String  @unique
+  displayName    String
+  description    String?
   /// Optional free-form category used to group and filter agents in the control plane.
-  category     String?
+  category       String?
   /// Suggested first messages shown in the web chat empty state (JSON string array).
-  starterPrompts Json @default("[]")
+  starterPrompts Json    @default("[]")
   /// Stored avatar reference. Three flavours are accepted:
   ///   - `/static/uploads/avatars/<file>` — admin upload through the SPA
   ///     (file lives under `apps/api/data/uploads/avatars/`);
@@ -227,21 +240,24 @@ model Agent {
   /// `NULL` means "use the shared `fallback.png`". See
   /// `apps/api/src/services/renderEmail.ts#resolveAssetUrl` for how the
   /// value is normalised at render time.
-  avatar       String?
+  avatar         String?
   /// Optional agent system prompt used by Daytona runs and mirrored in the editor.
-  systemPrompt String  @default("")
+  systemPrompt   String  @default("")
   /// Pi-ai provider id (e.g. `anthropic`, `openai`, `openrouter`).
-  modelProvider String @default("anthropic")
+  modelProvider  String  @default("anthropic")
   /// Model id within the provider catalog (e.g. `claude-opus-4-7`, `gpt-4o-mini`).
-  modelId       String @default("claude-opus-4-7")
+  modelId        String  @default("claude-opus-4-7")
 
-  emailEnabled     Boolean @default(false)
-  webEnabled       Boolean @default(true)
+  emailEnabled         Boolean @default(false)
+  webEnabled           Boolean @default(true)
   /// `everyone` (any deployment user can chat) or `specific` (only users in AgentAccess).
-  accessMode       String  @default("everyone")
+  accessMode           String  @default("everyone")
   /// Local part for inbound mail (`<inboundLocalPart>@<MAILGUN_DOMAIN>`).
   /// Defaults to the slug; admin can override.
-  inboundLocalPart String  @unique
+  inboundLocalPart     String  @unique
+  /// When true, runtime prompts include the profile for the user who authored
+  /// the current request (web conversations directly, email by matching sender).
+  profileAccessEnabled Boolean @default(false)
 
   /// Draft sandbox network policy (internet, allowlist, internal protection).
   /// Published copies are frozen in `AgentVersion.payload.runtime.sandbox`.
@@ -259,7 +275,7 @@ model Agent {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  versions      AgentVersion[] @relation("AgentVersions")
+  versions      AgentVersion[]      @relation("AgentVersions")
   access        AgentAccess[]
   toolBindings  AgentToolBinding[]
   skillBindings AgentSkillBinding[]
@@ -279,16 +295,16 @@ model Agent {
 /// Immutable snapshot of agent runtime config at publish time. `payload` is the
 /// source of truth for auditing runs.
 model AgentVersion {
-  id               String   @id @default(cuid())
-  agentId          String
-  agent            Agent    @relation("AgentVersions", fields: [agentId], references: [id], onDelete: Cascade)
-  currentForAgent  Agent?   @relation("AgentCurrentVersion")
+  id              String     @id @default(cuid())
+  agentId         String
+  agent           Agent      @relation("AgentVersions", fields: [agentId], references: [id], onDelete: Cascade)
+  currentForAgent Agent?     @relation("AgentCurrentVersion")
   /// Monotonic per-agent publish counter (1, 2, 3, …).
-  versionNumber    Int
+  versionNumber   Int
   /// Provider-neutral frozen config (system prompt, tools, skills, runtime).
-  payload          Json
-  createdAt        DateTime @default(now())
-  runs             AgentRun[]
+  payload         Json
+  createdAt       DateTime   @default(now())
+  runs            AgentRun[]
 
   @@unique([agentId, versionNumber])
   @@index([agentId])
@@ -397,16 +413,16 @@ model Skill {
 /// Immutable uploaded bundle for a Skill. The local `bundleStorageRef` points
 /// to the on-disk zip materialized into Daytona sandboxes.
 model SkillVersion {
-  id                    String              @id @default(cuid())
-  skillId               String
-  versionNumber         Int
+  id               String              @id @default(cuid())
+  skillId          String
+  versionNumber    Int
   /// Original upload filename for display/debugging.
-  filename              String
+  filename         String
   /// Local relative path inside `apps/api/data/skills/` of the bundle zip.
-  bundleStorageRef      String
-  skill                 Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  bindings              AgentSkillBinding[]
-  createdAt             DateTime            @default(now())
+  bundleStorageRef String
+  skill            Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  bindings         AgentSkillBinding[]
+  createdAt        DateTime            @default(now())
 
   @@unique([skillId, versionNumber])
   @@index([skillId])
@@ -489,20 +505,20 @@ model AgentSandbox {
 // ---------------------------------------------------------------------------
 
 model ChatConversation {
-  id                 String        @id @default(cuid())
-  agentId            String
-  userId             String
+  id        String        @id @default(cuid())
+  agentId   String
+  userId    String
   /// Backend session id currently bound to this conversation.
   sessionId String?       @unique
-  title              String        @default("New chat")
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  agent              Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages           ChatMessage[]
-  runs               AgentRun[]
-  issues             Issue[]
-  sandbox            AgentSandbox?
+  title     String        @default("New chat")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  agent     Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  runs      AgentRun[]
+  issues    Issue[]
+  sandbox   AgentSandbox?
 
   @@index([agentId])
   @@index([userId])
@@ -528,16 +544,16 @@ model ChatMessage {
 /// Files uploaded by the user inside a chat conversation. Persisted as bytes
 /// and mounted into the Daytona sandbox on the next run.
 model ChatAttachment {
-  id              String      @id @default(cuid())
-  chatMessageId   String
-  filename        String
-  contentType     String
-  sizeBytes       Int
-  bytes           Bytes
-  backendFileId   String?
-  mountPath       String?
-  createdAt       DateTime    @default(now())
-  chatMessage     ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  chatMessageId String
+  filename      String
+  contentType   String
+  sizeBytes     Int
+  bytes         Bytes
+  backendFileId String?
+  mountPath     String?
+  createdAt     DateTime    @default(now())
+  chatMessage   ChatMessage @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
 
   @@index([chatMessageId])
 }
@@ -547,31 +563,31 @@ model ChatAttachment {
 // ---------------------------------------------------------------------------
 
 model AgentRun {
-  id             String            @id @default(cuid())
-  agentId        String
+  id              String            @id @default(cuid())
+  agentId         String
   /// Frozen config this run executed against (`Agent.currentVersionId` at enqueue).
-  agentVersionId String?
-  agentVersion   AgentVersion?     @relation(fields: [agentVersionId], references: [id], onDelete: SetNull)
+  agentVersionId  String?
+  agentVersion    AgentVersion?     @relation(fields: [agentVersionId], references: [id], onDelete: SetNull)
   /// `email` | `chat` | `workflow`.
-  surface        String
+  surface         String
   /// Set when surface = `email`.
-  threadId       String?
+  threadId        String?
   /// Set when surface = `chat`.
-  conversationId String?
+  conversationId  String?
   /// Backend session this run executed against.
-  sessionId      String
+  sessionId       String
   /// `pending` | `running` | `succeeded` | `failed`.
-  status         String            @default("pending")
-  error          String?
+  status          String            @default("pending")
+  error           String?
   /// Final aggregated assistant text. Populated for both surfaces.
-  output         String?
-  startedAt      DateTime          @default(now())
-  completedAt    DateTime?
-  agent          Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  thread         EmailThread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  conversation   ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  events         RunEvent[]
-  attachments    AgentAttachment[]
+  output          String?
+  startedAt       DateTime          @default(now())
+  completedAt     DateTime?
+  agent           Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  thread          EmailThread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  conversation    ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  events          RunEvent[]
+  attachments     AgentAttachment[]
   workflowStepRun WorkflowStepRun?
 
   @@index([agentId])
@@ -655,16 +671,16 @@ model EmailMessage {
 }
 
 model EmailAttachment {
-  id              String       @id @default(cuid())
-  emailMessageId  String
-  filename        String
-  contentType     String
-  sizeBytes       Int
-  bytes           Bytes
-  backendFileId   String?
-  mountPath       String?
-  createdAt       DateTime     @default(now())
-  emailMessage    EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  emailMessageId String
+  filename       String
+  contentType    String
+  sizeBytes      Int
+  bytes          Bytes
+  backendFileId  String?
+  mountPath      String?
+  createdAt      DateTime     @default(now())
+  emailMessage   EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
 
   @@index([emailMessageId])
 }
@@ -679,43 +695,43 @@ model EmailAttachment {
 // ---------------------------------------------------------------------------
 
 model Issue {
-  id             String    @id @default(cuid())
+  id                     String    @id @default(cuid())
   /// Set for chat/email reports.
-  agentId        String?
+  agentId                String?
   /// Set for workflow reports.
-  workflowId     String?
+  workflowId             String?
   /// `chat` | `email` | `workflow`. Drives which session FK is consulted and
   /// how the SPA renders the conversation history.
-  surface        String
+  surface                String
   /// Set when surface = `chat`.
-  conversationId String?
+  conversationId         String?
   /// Set when surface = `email`.
-  threadId       String?
+  threadId               String?
   /// Set when surface = `workflow`.
   workflowConversationId String?
   /// Reporter's User row. Set for chat reports (cookie-authed) and for
   /// email reports when the email matches a known User.
-  reporterUserId String?
+  reporterUserId         String?
   /// Reporter's email. Always set: mirrors User.email for chat reports
   /// or EmailThread.userEmail for email-reported sessions. Used as the
   /// public identifier in the admin list.
-  reporterEmail  String
+  reporterEmail          String
   /// Free-form description of what went wrong.
-  description    String
+  description            String
   /// `open` | `resolved`.
-  status         String    @default("open")
-  resolvedAt     DateTime?
-  resolvedById   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  status                 String    @default("open")
+  resolvedAt             DateTime?
+  resolvedById           String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  agent        Agent?                @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  workflow     Workflow?             @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  conversation ChatConversation?      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  thread       EmailThread?           @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  agent                Agent?                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workflow             Workflow?             @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  conversation         ChatConversation?     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  thread               EmailThread?          @relation(fields: [threadId], references: [id], onDelete: Cascade)
   workflowConversation WorkflowConversation? @relation(fields: [workflowConversationId], references: [id], onDelete: Cascade)
-  reporter     User?                  @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
-  resolvedBy   User?                  @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  reporter             User?                 @relation("IssueReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  resolvedBy           User?                 @relation("IssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([agentId])
   @@index([workflowId])
@@ -735,20 +751,20 @@ model Issue {
 // ---------------------------------------------------------------------------
 
 model Workflow {
-  id          String  @id @default(cuid())
+  id               String  @id @default(cuid())
   /// URL slug for the workflow chat + admin pages.
-  slug        String  @unique
-  displayName String
-  description String?
+  slug             String  @unique
+  displayName      String
+  description      String?
   /// Suggested first messages shown in the workflow chat empty state.
-  starterPrompts Json @default("[]")
+  starterPrompts   Json    @default("[]")
   emailEnabled     Boolean @default(false)
   webEnabled       Boolean @default(true)
   /// `everyone` (any deployment user can run it) or `specific` (WorkflowAccess).
-  accessMode  String  @default("everyone")
+  accessMode       String  @default("everyone")
   /// Local part for inbound mail (`<inboundLocalPart>@<MAILGUN_DOMAIN>`).
   /// Defaults to the slug; admin can override. Must not collide with an Agent.
-  inboundLocalPart String @unique
+  inboundLocalPart String  @unique
 
   /// Latest published (frozen) pipeline snapshot. Runs pin a version.
   currentVersionId String?          @unique
@@ -891,15 +907,15 @@ model WorkflowAgentSession {
 
 /// Inbound email surface for a workflow (mirrors EmailThread for agents).
 model WorkflowEmailThread {
-  id             String                @id @default(cuid())
+  id             String                 @id @default(cuid())
   workflowId     String
   userEmail      String
   inboundAddress String?
   subject        String
-  rootMessageId  String                @unique
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  workflow       Workflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  rootMessageId  String                 @unique
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  workflow       Workflow               @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   messages       WorkflowEmailMessage[]
   runs           WorkflowRun[]
   agentSessions  WorkflowAgentSession[]
@@ -926,16 +942,16 @@ model WorkflowEmailMessage {
 }
 
 model WorkflowEmailAttachment {
-  id                   String               @id @default(cuid())
+  id                     String               @id @default(cuid())
   workflowEmailMessageId String
-  filename             String
-  contentType          String
-  sizeBytes            Int
-  bytes                Bytes
-  backendFileId        String?
-  mountPath            String?
-  createdAt            DateTime             @default(now())
-  workflowEmailMessage WorkflowEmailMessage @relation(fields: [workflowEmailMessageId], references: [id], onDelete: Cascade)
+  filename               String
+  contentType            String
+  sizeBytes              Int
+  bytes                  Bytes
+  backendFileId          String?
+  mountPath              String?
+  createdAt              DateTime             @default(now())
+  workflowEmailMessage   WorkflowEmailMessage @relation(fields: [workflowEmailMessageId], references: [id], onDelete: Cascade)
 
   @@index([workflowEmailMessageId])
 }

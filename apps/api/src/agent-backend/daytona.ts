@@ -33,6 +33,7 @@ import {
   toDaytonaNetworkOptions,
 } from "../services/sandboxPolicy.js";
 import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
+import { buildAuthorProfileContext } from "../services/userProfileContext.js";
 import { wrapDaytonaError } from "./daytonaErrors.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
@@ -365,7 +366,12 @@ export class DaytonaAgentBackend implements AgentBackend {
               }
             });
 
-            await piAgent.prompt(userMessage);
+            const promptMessage = await buildPromptMessage(
+              userMessage,
+              agent.profileAccessEnabled,
+              context,
+            );
+            await piAgent.prompt(promptMessage);
             const output = finalText || deltaText;
             if (lastModelError && output.trim().length === 0) {
               throw new AgentBackendError(lastModelError);
@@ -512,6 +518,17 @@ export class DaytonaAgentBackend implements AgentBackend {
       });
     }
   }
+}
+
+async function buildPromptMessage(
+  userMessage: string,
+  profileAccessEnabled: boolean,
+  context: AgentRunContext | undefined,
+): Promise<string> {
+  if (!profileAccessEnabled || !context) return userMessage;
+  const profileContext = await buildAuthorProfileContext(context);
+  if (!profileContext) return userMessage;
+  return `${profileContext}\n\nUser request:\n${userMessage}`;
 }
 
 async function loadPriorMessages(

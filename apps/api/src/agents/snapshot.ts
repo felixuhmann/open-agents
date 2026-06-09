@@ -37,6 +37,7 @@ export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnaps
     systemPrompt: agent.systemPrompt,
     modelProvider: agent.modelProvider,
     modelId: agent.modelId,
+    profileAccessEnabled: agent.profileAccessEnabled,
     managedTools,
     platformTools,
     thirdPartyMcp: agent.mcpBindings.map((b) => ({
@@ -160,6 +161,7 @@ export async function loadVersionedAgent(
     systemPrompt: snapshot.systemPrompt,
     modelProvider: snapshot.modelProvider,
     modelId: snapshot.modelId,
+    profileAccessEnabled: snapshot.profileAccessEnabled,
     toolBindings,
     skillBindings,
     mcpBindings,

@@ -82,6 +82,7 @@ type EditState = {
   modelId: string;
   emailEnabled: boolean;
   webEnabled: boolean;
+  profileAccessEnabled: boolean;
   accessMode: "everyone" | "specific";
   accessUserIds: string[];
   inboundLocalPart: string;
@@ -109,6 +110,7 @@ function fromDto(a: FullAgentDto): EditState {
     modelId: a.modelId,
     emailEnabled: a.emailEnabled,
     webEnabled: a.webEnabled,
+    profileAccessEnabled: a.profileAccessEnabled,
     accessMode: a.accessMode,
     accessUserIds: a.accessUserIds,
     inboundLocalPart: a.inboundLocalPart,
@@ -165,6 +167,7 @@ export default function AgentEditPage() {
           modelId: s.modelId,
           emailEnabled: s.emailEnabled,
           webEnabled: s.webEnabled,
+          profileAccessEnabled: s.profileAccessEnabled,
           accessMode: s.accessMode,
           accessUserIds: s.accessUserIds,
           inboundLocalPart: s.inboundLocalPart,
@@ -523,6 +526,23 @@ export default function AgentEditPage() {
                 <FieldContent>
                   <FieldLabel htmlFor="email-enabled">Email enabled</FieldLabel>
                   <FieldDescription>Receives mail at {emailAddress}.</FieldDescription>
+                </FieldContent>
+              </Field>
+              <Field orientation="horizontal">
+                <Switch
+                  id="profile-access-enabled"
+                  checked={state.profileAccessEnabled}
+                  onCheckedChange={(v) => setS({ profileAccessEnabled: v })}
+                />
+                <FieldContent>
+                  <FieldLabel htmlFor="profile-access-enabled">
+                    Share request author's profile
+                  </FieldLabel>
+                  <FieldDescription>
+                    When enabled, this agent receives the author profile for each request,
+                    including workflow steps where this agent is not first. Publish a new
+                    version to apply this setting to live runs.
+                  </FieldDescription>
                 </FieldContent>
               </Field>
               <Field>

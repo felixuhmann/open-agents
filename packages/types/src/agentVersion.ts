@@ -55,6 +55,7 @@ export const AgentConfigSnapshot = z.object({
   systemPrompt: z.string(),
   modelProvider: z.string().min(1),
   modelId: z.string().min(1),
+  profileAccessEnabled: z.boolean().default(false),
   managedTools: z.array(AgentConfigToolBinding),
   platformTools: z.array(AgentConfigToolBinding),
   thirdPartyMcp: z.preprocess((val: unknown) => {

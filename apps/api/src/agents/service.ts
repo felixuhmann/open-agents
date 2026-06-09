@@ -155,6 +155,7 @@ export type UpdateAgentArgs = {
   modelId?: string;
   emailEnabled?: boolean;
   webEnabled?: boolean;
+  profileAccessEnabled?: boolean;
   accessMode?: "everyone" | "specific";
   inboundLocalPart?: string;
   /**
@@ -216,6 +217,9 @@ export async function updateAgent(
   }
   if (args.emailEnabled !== undefined) scalarUpdate.emailEnabled = args.emailEnabled;
   if (args.webEnabled !== undefined) scalarUpdate.webEnabled = args.webEnabled;
+  if (args.profileAccessEnabled !== undefined) {
+    scalarUpdate.profileAccessEnabled = args.profileAccessEnabled;
+  }
   if (args.accessMode !== undefined) scalarUpdate.accessMode = args.accessMode;
   if (args.inboundLocalPart !== undefined) {
     scalarUpdate.inboundLocalPart = args.inboundLocalPart;

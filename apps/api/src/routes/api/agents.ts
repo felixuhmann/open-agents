@@ -51,6 +51,7 @@ function toSummary(agent: {
   avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;
+  profileAccessEnabled: boolean;
   accessMode: string;
 }) {
   return {
@@ -62,6 +63,7 @@ function toSummary(agent: {
     avatar: agent.avatar,
     emailEnabled: agent.emailEnabled,
     webEnabled: agent.webEnabled,
+    profileAccessEnabled: agent.profileAccessEnabled,
     accessMode: agent.accessMode,
   };
 }
@@ -84,6 +86,7 @@ function toDto(
     avatar: agent.avatar,
     emailEnabled: agent.emailEnabled,
     webEnabled: agent.webEnabled,
+    profileAccessEnabled: agent.profileAccessEnabled,
     accessMode: agent.accessMode,
     inboundLocalPart: agent.inboundLocalPart,
     mailgunDomain: mailgunDomain ?? null,

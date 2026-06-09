@@ -42,6 +42,7 @@ export const AgentDto = z.object({
   avatar: z.string().nullable(),
   emailEnabled: z.boolean(),
   webEnabled: z.boolean(),
+  profileAccessEnabled: z.boolean(),
   accessMode: AgentAccessMode,
   inboundLocalPart: z.string(),
   currentVersionNumber: z.number().int().positive().nullable().optional(),
@@ -63,6 +64,7 @@ export const AgentSummaryDto = AgentDto.pick({
   avatar: true,
   emailEnabled: true,
   webEnabled: true,
+  profileAccessEnabled: true,
   accessMode: true,
 });
 export type AgentSummaryDto = z.infer<typeof AgentSummaryDto>;
@@ -102,6 +104,7 @@ export const UpdateAgentInput = z.object({
   modelId: AgentModelSelection.shape.modelId.optional(),
   emailEnabled: z.boolean().optional(),
   webEnabled: z.boolean().optional(),
+  profileAccessEnabled: z.boolean().optional(),
   accessMode: AgentAccessMode.optional(),
   inboundLocalPart: z
     .string()
