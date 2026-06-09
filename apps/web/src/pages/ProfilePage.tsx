@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ClockCounterClockwiseIcon,
@@ -50,6 +50,10 @@ import {
   type AuthSessionInfo,
 } from "@/lib/queries";
 import { authClient } from "@/lib/auth";
+import { ApiError, api } from "@/lib/api";
+import type { UserProfileFields } from "@/lib/queries";
+
+type EditableProfileFields = { [K in keyof UserProfileFields]: string };
 
 export default function ProfilePage() {
   const qc = useQueryClient();
@@ -60,10 +64,43 @@ export default function ProfilePage() {
   const { theme, setTheme } = useTheme();
 
   const [name, setName] = useState("");
+  const [profileFields, setProfileFields] = useState<EditableProfileFields>({
+    phoneNumber: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    region: "",
+    postalCode: "",
+    country: "",
+    company: "",
+    jobTitle: "",
+    department: "",
+    website: "",
+    timezone: "",
+  });
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [revokeOtherSessions, setRevokeOtherSessions] = useState(true);
+
+  useEffect(() => {
+    if (!summary.data) return;
+    setName(summary.data.user.name ?? "");
+    setProfileFields({
+      phoneNumber: summary.data.user.profile.phoneNumber ?? "",
+      addressLine1: summary.data.user.profile.addressLine1 ?? "",
+      addressLine2: summary.data.user.profile.addressLine2 ?? "",
+      city: summary.data.user.profile.city ?? "",
+      region: summary.data.user.profile.region ?? "",
+      postalCode: summary.data.user.profile.postalCode ?? "",
+      country: summary.data.user.profile.country ?? "",
+      company: summary.data.user.profile.company ?? "",
+      jobTitle: summary.data.user.profile.jobTitle ?? "",
+      department: summary.data.user.profile.department ?? "",
+      website: summary.data.user.profile.website ?? "",
+      timezone: summary.data.user.profile.timezone ?? "",
+    });
+  }, [summary.data]);
 
   const currentSessionId = currentSession.data?.session.id ?? null;
   const sortedSessions = useMemo(
@@ -75,11 +112,11 @@ export default function ProfilePage() {
   );
 
   const updateProfile = useMutation({
-    mutationFn: async (nextName: string) => {
-      const result = await authClient.updateUser({ name: nextName });
-      if (result.error)
-        throw new Error(result.error.message || "Couldn't update profile");
-      return result;
+    mutationFn: async () => {
+      return api<{ ok: boolean }>("/api/profile", {
+        method: "PATCH",
+        json: { name: profileName.trim(), ...profileFields },
+      });
     },
     onSuccess: async () => {
       toast.success("Profile updated");
@@ -90,7 +127,10 @@ export default function ProfilePage() {
     },
     onError: (error) =>
       toast.error("Couldn't update profile", {
-        description: error instanceof Error ? error.message : String(error),
+        description:
+          error instanceof ApiError || error instanceof Error
+            ? error.message
+            : String(error),
       }),
   });
 
@@ -176,7 +216,11 @@ export default function ProfilePage() {
       }),
   });
 
-  const profileName = name || summary.data?.user.name || me.data?.name || "";
+  const profileName = name || me.data?.name || "";
+  const shownProfile = profileFields;
+  const setProfileField = (key: keyof UserProfileFields, value: string) => {
+    setProfileFields((current) => ({ ...current, [key]: value }));
+  };
   const passwordMismatch =
     confirmPassword.length > 0 &&
     newPassword.length > 0 &&
@@ -252,7 +296,7 @@ export default function ProfilePage() {
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
-                  updateProfile.mutate(profileName.trim());
+                  updateProfile.mutate();
                 }}
               >
                 <FieldGroup>
@@ -265,6 +309,131 @@ export default function ProfilePage() {
                       placeholder="How your teammates should see you"
                     />
                   </Field>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field>
+                      <FieldLabel htmlFor="profile-phone">Telephone number</FieldLabel>
+                      <Input
+                        id="profile-phone"
+                        value={shownProfile.phoneNumber}
+                        onChange={(event) =>
+                          setProfileField("phoneNumber", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-company">Company</FieldLabel>
+                      <Input
+                        id="profile-company"
+                        value={shownProfile.company}
+                        onChange={(event) =>
+                          setProfileField("company", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-job-title">Job title</FieldLabel>
+                      <Input
+                        id="profile-job-title"
+                        value={shownProfile.jobTitle}
+                        onChange={(event) =>
+                          setProfileField("jobTitle", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-department">Department</FieldLabel>
+                      <Input
+                        id="profile-department"
+                        value={shownProfile.department}
+                        onChange={(event) =>
+                          setProfileField("department", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-address-1">Address line 1</FieldLabel>
+                      <Input
+                        id="profile-address-1"
+                        value={shownProfile.addressLine1}
+                        onChange={(event) =>
+                          setProfileField("addressLine1", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-address-2">Address line 2</FieldLabel>
+                      <Input
+                        id="profile-address-2"
+                        value={shownProfile.addressLine2}
+                        onChange={(event) =>
+                          setProfileField("addressLine2", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-city">City</FieldLabel>
+                      <Input
+                        id="profile-city"
+                        value={shownProfile.city}
+                        onChange={(event) => setProfileField("city", event.target.value)}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-region">State / region</FieldLabel>
+                      <Input
+                        id="profile-region"
+                        value={shownProfile.region}
+                        onChange={(event) =>
+                          setProfileField("region", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-postal-code">Postal code</FieldLabel>
+                      <Input
+                        id="profile-postal-code"
+                        value={shownProfile.postalCode}
+                        onChange={(event) =>
+                          setProfileField("postalCode", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-country">Country</FieldLabel>
+                      <Input
+                        id="profile-country"
+                        value={shownProfile.country}
+                        onChange={(event) =>
+                          setProfileField("country", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-website">Website</FieldLabel>
+                      <Input
+                        id="profile-website"
+                        value={shownProfile.website}
+                        onChange={(event) =>
+                          setProfileField("website", event.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="profile-timezone">Timezone</FieldLabel>
+                      <Input
+                        id="profile-timezone"
+                        value={shownProfile.timezone}
+                        onChange={(event) =>
+                          setProfileField("timezone", event.target.value)
+                        }
+                        placeholder="America/New_York"
+                      />
+                    </Field>
+                  </div>
+                  <FieldDescription>
+                    Agents only receive these details when their profile access setting is
+                    enabled and published.
+                  </FieldDescription>
                   <Button
                     type="submit"
                     disabled={updateProfile.isPending || profileName.trim().length === 0}

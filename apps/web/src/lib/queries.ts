@@ -110,12 +110,28 @@ export function useCurrentSession() {
   });
 }
 
+export type UserProfileFields = {
+  phoneNumber: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  country: string | null;
+  company: string | null;
+  jobTitle: string | null;
+  department: string | null;
+  website: string | null;
+  timezone: string | null;
+};
+
 export type ProfileSummary = {
   user: {
     id: string;
     email: string;
     name: string | null;
     role: UserRole;
+    profile: UserProfileFields;
     createdAt: string | null;
     updatedAt: string | null;
   };
@@ -280,6 +296,7 @@ export type FullAgentDto = {
   avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;
+  profileAccessEnabled: boolean;
   accessMode: "everyone" | "specific";
   inboundLocalPart: string;
   mailgunDomain: string | null;
