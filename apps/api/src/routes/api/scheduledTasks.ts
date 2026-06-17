@@ -87,7 +87,7 @@ scheduledTasksRoutes.get("/", async (c) => {
 });
 
 scheduledTasksRoutes.post("/", async (c) => {
-  const user = requireAgentOperator(c);
+  const user = requireUser(c);
   const body = CreateScheduledTaskInput.parse(await c.req.json());
   let agentId: string | undefined;
   let workflowId: string | undefined;
@@ -129,7 +129,7 @@ scheduledTasksRoutes.get("/:id", async (c) => {
 });
 
 scheduledTasksRoutes.patch("/:id", async (c) => {
-  const user = requireAgentOperator(c);
+  const user = requireUser(c);
   const id = c.req.param("id");
   const existing = await loadTask(id);
   if (!existing) throw new HttpError(404, "scheduled task not found");
@@ -153,7 +153,7 @@ scheduledTasksRoutes.patch("/:id", async (c) => {
 });
 
 scheduledTasksRoutes.delete("/:id", async (c) => {
-  const user = requireAgentOperator(c);
+  const user = requireUser(c);
   const id = c.req.param("id");
   const existing = await loadTask(id);
   if (!existing) throw new HttpError(404, "scheduled task not found");
@@ -163,7 +163,7 @@ scheduledTasksRoutes.delete("/:id", async (c) => {
 });
 
 scheduledTasksRoutes.post("/:id/run", async (c) => {
-  const user = requireAgentOperator(c);
+  const user = requireUser(c);
   const id = c.req.param("id");
   const existing = await loadTask(id);
   if (!existing) throw new HttpError(404, "scheduled task not found");
