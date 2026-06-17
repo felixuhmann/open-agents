@@ -65,6 +65,7 @@ model User {
   createdWorkflows      Workflow[]             @relation("WorkflowCreatedBy")
   workflowAccess        WorkflowAccess[]
   workflowConversations WorkflowConversation[]
+  scheduledTasks        ScheduledTask[]
 
   @@map("user")
 }
@@ -285,6 +286,7 @@ model Agent {
   emailThreads  EmailThread[]
   runs          AgentRun[]
   issues        Issue[]
+  scheduledTasks ScheduledTask[]
   sandboxes     AgentSandbox[]
   workflowSteps WorkflowStep[]
 
@@ -518,7 +520,8 @@ model ChatConversation {
   messages  ChatMessage[]
   runs      AgentRun[]
   issues    Issue[]
-  sandbox   AgentSandbox?
+  sandbox           AgentSandbox?
+  scheduledTaskRuns ScheduledTaskRun[]
 
   @@index([agentId])
   @@index([userId])
@@ -589,6 +592,7 @@ model AgentRun {
   events          RunEvent[]
   attachments     AgentAttachment[]
   workflowStepRun WorkflowStepRun?
+  scheduledTaskRuns ScheduledTaskRun[]
 
   @@index([agentId])
   @@index([agentVersionId])
@@ -742,6 +746,68 @@ model Issue {
   @@index([reporterUserId])
 }
 
+
+// ---------------------------------------------------------------------------
+// Scheduled tasks: cron-triggered agent/workflow prompts with durable history.
+// ---------------------------------------------------------------------------
+
+model ScheduledTask {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  /// `agent` | `workflow`.
+  targetType  String
+  agentId     String?
+  workflowId  String?
+  userId      String
+  cron        String
+  prompt      String
+  /// `active` | `paused`.
+  status      String   @default("active")
+  timezone    String   @default("UTC")
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agent    Agent?             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workflow Workflow?          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs     ScheduledTaskRun[]
+
+  @@index([agentId])
+  @@index([workflowId])
+  @@index([userId])
+  @@index([status, nextRunAt])
+}
+
+model ScheduledTaskRun {
+  id                     String    @id @default(cuid())
+  scheduledTaskId        String
+  scheduledFor           DateTime
+  /// `pending` | `running` | `succeeded` | `failed`.
+  status                 String    @default("pending")
+  error                  String?
+  conversationId         String?
+  workflowConversationId String?
+  agentRunId             String?
+  workflowRunId          String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime  @default(now())
+
+  scheduledTask        ScheduledTask        @relation(fields: [scheduledTaskId], references: [id], onDelete: Cascade)
+  conversation         ChatConversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  workflowConversation WorkflowConversation? @relation(fields: [workflowConversationId], references: [id], onDelete: SetNull)
+  agentRun             AgentRun?            @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  workflowRun          WorkflowRun?         @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+
+  @@index([scheduledTaskId, scheduledFor])
+  @@index([status])
+  @@index([conversationId])
+  @@index([workflowConversationId])
+}
+
 // ---------------------------------------------------------------------------
 // Workflows: an ordered pipeline of agents. The first step receives the
 // user's request; each step's text + file outputs feed the next step's
@@ -782,6 +848,7 @@ model Workflow {
   emailThreads  WorkflowEmailThread[]
   runs          WorkflowRun[]
   issues        Issue[]
+  scheduledTasks ScheduledTask[]
 
   @@index([createdById])
 }
@@ -846,6 +913,7 @@ model WorkflowConversation {
   runs          WorkflowRun[]
   agentSessions WorkflowAgentSession[]
   issues        Issue[]
+  scheduledTaskRuns ScheduledTaskRun[]
 
   @@index([workflowId])
   @@index([userId])
@@ -979,6 +1047,7 @@ model WorkflowRun {
   emailThread       WorkflowEmailThread?  @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
   events            WorkflowRunEvent[]
   stepRuns          WorkflowStepRun[]
+  scheduledTaskRuns ScheduledTaskRun[]
 
   @@index([workflowId])
   @@index([conversationId])

@@ -926,3 +926,57 @@ export function useConversationSandbox(conversationId: string | undefined) {
       ),
   });
 }
+
+export type ScheduledTaskTargetType = "agent" | "workflow";
+export type ScheduledTaskStatus = "active" | "paused";
+
+export type ScheduledTask = {
+  id: string;
+  name: string;
+  description: string | null;
+  targetType: ScheduledTaskTargetType;
+  agent: { id: string; slug: string; displayName: string; avatar: string | null } | null;
+  workflow: { id: string; slug: string; displayName: string } | null;
+  cron: string;
+  prompt: string;
+  status: ScheduledTaskStatus;
+  timezone: string;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ScheduledTaskRun = {
+  id: string;
+  status: "pending" | "running" | "succeeded" | "failed";
+  error: string | null;
+  scheduledFor: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  conversationId: string | null;
+  workflowConversationId: string | null;
+  agentRunId: string | null;
+  workflowRunId: string | null;
+  createdAt: string;
+};
+
+export function useScheduledTasks() {
+  return useQuery({
+    queryKey: ["scheduled-tasks"],
+    queryFn: () =>
+      api<{ tasks: ScheduledTask[] }>("/api/scheduled-tasks").then((r) => r.tasks),
+  });
+}
+
+export function useScheduledTaskRuns(taskId: string | undefined) {
+  return useQuery({
+    enabled: Boolean(taskId),
+    queryKey: ["scheduled-tasks", taskId, "runs"],
+    queryFn: () =>
+      api<{ runs: ScheduledTaskRun[] }>(`/api/scheduled-tasks/${taskId}/runs`).then(
+        (r) => r.runs,
+      ),
+    refetchInterval: 10_000,
+  });
+}

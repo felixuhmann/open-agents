@@ -6,6 +6,7 @@ import { registerRunAgentWorker } from "../jobs/runAgent.js";
 import { registerRunWorkflowWorker } from "../jobs/runWorkflow.js";
 import { registerSandboxReconcileWorker } from "../jobs/sandboxReconcile.js";
 import { registerSendEmailWorker } from "../jobs/sendEmail.js";
+import { registerScheduledTaskWorkers } from "../jobs/scheduledTasks.js";
 import { backfillSandboxesFromSessions } from "../services/sandboxes.js";
 import { log } from "../log.js";
 import { stopRunEventsListener } from "../runs/events.js";
@@ -38,6 +39,7 @@ export async function bootstrap(): Promise<void> {
   await registerRunAgentWorker();
   await registerRunWorkflowWorker();
   await registerSendEmailWorker();
+  await registerScheduledTaskWorkers();
   const backfilled = await backfillSandboxesFromSessions();
   if (backfilled > 0) {
     log.info("backfilled AgentSandbox rows from existing sessions", {

@@ -8,6 +8,9 @@ export const JOB_RUN_AGENT = "run-agent";
 export const JOB_RUN_WORKFLOW = "run-workflow";
 export const JOB_SEND_EMAIL = "send-email";
 export const JOB_SANDBOX_RECONCILE = "sandbox-reconcile";
+export const JOB_SCHEDULED_TASK_DISPATCH = "scheduled-task-dispatch";
+export const JOB_RUN_SCHEDULED_TASK = "run-scheduled-task";
+export const JOB_SCHEDULED_TASK_MONITOR = "scheduled-task-monitor";
 
 /**
  * `surface` decides what the worker does at the end of a successful run:
@@ -51,3 +54,7 @@ export type RunWorkflowJobData = {
   /** Set when the run originated from inbound email (step-0 file mounts). */
   workflowEmailMessageId?: string;
 };
+
+export type ScheduledTaskDispatchJobData = Record<string, never>;
+export type RunScheduledTaskJobData = { scheduledTaskRunId: string };
+export type ScheduledTaskMonitorJobData = Record<string, never>;

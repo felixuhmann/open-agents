@@ -33,6 +33,7 @@ const AgentEditPage = lazy(() => import("./pages/AgentEditPage"));
 const AgentChatPage = lazy(() => import("./pages/AgentChatPage"));
 const AgentConversationsPage = lazy(() => import("./pages/AgentConversationsPage"));
 const WorkflowsListPage = lazy(() => import("./pages/WorkflowsListPage"));
+const ScheduledTasksPage = lazy(() => import("./pages/ScheduledTasksPage"));
 const WorkflowEditPage = lazy(() => import("./pages/WorkflowEditPage"));
 const WorkflowChatPage = lazy(() => import("./pages/WorkflowChatPage"));
 const WorkflowConversationsPage = lazy(() => import("./pages/WorkflowConversationsPage"));
@@ -123,6 +124,7 @@ function ProtectedRoutes() {
             }
           />
           <Route path="/workflows" element={<WorkflowsListPage />} />
+          <Route path="/scheduled-tasks" element={<ScheduledTasksPage />} />
           <Route
             path="/workflows/:slug/edit"
             element={
