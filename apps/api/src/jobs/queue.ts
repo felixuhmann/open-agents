@@ -6,6 +6,9 @@ import {
   JOB_RUN_WORKFLOW,
   JOB_SANDBOX_RECONCILE,
   JOB_SEND_EMAIL,
+  JOB_SCHEDULED_TASK_DISPATCH,
+  JOB_RUN_SCHEDULED_TASK,
+  JOB_SCHEDULED_TASK_MONITOR,
 } from "./types.js";
 
 let boss: PgBoss | null = null;
@@ -24,9 +27,20 @@ export async function getBoss(): Promise<PgBoss> {
   await instance.createQueue(JOB_RUN_WORKFLOW);
   await instance.createQueue(JOB_SEND_EMAIL);
   await instance.createQueue(JOB_SANDBOX_RECONCILE);
+  await instance.createQueue(JOB_SCHEDULED_TASK_DISPATCH);
+  await instance.createQueue(JOB_RUN_SCHEDULED_TASK);
+  await instance.createQueue(JOB_SCHEDULED_TASK_MONITOR);
   boss = instance;
   log.info("pg-boss started", {
-    queues: [JOB_RUN_AGENT, JOB_RUN_WORKFLOW, JOB_SEND_EMAIL, JOB_SANDBOX_RECONCILE],
+    queues: [
+      JOB_RUN_AGENT,
+      JOB_RUN_WORKFLOW,
+      JOB_SEND_EMAIL,
+      JOB_SANDBOX_RECONCILE,
+      JOB_SCHEDULED_TASK_DISPATCH,
+      JOB_RUN_SCHEDULED_TASK,
+      JOB_SCHEDULED_TASK_MONITOR,
+    ],
   });
   return instance;
 }
