@@ -38,9 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import {
-  canOperateAgents,
   useAgents,
-  useCurrentUser,
   useScheduledTaskRuns,
   useScheduledTasks,
   useWorkflows,
@@ -50,13 +48,11 @@ import {
 const DEFAULT_CRON = "0 9 * * *";
 
 export default function ScheduledTasksPage() {
-  const me = useCurrentUser();
   const tasks = useScheduledTasks();
   const agents = useAgents();
   const workflows = useWorkflows();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const canManage = canOperateAgents(me.data?.role);
   const selected = useMemo(
     () => tasks.data?.find((task) => task.id === selectedId) ?? tasks.data?.[0] ?? null,
     [selectedId, tasks.data],
@@ -115,14 +111,12 @@ export default function ScheduledTasksPage() {
         description="Run an agent or workflow automatically on a cron interval with a saved prompt and full session history."
       />
 
-      {canManage ? (
-        <NewTaskCard
-          agents={agents.data ?? []}
-          workflows={workflows.data ?? []}
-          isPending={createTask.isPending}
-          onCreate={(body) => createTask.mutate(body)}
-        />
-      ) : null}
+      <NewTaskCard
+        agents={agents.data ?? []}
+        workflows={workflows.data ?? []}
+        isPending={createTask.isPending}
+        onCreate={(body) => createTask.mutate(body)}
+      />
 
       {!tasks.data || tasks.data.length === 0 ? (
         <Empty>
@@ -150,7 +144,6 @@ export default function ScheduledTasksPage() {
                 }
                 onRun={() => runTask.mutate(task.id)}
                 onDelete={() => deleteTask.mutate(task.id)}
-                canManage={canManage}
               />
             ))}
           </div>
@@ -295,7 +288,6 @@ function TaskCard({
   onToggle,
   onRun,
   onDelete,
-  canManage,
 }: {
   task: ScheduledTask;
   selected: boolean;
@@ -303,7 +295,6 @@ function TaskCard({
   onToggle: () => void;
   onRun: () => void;
   onDelete: () => void;
-  canManage: boolean;
 }) {
   const target =
     task.targetType === "agent" ? task.agent?.displayName : task.workflow?.displayName;
@@ -329,26 +320,24 @@ function TaskCard({
           Next run:{" "}
           {task.nextRunAt ? new Date(task.nextRunAt).toLocaleString() : "paused"}
         </div>
-        {canManage ? (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onRun}>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onRun}>
+            <PlayIcon data-icon="inline-start" />
+            Run now
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onToggle}>
+            {task.status === "active" ? (
+              <PauseIcon data-icon="inline-start" />
+            ) : (
               <PlayIcon data-icon="inline-start" />
-              Run now
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onToggle}>
-              {task.status === "active" ? (
-                <PauseIcon data-icon="inline-start" />
-              ) : (
-                <PlayIcon data-icon="inline-start" />
-              )}
-              {task.status === "active" ? "Pause" : "Resume"}
-            </Button>
-            <Button type="button" variant="destructive" size="sm" onClick={onDelete}>
-              <TrashIcon data-icon="inline-start" />
-              Delete
-            </Button>
-          </div>
-        ) : null}
+            )}
+            {task.status === "active" ? "Pause" : "Resume"}
+          </Button>
+          <Button type="button" variant="destructive" size="sm" onClick={onDelete}>
+            <TrashIcon data-icon="inline-start" />
+            Delete
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
