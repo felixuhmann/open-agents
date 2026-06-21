@@ -48,37 +48,53 @@ export const ScheduledTaskRunDto = z.object({
 });
 export type ScheduledTaskRunDto = z.infer<typeof ScheduledTaskRunDto>;
 
+const scheduledTaskInputShape = {
+  name: z.string().min(1).max(120),
+  description: z.string().max(1000).nullable().optional(),
+  targetType: ScheduledTaskTargetType,
+  agentSlug: z.string().min(1).optional(),
+  workflowSlug: z.string().min(1).optional(),
+  cron: z.string().min(1).max(120),
+  prompt: z.string().min(1).max(20000),
+  timezone: z.string().min(1).max(80),
+  status: ScheduledTaskStatus,
+};
+
+function validateScheduledTaskTarget(
+  value: {
+    targetType?: ScheduledTaskTargetType;
+    agentSlug?: string;
+    workflowSlug?: string;
+  },
+  addIssue: (path: string[], message: string) => void,
+) {
+  if (value.targetType === "agent" && !value.agentSlug) {
+    addIssue(["agentSlug"], "agentSlug is required");
+  }
+  if (value.targetType === "workflow" && !value.workflowSlug) {
+    addIssue(["workflowSlug"], "workflowSlug is required");
+  }
+}
+
 export const CreateScheduledTaskInput = z
   .object({
-    name: z.string().min(1).max(120),
-    description: z.string().max(1000).nullable().optional(),
-    targetType: ScheduledTaskTargetType,
-    agentSlug: z.string().min(1).optional(),
-    workflowSlug: z.string().min(1).optional(),
-    cron: z.string().min(1).max(120),
-    prompt: z.string().min(1).max(20000),
-    timezone: z.string().min(1).max(80).default("UTC"),
+    ...scheduledTaskInputShape,
+    timezone: scheduledTaskInputShape.timezone.default("UTC"),
     status: ScheduledTaskStatus.default("active"),
   })
   .superRefine((value, ctx) => {
-    if (value.targetType === "agent" && !value.agentSlug) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["agentSlug"],
-        message: "agentSlug is required",
-      });
-    }
-    if (value.targetType === "workflow" && !value.workflowSlug) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["workflowSlug"],
-        message: "workflowSlug is required",
-      });
-    }
+    validateScheduledTaskTarget(value, (path, message) => {
+      ctx.addIssue({ code: "custom", path, message });
+    });
   });
 export type CreateScheduledTaskInput = z.infer<typeof CreateScheduledTaskInput>;
 
-export const UpdateScheduledTaskInput = CreateScheduledTaskInput.partial().extend({
-  status: ScheduledTaskStatus.optional(),
-});
+export const UpdateScheduledTaskInput = z
+  .object(scheduledTaskInputShape)
+  .partial()
+  .superRefine((value, ctx) => {
+    validateScheduledTaskTarget(value, (path, message) => {
+      ctx.addIssue({ code: "custom", path, message });
+    });
+  });
 export type UpdateScheduledTaskInput = z.infer<typeof UpdateScheduledTaskInput>;
