@@ -1,10 +1,21 @@
+import type { SubagentInnerEvent } from "@open-agents/types";
 import { getAgentBackend } from "../agent-backend/instance.js";
-import type { AgentRunContext } from "../agent-backend/types.js";
+import type {
+  AgentEventHandler,
+  AgentRunContext,
+  AgentStreamEvent,
+} from "../agent-backend/types.js";
 import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
+import { truncateText } from "./daytonaLimits.js";
+import { summarizeToolResultForRunLog } from "./runObservability.js";
 import { streamRunWithEvents } from "./runStream.js";
+import { loadRunFileResources, propagateSubagentFiles } from "./subagentFiles.js";
+
+/** Cap mirrored subagent text so nested activity doesn't bloat the parent log. */
+const MIRROR_TEXT_CHARS = 2_000;
 
 /**
  * Maximum delegation depth. A user-facing run is depth 0; the subagent it
@@ -23,6 +34,12 @@ export type SubagentCallParams = {
     depth: number;
     /** Agent ids from the delegation root down to the caller, inclusive. */
     ancestors: string[];
+    /**
+     * The parent's `run_subagent` tool-call id. When present, child-run
+     * activity is mirrored onto the parent stream as `subagent.event`s keyed
+     * to this id so the chat UI can nest it under the tool card.
+     */
+    toolCallId?: string;
   };
   callee: {
     subagentId: string;
@@ -41,6 +58,93 @@ export type SubagentCallResult = {
   error?: string;
 };
 
+type MirrorController = {
+  handler: AgentEventHandler;
+  status: (status: "started" | "succeeded" | "failed") => void;
+};
+
+function clip(text: string | undefined): string {
+  return truncateText(text ?? "", MIRROR_TEXT_CHARS).text;
+}
+
+/**
+ * Build a handler that forwards a child run's normalized events onto the
+ * parent run's event log as `subagent.event`s, keyed to the parent's
+ * `run_subagent` tool-call id so the chat UI can nest them under that card.
+ * Deltas and model requests are intentionally dropped to keep the parent log
+ * at tool-card granularity.
+ */
+function makeMirrorHandler(ctx: {
+  parentRunId: string;
+  childRunId: string;
+  slug: string;
+  toolCallId?: string;
+}): MirrorController {
+  const { parentRunId, childRunId, slug, toolCallId } = ctx;
+
+  const emit = (inner: SubagentInnerEvent) => {
+    if (!toolCallId) return;
+    void appendEvent({
+      runId: parentRunId,
+      type: "subagent.event",
+      payload: { type: "subagent.event", toolCallId, childRunId, slug, inner },
+    }).catch(() => undefined);
+  };
+
+  return {
+    status: (status) => emit({ kind: "run_status", status }),
+    handler: (event: AgentStreamEvent) => {
+      switch (event.kind) {
+        case "message":
+          emit({ kind: "message", text: clip(event.text) });
+          break;
+        case "tool_use":
+          emit({ kind: "tool_use", toolName: event.toolName, callId: event.callId });
+          break;
+        case "tool_output":
+          emit({
+            kind: "tool_output",
+            toolName: event.toolName,
+            callId: event.callId,
+            stream: event.stream,
+            text: clip(event.text),
+          });
+          break;
+        case "tool_result": {
+          const summary = summarizeToolResultForRunLog(event.result);
+          emit({
+            kind: "tool_result",
+            toolName: event.toolName,
+            callId: event.callId,
+            isError: event.isError,
+            text: clip(typeof summary === "string" ? summary : JSON.stringify(summary)),
+          });
+          break;
+        }
+        case "session_error":
+          emit({ kind: "session_error", text: clip(event.message) });
+          break;
+      }
+    },
+  };
+}
+
+/** Append a compact, model-readable list of returned files to the tool output. */
+function appendFileSummary(
+  output: string,
+  files: Awaited<ReturnType<typeof propagateSubagentFiles>>,
+): string {
+  const lines = files.map(
+    (f) =>
+      `- ${f.filename} (${f.sizeBytes} bytes) — available in your sandbox at ${f.path}`,
+  );
+  return (
+    `${output}\n\n---\nFiles produced by this subagent have been attached to this ` +
+    `conversation and copied into your sandbox so you can read, reprocess, or ` +
+    `forward them to another subagent:\n${lines.join("\n")}`
+  );
+}
+
 /**
  * Execute one delegated subagent turn. Creates a fresh, isolated Daytona
  * session for the callee (pinned to its frozen version), records a child
@@ -51,7 +155,9 @@ export type SubagentCallResult = {
  * return an error result the model sees as a tool error rather than throwing,
  * so a bad delegation doesn't abort the whole parent run.
  */
-export async function runSubagent(params: SubagentCallParams): Promise<SubagentCallResult> {
+export async function runSubagent(
+  params: SubagentCallParams,
+): Promise<SubagentCallResult> {
   const { parent, callee, prompt } = params;
   const childDepth = parent.depth + 1;
 
@@ -89,6 +195,17 @@ export async function runSubagent(params: SubagentCallParams): Promise<SubagentC
     return { ok: false, error: `Subagent not found: ${callee.slug}` };
   }
 
+  // Seed the child sandbox with the parent run's files so a subagent can pick
+  // up artifacts an earlier subagent produced (the shared delegation "tray").
+  const seededFiles = await loadRunFileResources(parent.runId).catch((err) => {
+    log.warn("subagent: failed to load parent files for seeding", {
+      parentRunId: parent.runId,
+      subagent: callee.slug,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  });
+
   const backend = await getAgentBackend();
   let session;
   try {
@@ -97,6 +214,7 @@ export async function runSubagent(params: SubagentCallParams): Promise<SubagentC
       agentSlug: base.slug,
       title: `subagent: ${base.slug}`,
       agentVersionId: callee.agentVersionId,
+      ...(seededFiles.length > 0 ? { resources: seededFiles } : {}),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -141,6 +259,16 @@ export async function runSubagent(params: SubagentCallParams): Promise<SubagentC
     depth: childDepth,
   });
 
+  // Mirror the child's activity onto the parent stream so the chat UI can show
+  // it live, nested under the parent's `run_subagent` tool card.
+  const mirror = makeMirrorHandler({
+    parentRunId: parent.runId,
+    childRunId: childRun.id,
+    slug: callee.slug,
+    toolCallId: parent.toolCallId,
+  });
+  mirror.status("started");
+
   try {
     const output = await streamRunWithEvents(
       childRun.id,
@@ -155,17 +283,46 @@ export async function runSubagent(params: SubagentCallParams): Promise<SubagentC
         delegationAncestors: [...parent.ancestors, base.id],
         parentRunId: parent.runId,
       },
+      mirror.handler,
     );
+
+    // Surface any files the subagent attached back to the parent: copy them
+    // onto the parent run (chat/download) and materialize them into the parent
+    // sandbox (reprocess / forward to another subagent).
+    const parentRun = await prisma.agentRun.findUnique({
+      where: { id: parent.runId },
+      select: { sessionId: true },
+    });
+    let files: Awaited<ReturnType<typeof propagateSubagentFiles>> = [];
+    if (parentRun?.sessionId) {
+      files = await propagateSubagentFiles({
+        childRunId: childRun.id,
+        parentRunId: parent.runId,
+        parentSessionId: parentRun.sessionId,
+        slug: callee.slug,
+      }).catch((err) => {
+        log.warn("subagent: file propagation failed", {
+          parentRunId: parent.runId,
+          childRunId: childRun.id,
+          subagent: callee.slug,
+          err: err instanceof Error ? err.message : String(err),
+        });
+        return [];
+      });
+    }
+
+    const finalOutput = files.length > 0 ? appendFileSummary(output, files) : output;
     await prisma.agentRun.update({
       where: { id: childRun.id },
-      data: { status: "succeeded", completedAt: new Date(), output },
+      data: { status: "succeeded", completedAt: new Date(), output: finalOutput },
     });
     await appendEvent({
       runId: childRun.id,
       type: "run.succeeded",
-      payload: { type: "run.succeeded", output },
+      payload: { type: "run.succeeded", output: finalOutput },
     }).catch(() => undefined);
-    return { ok: true, runId: childRun.id, output };
+    mirror.status("succeeded");
+    return { ok: true, runId: childRun.id, output: finalOutput };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.agentRun
@@ -179,6 +336,7 @@ export async function runSubagent(params: SubagentCallParams): Promise<SubagentC
       type: "run.failed",
       payload: { type: "run.failed", error: message },
     }).catch(() => undefined);
+    mirror.status("failed");
     log.warn("subagent: run failed", {
       parentRunId: parent.runId,
       childRunId: childRun.id,

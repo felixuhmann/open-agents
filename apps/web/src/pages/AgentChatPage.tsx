@@ -25,7 +25,7 @@ import { Composer, type PendingUpload } from "@/components/chat/Composer";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
-import { ToolCallCard } from "@/components/chat/ToolCallCard";
+import { ToolCallCard, type SubagentItem } from "@/components/chat/ToolCallCard";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
 
@@ -38,7 +38,15 @@ type StreamEvent = {
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-type LiveToolCall = { callId: string; toolName: string; output: string; done: boolean };
+type LiveToolCall = {
+  callId: string;
+  toolName: string;
+  output: string;
+  done: boolean;
+  /** Mirrored child activity, present only for `run_subagent` calls. */
+  subagentSlug?: string;
+  subagentItems?: SubagentItem[];
+};
 
 type OptimisticMessage = {
   text: string;
@@ -59,6 +67,81 @@ function appendToolOutput(
   const row = next[idx];
   if (!row) return prev;
   next[idx] = { ...row, output: row.output + chunk };
+  return next;
+}
+
+type SubagentInner = {
+  kind: string;
+  toolName?: string;
+  text?: string;
+  callId?: string;
+  isError?: boolean;
+  stream?: "stdout" | "stderr";
+  status?: string;
+};
+
+/** Fold one mirrored child event into the parent `run_subagent` tool card. */
+function applySubagentEvent(
+  prev: LiveToolCall[],
+  toolCallId: string,
+  slug: string,
+  inner: SubagentInner,
+): LiveToolCall[] {
+  const idx = prev.findIndex((tc) => tc.callId === toolCallId);
+  if (idx < 0) return prev;
+  const row = prev[idx];
+  if (!row) return prev;
+  const items = [...(row.subagentItems ?? [])];
+
+  const upsertTool = (mut: (tool: Extract<SubagentItem, { type: "tool" }>) => void) => {
+    const ti = items.findIndex(
+      (it) => it.type === "tool" && it.callId === (inner.callId ?? ""),
+    );
+    if (ti >= 0) {
+      const existing = items[ti] as Extract<SubagentItem, { type: "tool" }>;
+      const clone = { ...existing };
+      mut(clone);
+      items[ti] = clone;
+    } else {
+      const created: Extract<SubagentItem, { type: "tool" }> = {
+        type: "tool",
+        callId: inner.callId ?? `sub-${items.length}`,
+        toolName: inner.toolName ?? "tool",
+        output: "",
+        done: false,
+      };
+      mut(created);
+      items.push(created);
+    }
+  };
+
+  switch (inner.kind) {
+    case "tool_use":
+      upsertTool(() => {});
+      break;
+    case "tool_output":
+      upsertTool((t) => {
+        const prefix = inner.stream === "stderr" ? "[stderr] " : "";
+        t.output += `${prefix}${inner.text ?? ""}`;
+      });
+      break;
+    case "tool_result":
+      upsertTool((t) => {
+        t.done = true;
+        if (inner.text) t.output = inner.text;
+      });
+      break;
+    case "message":
+      if (inner.text) items.push({ type: "message", text: inner.text });
+      break;
+    case "session_error":
+      if (inner.text) items.push({ type: "message", text: inner.text, isError: true });
+      break;
+    // run_status is reflected via the parent tool card's running/done state.
+  }
+
+  const next = [...prev];
+  next[idx] = { ...row, subagentSlug: slug, subagentItems: items };
   return next;
 }
 
@@ -333,6 +416,17 @@ export default function AgentChatPage() {
                   `unknown-${toolName}`);
             return appendToolOutput(prev, callId, toolName, chunk);
           });
+        } else if (
+          data.type === "subagent.event" &&
+          typeof data.payload.toolCallId === "string" &&
+          typeof data.payload.slug === "string" &&
+          data.payload.inner !== null &&
+          typeof data.payload.inner === "object"
+        ) {
+          const toolCallId = data.payload.toolCallId;
+          const slug = data.payload.slug;
+          const inner = data.payload.inner as SubagentInner;
+          setToolCalls((prev) => applySubagentEvent(prev, toolCallId, slug, inner));
         } else if (data.type === "run.succeeded" || data.type === "run.failed") {
           source.close();
           const finishedRunId = activeRunId;
@@ -363,6 +457,7 @@ export default function AgentChatPage() {
     source.addEventListener("tool.use", handle as EventListener);
     source.addEventListener("tool.output", handle as EventListener);
     source.addEventListener("tool.result", handle as EventListener);
+    source.addEventListener("subagent.event", handle as EventListener);
     source.addEventListener("run.started", handle as EventListener);
     source.addEventListener("run.succeeded", handle as EventListener);
     source.addEventListener("run.failed", handle as EventListener);
@@ -507,6 +602,8 @@ export default function AgentChatPage() {
                               toolName={tc.toolName}
                               output={tc.output}
                               running={!tc.done}
+                              subagentSlug={tc.subagentSlug}
+                              subagentItems={tc.subagentItems}
                             />
                           ))}
                         </div>

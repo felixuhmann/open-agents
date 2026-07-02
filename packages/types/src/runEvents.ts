@@ -50,10 +50,37 @@ export const RunEventTypes = z.enum([
   "tool.result",
   "model.request",
   "session.error",
+  "subagent.event",
   "run.succeeded",
   "run.failed",
 ]);
 export type RunEventTypes = z.infer<typeof RunEventTypes>;
+
+/**
+ * A single mirrored event from a child (subagent) run, flattened to the
+ * minimum the chat UI needs to render nested activity inside the parent's
+ * `run_subagent` tool card. `kind` mirrors the backend's normalized event
+ * vocabulary plus `run_status` for the child's lifecycle transitions.
+ */
+export const SubagentInnerEvent = z.object({
+  kind: z.enum([
+    "delta",
+    "message",
+    "tool_use",
+    "tool_output",
+    "tool_result",
+    "model_request",
+    "session_error",
+    "run_status",
+  ]),
+  toolName: z.string().optional(),
+  text: z.string().optional(),
+  callId: z.string().optional(),
+  isError: z.boolean().optional(),
+  stream: z.enum(["stdout", "stderr"]).optional(),
+  status: z.string().optional(),
+});
+export type SubagentInnerEvent = z.infer<typeof SubagentInnerEvent>;
 
 export const RunEventPayload = z.discriminatedUnion("type", [
   z.object({
@@ -144,6 +171,16 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     type: z.literal("session.error"),
     message: z.string(),
     rawType: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("subagent.event"),
+    /** Parent `run_subagent` tool-call id — the key the UI nests under. */
+    toolCallId: z.string(),
+    /** The child AgentRun this activity came from. */
+    childRunId: z.string(),
+    /** Callee slug, for the panel header. */
+    slug: z.string(),
+    inner: SubagentInnerEvent,
   }),
   z.object({
     type: z.literal("run.succeeded"),

@@ -21,7 +21,11 @@ export type SubagentToolRuntime = {
 };
 
 function errorResult(text: string) {
-  return { content: [{ type: "text" as const, text }], details: { isError: true }, isError: true };
+  return {
+    content: [{ type: "text" as const, text }],
+    details: { isError: true },
+    isError: true,
+  };
 }
 
 /**
@@ -39,7 +43,9 @@ export function buildSubagentPiTools(
   const bySlug = new Map(subagents.map((s) => [s.slug, s]));
   const slugs = subagents.map((s) => s.slug);
   const roster = subagents
-    .map((s) => `- ${s.slug}: ${s.displayName}${s.description ? ` — ${s.description}` : ""}`)
+    .map(
+      (s) => `- ${s.slug}: ${s.displayName}${s.description ? ` — ${s.description}` : ""}`,
+    )
     .join("\n");
 
   // A closed enum of allowed slugs so the model can only target bound agents.
@@ -55,7 +61,13 @@ export function buildSubagentPiTools(
       "Delegate a self-contained task to one of your subagents and receive its final text back. " +
       "The subagent runs in a fresh, isolated workspace with NO access to this conversation — " +
       "include everything it needs in `prompt`. Use this to hand specialized work to a purpose-built " +
-      "agent instead of doing it yourself. Available subagents:\n" +
+      "agent instead of doing it yourself.\n\n" +
+      "FILES: If a subagent produces a file, it attaches that file to the run. Any files it returns " +
+      "are automatically attached to this conversation AND copied into YOUR sandbox under " +
+      "`subagent_files/` — the tool result lists their exact paths. Read, reprocess, or pass those " +
+      "paths on to a later subagent (your current files are also seeded into every subagent you " +
+      "call). Never try to read a subagent's own sandbox paths directly; they do not exist in yours.\n\n" +
+      "Available subagents:\n" +
       roster,
     parameters: Type.Object({
       subagent: subagentParam,
@@ -65,7 +77,7 @@ export function buildSubagentPiTools(
       }),
     }),
     executionMode: "sequential",
-    execute: async (_id: string, params: Static<TSchema>) => {
+    execute: async (id: string, params: Static<TSchema>) => {
       const p = params as { subagent: string; prompt: string };
       const callee = bySlug.get(p.subagent);
       if (!callee) {
@@ -74,7 +86,9 @@ export function buildSubagentPiTools(
         );
       }
       if (!runtime.parentRunId) {
-        return errorResult("Subagent delegation is only available inside a persisted run.");
+        return errorResult(
+          "Subagent delegation is only available inside a persisted run.",
+        );
       }
 
       // Deferred import breaks the daytona <-> runStream module cycle.
@@ -85,6 +99,7 @@ export function buildSubagentPiTools(
           surface: runtime.parentSurface,
           depth: runtime.depth,
           ancestors: runtime.ancestors,
+          toolCallId: id,
         },
         callee: {
           subagentId: callee.subagentId,
