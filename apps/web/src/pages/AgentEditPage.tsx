@@ -15,6 +15,8 @@ import {
   PuzzlePieceIcon,
   ShieldCheckIcon,
   TrashIcon,
+  UsersThreeIcon,
+  WarningIcon,
   WarningOctagonIcon,
   WrenchIcon,
 } from "@phosphor-icons/react";
@@ -23,6 +25,7 @@ import {
   type FullAgentDto,
   useAgent,
   useAgentAccess,
+  useAgents,
   useMcpServers,
   useSkills,
   useTools,
@@ -89,6 +92,7 @@ type EditState = {
   toolIds: string[];
   skillBindings: Array<{ skillId: string; skillVersionId: string }>;
   mcpServerIds: string[];
+  subagentIds: string[];
   sandboxInternetEnabled: boolean;
   sandboxAllowList: string;
   sandboxProtectInternalNetwork: boolean;
@@ -119,6 +123,7 @@ function fromDto(a: FullAgentDto): EditState {
       a.skillBindings ??
       a.skills.map((s) => ({ skillId: s.id, skillVersionId: s.versionId })),
     mcpServerIds: a.mcpServerIds ?? a.mcpServers.map((m) => m.id),
+    subagentIds: a.subagentIds ?? a.subagents.map((s) => s.id),
     sandboxInternetEnabled: a.sandboxNetworkPolicy.internetEnabled,
     sandboxAllowList: a.sandboxNetworkPolicy.allowList,
     sandboxProtectInternalNetwork: a.sandboxNetworkPolicy.protectInternalNetwork,
@@ -144,6 +149,7 @@ export default function AgentEditPage() {
   const tools = useTools();
   const skills = useSkills();
   const mcpServers = useMcpServers();
+  const allAgents = useAgents();
   const access = useAgentAccess(slug);
   const qc = useQueryClient();
   const [state, setState] = useState<EditState | null>(null);
@@ -174,6 +180,7 @@ export default function AgentEditPage() {
           toolBindings: s.toolIds.map((id) => ({ toolId: id })),
           skillBindings: s.skillBindings,
           mcpServerIds: s.mcpServerIds,
+          subagentIds: s.subagentIds,
           sandboxNetworkPolicy: {
             internetEnabled: s.sandboxInternetEnabled,
             allowList: s.sandboxAllowList.trim(),
@@ -290,6 +297,10 @@ export default function AgentEditPage() {
     return `${person.name ?? ""} ${person.email}`.toLowerCase().includes(query);
   });
   const selectedAccessIds = new Set(state.accessUserIds);
+  const subagentOptions = (allAgents.data ?? []).filter((a) => a.id !== agent.data.id);
+  const unpublishedSubagents = (agent.data.subagents ?? []).filter(
+    (s) => state.subagentIds.includes(s.id) && !s.hasPublishedVersion,
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -1002,6 +1013,64 @@ export default function AgentEditPage() {
                     Add an MCP server
                   </Link>{" "}
                   before attaching it here.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UsersThreeIcon className="size-4" weight="duotone" />
+            Subagents
+          </CardTitle>
+          <CardDescription>
+            Other agents this agent can delegate to with the <code>run_subagent</code>{" "}
+            tool. Each delegation runs the selected agent in a fresh, isolated
+            workspace and returns its final answer. The callee&apos;s published version
+            is pinned when you publish this agent.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {unpublishedSubagents.length > 0 ? (
+            <div className="flex items-start gap-2 border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <WarningIcon className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <div>
+                These selected subagents have no published version and will block
+                publishing until you publish them:{" "}
+                <span className="font-medium">
+                  {unpublishedSubagents.map((s) => s.displayName).join(", ")}
+                </span>
+                .
+              </div>
+            </div>
+          ) : null}
+          {subagentOptions.length > 0 ? (
+            <CheckboxGrid
+              items={subagentOptions.map((a) => ({
+                id: a.id,
+                title: a.displayName,
+                description: a.description ?? a.slug,
+              }))}
+              selected={state.subagentIds}
+              onToggle={(id, on) => {
+                const next = new Set(state.subagentIds);
+                if (on) next.add(id);
+                else next.delete(id);
+                setS({ subagentIds: [...next] });
+              }}
+            />
+          ) : (
+            <Empty className="py-6">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <UsersThreeIcon />
+                </EmptyMedia>
+                <EmptyTitle>No other agents</EmptyTitle>
+                <EmptyDescription>
+                  Create another agent to delegate work to it from here.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

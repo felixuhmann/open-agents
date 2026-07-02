@@ -37,7 +37,7 @@ export const agentControlPlaneTools = [
     name: "agents_update",
     title: "Update agent",
     description:
-      "Patch agent draft fields (category, system prompt, model, tool bindings, skills, MCP servers, access).",
+      "Patch agent draft fields (category, system prompt, model, tool bindings, skills, MCP servers, subagents, access).",
     auth: "operator",
     method: "PATCH",
     path: "/api/agents/:slug",

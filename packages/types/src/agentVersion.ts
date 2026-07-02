@@ -31,6 +31,21 @@ export const AgentConfigMcpServer = z.object({
 });
 export type AgentConfigMcpServer = z.infer<typeof AgentConfigMcpServer>;
 
+/**
+ * Frozen delegation target. Captured at publish time with the callee's
+ * then-current published version pinned, so a delegation runs the exact
+ * subagent config that existed when the caller was published.
+ */
+export const AgentConfigSubagentBinding = z.object({
+  subagentId: z.string(),
+  slug: z.string(),
+  displayName: z.string(),
+  description: z.string().nullish(),
+  /** Pinned published version of the callee to execute. */
+  agentVersionId: z.string(),
+});
+export type AgentConfigSubagentBinding = z.infer<typeof AgentConfigSubagentBinding>;
+
 /** @deprecated Alias for `AgentConfigMcpServer`. */
 export type AgentConfigThirdPartyMcp = AgentConfigMcpServer;
 
@@ -69,6 +84,8 @@ export const AgentConfigSnapshot = z.object({
     });
   }, z.array(AgentConfigMcpServer)),
   skillBindings: z.array(AgentConfigSkillBinding),
+  /** Agents this agent may delegate to, each pinned to a published version. */
+  subagentBindings: z.array(AgentConfigSubagentBinding).default([]),
   runtime: AgentConfigRuntime,
 });
 export type AgentConfigSnapshot = z.infer<typeof AgentConfigSnapshot>;

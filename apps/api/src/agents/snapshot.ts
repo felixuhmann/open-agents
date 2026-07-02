@@ -16,6 +16,41 @@ export type VersionedAgent = HydratedAgent & {
 };
 
 /**
+ * Normalized delegation target consumed by the runtime (`run_subagent`).
+ * Draft runs resolve this live from the current bindings; versioned runs
+ * resolve it from the frozen snapshot so the pinned version is honored.
+ */
+export type RuntimeSubagentBinding = {
+  subagentId: string;
+  slug: string;
+  displayName: string;
+  description: string | null;
+  /** Pinned published version to run; null means "use the callee's current". */
+  agentVersionId: string | null;
+};
+
+export function resolveRuntimeSubagents(
+  agent: HydratedAgent | VersionedAgent,
+): RuntimeSubagentBinding[] {
+  if ("configSnapshot" in agent) {
+    return agent.configSnapshot.subagentBindings.map((b) => ({
+      subagentId: b.subagentId,
+      slug: b.slug,
+      displayName: b.displayName,
+      description: b.description ?? null,
+      agentVersionId: b.agentVersionId,
+    }));
+  }
+  return agent.subagentBindings.map((b) => ({
+    subagentId: b.subagentId,
+    slug: b.subagent.slug,
+    displayName: b.subagent.displayName,
+    description: b.subagent.description,
+    agentVersionId: b.subagent.currentVersionId,
+  }));
+}
+
+/**
  * Build a provider-neutral config snapshot from the agent's current draft
  * bindings. Daytona is the only runtime backend.
  */
@@ -51,6 +86,21 @@ export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnaps
       skillName: b.skill.name,
       versionNumber: b.skillVersion.versionNumber,
     })),
+    subagentBindings: agent.subagentBindings.map((b) => {
+      if (!b.subagent.currentVersionId) {
+        throw new HttpError(
+          409,
+          `Cannot publish "${agent.slug}": subagent "${b.subagent.slug}" has no published version. Publish it before publishing this agent.`,
+        );
+      }
+      return {
+        subagentId: b.subagentId,
+        slug: b.subagent.slug,
+        displayName: b.subagent.displayName,
+        description: b.subagent.description,
+        agentVersionId: b.subagent.currentVersionId,
+      };
+    }),
     runtime: { backend: "daytona", sandbox },
   });
 }

@@ -142,6 +142,12 @@ export const UpdateAgentInput = z.object({
     .optional(),
   /** Replace-semantics: MCP servers from the library attached to this agent. */
   mcpServerIds: z.array(z.string()).optional(),
+  /**
+   * Replace-semantics: other agents this agent may delegate to via the
+   * `run_subagent` tool. Each entry is an `Agent.id`; the agent's own id is
+   * ignored (no self-delegation).
+   */
+  subagentIds: z.array(z.string()).optional(),
   accessUserIds: z.array(z.string()).optional(),
   sandboxNetworkPolicy: SandboxNetworkPolicySchema.optional(),
   sandboxCommandPolicy: SandboxCommandPolicySchema.optional(),

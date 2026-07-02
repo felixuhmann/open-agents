@@ -314,6 +314,14 @@ export type FullAgentDto = {
   skills: Array<{ id: string; name: string; versionId: string; versionNumber: number }>;
   mcpServers: Array<{ id: string; name: string; label: string; serverUrl: string }>;
   mcpServerIds: string[];
+  subagentIds: string[];
+  subagents: Array<{
+    id: string;
+    slug: string;
+    displayName: string;
+    description: string | null;
+    hasPublishedVersion: boolean;
+  }>;
   accessUserIds: string[];
   sandboxNetworkPolicy: {
     internetEnabled: boolean;

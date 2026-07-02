@@ -68,12 +68,24 @@ export type UploadFileInput = {
 
 export type AgentRunContext = {
   runId: string;
-  surface: "chat" | "email" | "workflow";
+  surface: "chat" | "email" | "workflow" | "subagent";
   agentId: string;
   /** Frozen config version this run executes against. */
   agentVersionId?: string;
   chatMessageId?: string;
   emailMessageId?: string;
+  /**
+   * Delegation depth of this run (0 for a user-facing run, 1 for a subagent
+   * it spawns, and so on). Used to bound `run_subagent` recursion.
+   */
+  delegationDepth?: number;
+  /**
+   * Agent ids from the delegation root down to this run inclusive. Used to
+   * reject cycles (an agent calling an ancestor already in the chain).
+   */
+  delegationAncestors?: string[];
+  /** AgentRun that spawned this run via `run_subagent`, when applicable. */
+  parentRunId?: string;
 };
 
 /**

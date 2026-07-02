@@ -41,6 +41,7 @@ import { loadVersionedAgent, type VersionedAgent } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
+import { buildSubagentPiTools } from "../mcp/subagentTools.js";
 import { loadMcpServerBearerMap } from "../mcp/mcpServerSecrets.js";
 import { listAgentMcpServers } from "../agents/service.js";
 import {
@@ -300,6 +301,12 @@ export class DaytonaAgentBackend implements AgentBackend {
             thirdPartyBearer,
             { sandbox: { fs: sandbox.fs, workspaceDir } },
           );
+          const subagentTools = buildSubagentPiTools(agent, {
+            parentRunId: context?.runId,
+            parentSurface: context?.surface ?? "chat",
+            depth: context?.delegationDepth ?? 0,
+            ancestors: context?.delegationAncestors ?? [agentId],
+          });
           const tools = [
             ...buildTools(
               agent,
@@ -310,6 +317,7 @@ export class DaytonaAgentBackend implements AgentBackend {
               context?.runId,
             ),
             ...mcpTools,
+            ...subagentTools,
           ];
           let finalText = "";
           let deltaText = "";

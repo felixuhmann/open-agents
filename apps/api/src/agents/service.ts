@@ -35,6 +35,9 @@ export type HydratedAgent = Agent & {
   mcpBindings: (Prisma.AgentMcpBindingGetPayload<true> & {
     mcpServer: Prisma.McpServerGetPayload<true>;
   })[];
+  subagentBindings: (Prisma.AgentSubagentBindingGetPayload<true> & {
+    subagent: Prisma.AgentGetPayload<true>;
+  })[];
   access: Prisma.AgentAccessGetPayload<true>[];
 };
 
@@ -42,6 +45,7 @@ const HYDRATED_INCLUDE = {
   toolBindings: { include: { tool: true } },
   skillBindings: { include: { skill: true, skillVersion: true } },
   mcpBindings: { include: { mcpServer: true } },
+  subagentBindings: { include: { subagent: true } },
   access: true,
   currentVersion: true,
 } as const satisfies Prisma.AgentInclude;
@@ -174,6 +178,7 @@ export type UpdateAgentArgs = {
   skillIds?: string[];
   skillBindings?: { skillId: string; skillVersionId: string }[];
   mcpServerIds?: string[];
+  subagentIds?: string[];
   accessUserIds?: string[];
   sandboxNetworkPolicy?: SandboxNetworkPolicy;
   sandboxCommandPolicy?: SandboxCommandPolicy;
@@ -321,6 +326,27 @@ export async function updateAgent(
     }
   }
 
+  let resolvedSubagentIds: string[] | undefined = args.subagentIds;
+  if (args.subagentIds) {
+    // Drop self-delegation and any ids that don't resolve to a real agent.
+    const requested = args.subagentIds.filter((sid) => sid !== id);
+    const existing = await prisma.agent.findMany({
+      where: { id: { in: requested } },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((a) => a.id));
+    const missing = args.subagentIds.filter(
+      (sid) => sid === id || !existingIds.has(sid),
+    );
+    if (missing.length > 0) {
+      log.warn("agents: dropping invalid subagent ids on update", {
+        agentId: id,
+        missing,
+      });
+    }
+    resolvedSubagentIds = [...new Set(requested.filter((sid) => existingIds.has(sid)))];
+  }
+
   let resolvedAccessUserIds: string[] | undefined = args.accessUserIds;
   if (args.accessUserIds && args.accessUserIds.length > 0) {
     const existing = await prisma.user.findMany({
@@ -376,6 +402,15 @@ export async function updateAgent(
       if (resolvedMcpServerIds.length > 0) {
         await tx.agentMcpBinding.createMany({
           data: resolvedMcpServerIds.map((mcpServerId) => ({ agentId: id, mcpServerId })),
+        });
+      }
+    }
+
+    if (resolvedSubagentIds) {
+      await tx.agentSubagentBinding.deleteMany({ where: { agentId: id } });
+      if (resolvedSubagentIds.length > 0) {
+        await tx.agentSubagentBinding.createMany({
+          data: resolvedSubagentIds.map((subagentId) => ({ agentId: id, subagentId })),
         });
       }
     }

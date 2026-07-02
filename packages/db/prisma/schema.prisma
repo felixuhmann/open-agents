@@ -281,6 +281,10 @@ model Agent {
   toolBindings  AgentToolBinding[]
   skillBindings AgentSkillBinding[]
   mcpBindings   AgentMcpBinding[]
+  /// Other agents this agent may delegate to via the `run_subagent` tool.
+  subagentBindings AgentSubagentBinding[] @relation("AgentSubagentParent")
+  /// Bindings where this agent is the callee (which agents can delegate to it).
+  subagentOf       AgentSubagentBinding[] @relation("AgentSubagentChild")
   memoryDocs    MemoryDoc[]
   conversations ChatConversation[]
   emailThreads  EmailThread[]
@@ -430,6 +434,22 @@ model SkillVersion {
   @@index([skillId])
 }
 
+/// Directed "can delegate to" edge between two agents. When agent A binds
+/// agent B, A's runtime gains a `run_subagent` option targeting B. The callee's
+/// published version is frozen into A's `AgentVersion.payload.subagentBindings`
+/// at publish time (mirrors how WorkflowStep pins agent versions), so live
+/// delegations are reproducible even as B is edited afterward.
+model AgentSubagentBinding {
+  agentId    String
+  subagentId String
+  agent      Agent    @relation("AgentSubagentParent", fields: [agentId], references: [id], onDelete: Cascade)
+  subagent   Agent    @relation("AgentSubagentChild", fields: [subagentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([agentId, subagentId])
+  @@index([subagentId])
+}
+
 /// Many-to-many between Agent and Skill, pinned to one uploaded version.
 model AgentSkillBinding {
   agentId        String
@@ -571,8 +591,11 @@ model AgentRun {
   /// Frozen config this run executed against (`Agent.currentVersionId` at enqueue).
   agentVersionId  String?
   agentVersion    AgentVersion?     @relation(fields: [agentVersionId], references: [id], onDelete: SetNull)
-  /// `email` | `chat` | `workflow`.
+  /// `email` | `chat` | `workflow` | `subagent`.
   surface         String
+  /// Set when this run was spawned by another run's `run_subagent` tool call.
+  /// Points at the parent AgentRun so nested delegations form a tree.
+  parentRunId     String?
   /// Set when surface = `email`.
   threadId        String?
   /// Set when surface = `chat`.
@@ -589,6 +612,8 @@ model AgentRun {
   agent           Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
   thread          EmailThread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
   conversation    ChatConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  parentRun       AgentRun?         @relation("AgentRunChildren", fields: [parentRunId], references: [id], onDelete: SetNull)
+  childRuns       AgentRun[]        @relation("AgentRunChildren")
   events          RunEvent[]
   attachments     AgentAttachment[]
   workflowStepRun WorkflowStepRun?
@@ -598,6 +623,7 @@ model AgentRun {
   @@index([agentVersionId])
   @@index([threadId])
   @@index([conversationId])
+  @@index([parentRunId])
   @@index([status])
 }
 
