@@ -17,6 +17,7 @@ These fields replace the prior value when included:
 - Agent `skillIds`
 - Agent `skillBindings`
 - Agent `mcpServerIds`
+- Agent `subagentIds`
 - Agent `accessUserIds`
 - Workflow `starterPrompts`
 - Workflow `steps`
@@ -54,6 +55,10 @@ Managed tools run in Daytona. Platform tools run on the API host. Third-party MC
 
 Uploaded agent skills materialize into Daytona sandboxes when a sandbox is created. Changing skill bindings mid-conversation does not necessarily re-sync an existing sandbox; start a new session or sandbox if the run must see new skill files.
 
+## Subagent Delegation
+
+`agents_update.subagentIds` lists the `Agent.id` values an agent may delegate to through its built-in `run_subagent` tool. This is agent-to-agent delegation inside a single run, which is different from a workflow's ordered `steps`. The array is replace-semantics; the agent's own id is ignored (no self-delegation). Delegated agents should have a published version, and delegation changes only take effect after you publish the calling agent.
+
 ## MCP Server Confusion
 
 There are two different MCP concepts:
@@ -65,7 +70,7 @@ Do not try to attach the control-plane server to itself as a third-party library
 
 ## MCP Limitations
 
-Multipart uploads are not represented as MCP tools. Agent avatars, chat attachments, skill bundle zips, and branding image uploads require the web UI or direct HTTP.
+Skill bundle zips upload through MCP via `skills_create`, which returns a single-use signed URL you `PUT` the raw zip to (the tool does not carry the bytes itself). Other multipart uploads — agent avatars, chat attachments, and branding images — are not represented as MCP tools and require the web UI or direct HTTP.
 
 SSE tools return `text/event-stream`, not JSON. Use them for live progress or replay; use conversation `*_get` tools for durable history.
 

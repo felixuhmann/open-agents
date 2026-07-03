@@ -17,6 +17,7 @@
    - `toolBindings`
    - `skillBindings` or `skillIds`
    - `mcpServerIds`
+   - `subagentIds` when the agent should delegate to other agents via `run_subagent`
    - `accessMode` and `accessUserIds`
    - sandbox policies if requested
 7. Call `agents_get` again and verify the draft matches the request.
@@ -37,6 +38,7 @@ Never stop after `agents_create` or `agents_update` when the user expects a usab
    - `tools_list` for `toolBindings[].toolId`
    - `skills_list` for skill and version ids
    - `mcp_servers_list` for third-party MCP ids
+   - `agents_list` for `subagentIds` when changing delegation
    - `models_catalog` for model ids
 4. Call `agents_update` with only the fields being changed (including `category` when recategorizing, `profileAccessEnabled` for requester profile access, or `null` to clear nullable fields), except arrays must be complete desired arrays.
 5. Call `agents_get` to verify draft state.
@@ -53,6 +55,14 @@ Never stop after `agents_create` or `agents_update` when the user expects a usab
 5. Call `agents_get` for each target agent.
 6. Call `agents_update` with the complete `mcpServerIds` array.
 7. Call `agents_publish`.
+
+## Upload And Bind A Skill Bundle
+
+1. Package the skill as a `.zip` whose top level contains a `SKILL.md`.
+2. Call `skills_create` with the skill `name` (and optional `description` for a brand-new skill). Reusing an existing name uploads a new version; a new name creates a new skill.
+3. `PUT` the raw zip bytes to the returned `uploadUrl` before it expires (single-use, ~15 min), for example `curl -X PUT --data-binary @bundle.zip "<uploadUrl>"`.
+4. Call `skills_list` to confirm the skill and its new version id.
+5. Bind it to an agent with `agents_update` using `skillBindings` (pin `skillId` + `skillVersionId`) or `skillIds`, then `agents_publish`.
 
 ## Create And Publish A Workflow
 

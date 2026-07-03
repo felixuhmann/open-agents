@@ -1,6 +1,6 @@
 ---
 name: open-agents-control-plane
-description: Operate an Open Agents deployment through its control-plane MCP server. Use when creating, updating, publishing, testing, debugging, or administering agents, workflows, conversations, MCP library entries, tool bindings, skill bindings, users, settings, secrets, sandboxes, issues, or analytics via tools such as agents_create, agents_update, agents_publish, workflows_publish, conversations_send_message, mcp_servers_probe, and settings_upsert.
+description: Operate an Open Agents deployment through its control-plane MCP server. Use when creating, updating, publishing, testing, debugging, or administering agents, workflows, conversations, subagent delegation, MCP library entries, tool bindings, skill bindings, skill uploads, users, settings, secrets, sandboxes, issues, or analytics via tools such as agents_create, agents_update, agents_publish, workflows_publish, conversations_send_message, mcp_servers_probe, skills_create, and settings_upsert.
 ---
 
 # Open Agents Control Plane
@@ -13,7 +13,7 @@ Treat agents and workflows as draft-first resources. `agents_create`, `agents_up
 
 Before mutating, read current state and library catalogs. Use `agents_get`, `workflows_get`, `tools_list`, `models_catalog`, `skills_list`, and `mcp_servers_list` so updates preserve existing choices and use valid ids.
 
-Many update fields use replacement semantics. When patching `toolBindings`, `skillIds`, `skillBindings`, `mcpServerIds`, `accessUserIds`, workflow `steps`, or `starterPrompts`, send the complete desired array, not only the item being added.
+Many update fields use replacement semantics. When patching `toolBindings`, `skillIds`, `skillBindings`, `mcpServerIds`, `subagentIds`, `accessUserIds`, workflow `steps`, or `starterPrompts`, send the complete desired array, not only the item being added.
 
 ## Standard Workflow
 
@@ -38,6 +38,7 @@ When creating or substantially changing an agent:
 - Bind tools with `toolBindings` using `Tool.id` values from `tools_list`, not tool names.
 - Bind uploaded skills with `skillBindings` when a specific version is needed. Use `skillIds` only when the API/client schema makes that the intended shortcut.
 - Attach third-party MCP servers with `mcpServerIds` after probing or verifying the library entry.
+- Enable subagent delegation with `subagentIds`, listing the `Agent.id` values this agent may call through its `run_subagent` tool. The array is replace-semantics; the agent's own id is ignored (no self-delegation). Each delegate should have a published version before the caller relies on it.
 - Set `accessMode` and `accessUserIds` together when restricting access.
 - Publish with `agents_publish`, then verify with `agents_get`.
 - Run a minimal chat test through the MCP conversation tools before declaring the agent ready.
@@ -63,13 +64,21 @@ Use the MCP library tools for external MCP servers attached to agents:
 
 Do not confuse this library with the control-plane MCP server itself. Library servers are tools available during agent runs.
 
+## Skill Bundles
+
+Uploaded skills are `.zip` bundles whose top level contains a `SKILL.md`. They are bound to agents through `skillBindings` or `skillIds`.
+
+- Upload a bundle through MCP with `skills_create`. It returns a short-lived, single-use signed `uploadUrl`; you then `PUT` the raw zip bytes to that URL (for example `curl -X PUT --data-binary @bundle.zip "<uploadUrl>"`). Reusing an existing skill `name` creates a new version; a new `name` creates a new skill. This requires admin role and an environment with a filesystem to hold the bundle.
+- List existing bundles and versions with `skills_list`, and remove one with `skills_delete` (destructive; only when explicitly asked).
+- `skill_download_link` returns a public download URL and install instructions for this deployment's own control-plane skill bundle. Fetch and unzip it into a skills directory to install it; do not inline its contents into context.
+
 ## Safety Rules
 
 Do not delete agents, workflows, users, skills, MCP servers, sandboxes, secrets, settings, bearer tokens, or issues unless the user explicitly asks for that destructive action.
 
 Do not expose secret values. `secrets_list` only reports configured keys; `secrets_upsert` requires the user to provide the value.
 
-Do not assume uploads are available through MCP. Multipart uploads such as avatars, skill bundle zips, and chat attachments require the web UI or direct HTTP.
+Skill bundle zips upload through MCP via the `skills_create` signed-URL flow. Other multipart uploads — agent avatars, chat attachments, and branding images — are not exposed as MCP tools and require the web UI or direct HTTP.
 
 Prefer exact MCP tool schemas shown by the client over memory if they differ from this skill.
 

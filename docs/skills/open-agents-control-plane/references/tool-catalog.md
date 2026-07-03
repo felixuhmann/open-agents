@@ -7,7 +7,7 @@ This catalog summarizes the MCP tools exposed by `apps/api/src/mcp/controlPlane/
 - `agents_list`: List visible agents, including their categories for client-side filtering.
 - `agents_create`: Create an agent draft. Accepts optional `category`; follow with `agents_get`, configuration updates, `agents_publish`, and a chat test.
 - `agents_get`: Read full agent configuration by slug, including `profileAccessEnabled`.
-- `agents_update`: Patch agent draft fields, including `category` (`null` clears it) and `profileAccessEnabled` (requester profile access). Replacement arrays must be complete.
+- `agents_update`: Patch agent draft fields, including `category` (`null` clears it), `profileAccessEnabled` (requester profile access), and `subagentIds` (agents this one may delegate to via `run_subagent`). Replacement arrays must be complete.
 - `agents_publish`: Freeze the current draft into a published `AgentVersion`.
 - `agents_delete`: Permanently delete an agent. Use only when explicitly requested.
 - `agents_list_access`: List explicit access users for restricted agents.
@@ -45,6 +45,8 @@ This catalog summarizes the MCP tools exposed by `apps/api/src/mcp/controlPlane/
 - `tools_list`: List managed and platform tools. Use `Tool.id` for agent `toolBindings`.
 - `models_catalog`: List model providers and model ids, including whether each provider is configured.
 - `skills_list`: List uploaded skill bundles and versions.
+- `skills_create`: Request a short-lived, single-use signed URL to upload a skill bundle zip (top level contains `SKILL.md`). Does not transfer bytes itself: `PUT` the raw zip to the returned `uploadUrl`. Reusing a `name` adds a new version; a new `name` creates a new skill. Admin only.
+- `skill_download_link`: Public tool returning a download URL and install instructions for this deployment's control-plane skill bundle. Fetch and unzip into a skills directory; do not inline its contents.
 - `skills_delete`: Delete a skill bundle. Use only when explicitly requested.
 - `mcp_servers_probe_draft`: Test an unsaved external MCP URL.
 - `mcp_servers_list`: List third-party MCP library entries.
