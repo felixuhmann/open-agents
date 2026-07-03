@@ -22,6 +22,10 @@ docker/.env
 docs
 *.md
 !apps/api/src/emails/**
+# ...except the control-plane skill folder: `apps/api` build compiles it into
+# the runtime `.skill` download (dist/skills/), so it must reach the context.
+!docs/skills/open-agents-control-plane
+!docs/skills/open-agents-control-plane/**
 
 # Test and CI
 **/*.test.ts

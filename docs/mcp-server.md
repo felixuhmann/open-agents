@@ -141,17 +141,45 @@ The proxy (`apiProxy.ts`) needs no changes for new `/api/*` paths.
 
 ## Implementation files
 
-| File                                          | Role                                             |
-| --------------------------------------------- | ------------------------------------------------ |
-| `apps/api/src/routes/mcp.ts`                  | Hono route, auth gate, Streamable HTTP transport |
-| `apps/api/src/routes/wellKnown.ts`            | Root OAuth discovery for MCP clients             |
-| `apps/api/src/auth/mcpAuth.ts`                | OAuth + bearer session resolution for `/mcp`     |
-| `apps/api/src/mcp/controlPlane/server.ts`     | MCP server factory                               |
-| `apps/api/src/mcp/controlPlane/defineTool.ts` | Tool registration + REST proxy helper            |
-| `apps/api/src/mcp/controlPlane/tools/`        | Per-operation tool definitions                   |
-| `apps/api/src/mcp/controlPlane/apiProxy.ts`   | Internal `app.request` proxy                     |
-| `apps/api/src/auth/index.ts`                  | `bearer()` + `mcp()` plugins                     |
-| `apps/web/src/pages/OAuthConsentPage.tsx`     | OAuth consent UI during connector setup          |
+| File                                           | Role                                                |
+| ---------------------------------------------- | --------------------------------------------------- |
+| `apps/api/src/routes/mcp.ts`                   | Hono route, auth gate, Streamable HTTP transport    |
+| `apps/api/src/routes/wellKnown.ts`             | Root OAuth discovery for MCP clients                |
+| `apps/api/src/auth/mcpAuth.ts`                 | OAuth + bearer session resolution for `/mcp`        |
+| `apps/api/src/mcp/controlPlane/server.ts`      | MCP server factory                                  |
+| `apps/api/src/mcp/controlPlane/defineTool.ts`  | Tool registration + REST proxy helper               |
+| `apps/api/src/mcp/controlPlane/tools/`         | Per-operation tool definitions                      |
+| `apps/api/src/mcp/controlPlane/apiProxy.ts`    | Internal `app.request` proxy                        |
+| `apps/api/src/auth/index.ts`                   | `bearer()` + `mcp()` plugins                        |
+| `apps/web/src/pages/OAuthConsentPage.tsx`      | OAuth consent UI during connector setup             |
+| `apps/api/src/routes/api/controlPlaneSkill.ts` | Public skill download + info routes                 |
+| `apps/api/src/services/controlPlaneSkill.ts`   | Compiles `docs/skills/…` into a `.skill` at runtime |
+
+## Downloading the control-plane skill
+
+The agent skill that teaches a client how to drive this MCP server lives in the
+repo at `docs/skills/open-agents-control-plane/` (`SKILL.md` + `references/`).
+Rather than committing a pre-built bundle that drifts, the API **compiles that
+folder into a `.skill` bundle at request time**:
+
+- `GET /api/skills/control-plane/bundle.skill` — **public, unauthenticated**.
+  Streams a freshly-zipped `.skill` (cached in-process, served with a strong
+  `ETag`). The bundle is documentation only, so it needs no auth.
+- `GET /api/skills/control-plane` — public JSON with the download URL, the
+  suggested install path, and a one-line install command.
+
+The `apps/api` build copies the skill folder into `dist/skills/` (mirroring
+`emails/static`), since `docs/` is stripped from the production image; the
+service falls back to the repo `docs/` tree in dev.
+
+MCP clients discover this via the **`skill_download_link`** tool, which returns
+the JSON above. The intended flow preserves progressive disclosure: the tool
+hands back a _link_, the agent fetches and unzips it into its skills directory
+(`.claude/skills/open-agents-control-plane/`), and from then on only the
+`SKILL.md` frontmatter sits in context — references are read on demand. Nothing
+bulky is ever inlined into the tool result. Re-running the download always
+reflects the current docs for this deployment. The output is also a valid
+Skills Library bundle, so it can be re-uploaded via **Skills** if desired.
 
 ## Distinction from agent-runtime MCP
 

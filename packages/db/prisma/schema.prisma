@@ -434,6 +434,29 @@ model SkillVersion {
   @@index([skillId])
 }
 
+/// One-shot, short-lived authorization to upload a skill bundle out-of-band —
+/// the "signed URL" target backing the `skills_create` MCP tool. The raw token
+/// is returned once inside the upload URL and never stored; only its SHA-256
+/// hash is persisted here. A successful upload (or passing `expiresAt`)
+/// invalidates the row, so a leaked or replayed URL cannot create a second
+/// version.
+model PendingSkillUpload {
+  id          String    @id @default(cuid())
+  /// SHA-256 hash (hex) of the opaque upload token. The raw token is never stored.
+  tokenHash   String    @unique
+  /// Target skill name. If a Skill with this name exists at upload time the
+  /// bundle becomes a new version; otherwise a new Skill is created.
+  skillName   String
+  /// Description applied only when the upload creates a brand-new skill.
+  description String?
+  expiresAt   DateTime
+  /// Set atomically on the first successful upload; guarantees single use.
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
 /// Directed "can delegate to" edge between two agents. When agent A binds
 /// agent B, A's runtime gains a `run_subagent` option targeting B. The callee's
 /// published version is frozen into A's `AgentVersion.payload.subagentBindings`

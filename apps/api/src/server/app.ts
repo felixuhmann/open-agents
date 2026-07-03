@@ -4,6 +4,7 @@ import { attachUser } from "../auth/middleware.js";
 import { config } from "../config.js";
 import { agentsRoutes } from "../routes/api/agents.js";
 import { analyticsRoutes } from "../routes/api/analytics.js";
+import { controlPlaneSkillRoutes } from "../routes/api/controlPlaneSkill.js";
 import { conversationsRoutes } from "../routes/api/conversations.js";
 import { issuesRoutes } from "../routes/api/issues.js";
 import { profileRoutes } from "../routes/api/profile.js";
@@ -103,6 +104,8 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/settings", settingsRoutes);
   app.route("/api/mcp-connection", mcpConnectionRoutes);
   app.route("/api/mcp-servers", mcpServersRoutes);
+  // More specific than `/api/skills` — register first so it is not shadowed.
+  app.route("/api/skills/control-plane", controlPlaneSkillRoutes);
   app.route("/api/skills", skillsRoutes);
   app.route("/api/tools", toolsRoutes);
   app.route("/api/models", modelsRoutes);

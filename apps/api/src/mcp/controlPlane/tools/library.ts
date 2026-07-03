@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   CreateMcpServerInput,
+  CreateSkillUploadRequestInput,
   ProbeMcpServerInput,
   ProbeStoredMcpServerInput,
   UpdateMcpServerInput,
@@ -34,6 +35,28 @@ export const libraryControlPlaneTools = [
     method: "GET",
     path: "/api/skills",
     input: z.object({}),
+  }),
+  defineControlPlaneTool({
+    name: "skill_download_link",
+    title: "Get control-plane skill download link",
+    description:
+      "Return a public download URL and install instructions for the latest Open Agents control-plane agent skill bundle (.skill), compiled from this deployment's docs. Fetch the URL and unzip it into your skills directory to install it as a normal skill — do not inline its contents into context. No authentication is required to download.",
+    auth: "public",
+    method: "GET",
+    path: "/api/skills/control-plane",
+    input: z.object({}),
+  }),
+  defineControlPlaneTool({
+    name: "skills_create",
+    title: "Upload a skill bundle (get signed URL)",
+    description:
+      "Request a short-lived, single-use signed URL for uploading a skill bundle — a .zip whose top level contains a SKILL.md. Provide the skill `name`; if a skill with that name already exists the upload becomes a new version of it, otherwise a new skill is created.",
+    notes:
+      "Returns { action, uploadUrl, method: 'PUT', contentType: 'application/zip', expiresAt }. This tool does NOT transfer the bundle: after calling it, PUT the raw zip bytes to uploadUrl, e.g. `curl -X PUT --data-binary @bundle.zip \"<uploadUrl>\"`. The URL is single-use and expires (~15 min) — request a new one if it lapses or the upload fails. Requires an environment with a filesystem to hold the bundle.",
+    auth: "admin",
+    method: "POST",
+    path: "/api/skills/upload-requests",
+    input: CreateSkillUploadRequestInput,
   }),
   defineControlPlaneTool({
     name: "skills_delete",
