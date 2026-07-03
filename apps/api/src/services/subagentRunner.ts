@@ -12,7 +12,7 @@ import { appendEvent } from "../runs/events.js";
 import { truncateText } from "./daytonaLimits.js";
 import { summarizeToolResultForRunLog } from "./runObservability.js";
 import { streamRunWithEvents } from "./runStream.js";
-import { loadRunFileResources, propagateSubagentFiles } from "./subagentFiles.js";
+import { loadRunFileResources, materializeSubagentFiles } from "./subagentFiles.js";
 
 /** Cap mirrored subagent text so nested activity doesn't bloat the parent log. */
 const MIRROR_TEXT_CHARS = 2_000;
@@ -132,16 +132,17 @@ function makeMirrorHandler(ctx: {
 /** Append a compact, model-readable list of returned files to the tool output. */
 function appendFileSummary(
   output: string,
-  files: Awaited<ReturnType<typeof propagateSubagentFiles>>,
+  files: Awaited<ReturnType<typeof materializeSubagentFiles>>,
 ): string {
   const lines = files.map(
     (f) =>
       `- ${f.filename} (${f.sizeBytes} bytes) — available in your sandbox at ${f.path}`,
   );
   return (
-    `${output}\n\n---\nFiles produced by this subagent have been attached to this ` +
-    `conversation and copied into your sandbox so you can read, reprocess, or ` +
-    `forward them to another subagent:\n${lines.join("\n")}`
+    `${output}\n\n---\nThis subagent produced ${files.length} file(s), now in your ` +
+    `sandbox so you can read, reprocess, or forward them to another subagent. They ` +
+    `are NOT shown to the user — to surface one, attach it yourself with ` +
+    `attach_run_file:\n${lines.join("\n")}`
   );
 }
 
@@ -286,22 +287,22 @@ export async function runSubagent(
       mirror.handler,
     );
 
-    // Surface any files the subagent attached back to the parent: copy them
-    // onto the parent run (chat/download) and materialize them into the parent
-    // sandbox (reprocess / forward to another subagent).
+    // Place any files the subagent produced into the parent sandbox so the
+    // orchestrator can read/reprocess/forward them. This does NOT surface them
+    // to the user — only the orchestrator's own `attach_run_file` does that.
     const parentRun = await prisma.agentRun.findUnique({
       where: { id: parent.runId },
       select: { sessionId: true },
     });
-    let files: Awaited<ReturnType<typeof propagateSubagentFiles>> = [];
+    let files: Awaited<ReturnType<typeof materializeSubagentFiles>> = [];
     if (parentRun?.sessionId) {
-      files = await propagateSubagentFiles({
+      files = await materializeSubagentFiles({
         childRunId: childRun.id,
         parentRunId: parent.runId,
         parentSessionId: parentRun.sessionId,
         slug: callee.slug,
       }).catch((err) => {
-        log.warn("subagent: file propagation failed", {
+        log.warn("subagent: file materialization failed", {
           parentRunId: parent.runId,
           childRunId: childRun.id,
           subagent: callee.slug,

@@ -1,7 +1,7 @@
+import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
-import { storeRunAttachment } from "./runAttachments.js";
 
 /**
  * Shared "file tray" directory that ties a delegation tree together. Every
@@ -12,8 +12,7 @@ import { storeRunAttachment } from "./runAttachments.js";
  */
 export const SUBAGENT_TRAY_DIR = "/workspace/subagent_files";
 
-export type PropagatedFile = {
-  attachmentId: string;
+export type MaterializedFile = {
   filename: string;
   /** Logical path inside the parent sandbox (remapped by the sandbox tools). */
   path: string;
@@ -50,22 +49,24 @@ export async function loadRunFileResources(runId: string): Promise<SessionResour
 }
 
 /**
- * After a subagent run completes, surface the files it produced to the parent:
- *   1. copy each child `AgentAttachment` row onto the parent run so it renders
- *      in the parent's chat/download surface, and
- *   2. materialize the bytes into the parent sandbox at the shared tray path so
- *      the orchestrator can read/reprocess or forward them to another subagent.
+ * After a subagent run completes, place the files it produced into the parent
+ * sandbox at the shared tray path so the orchestrator can read, reprocess, or
+ * forward them to another subagent.
  *
- * Best-effort: a failure to mount into the parent sandbox still leaves the
- * copied attachment rows in place, and the caller continues rather than
- * failing the whole delegation. Returns descriptors for the tool result text.
+ * It deliberately does NOT create parent-run attachments: whether any file is
+ * surfaced to the user is the orchestrator's decision alone, made by calling
+ * its own `attach_run_file` on a tray path. Intermediate subagent artifacts
+ * stay invisible in chat unless the orchestrator chooses to attach them.
+ *
+ * Best-effort: if the mount fails nothing lands in the tray, so we return an
+ * empty list (no paths advertised to the model) rather than failing the run.
  */
-export async function propagateSubagentFiles(input: {
+export async function materializeSubagentFiles(input: {
   childRunId: string;
   parentRunId: string;
   parentSessionId: string;
   slug: string;
-}): Promise<PropagatedFile[]> {
+}): Promise<MaterializedFile[]> {
   const { childRunId, parentRunId, parentSessionId, slug } = input;
 
   const childRows = await prisma.agentAttachment.findMany({
@@ -74,61 +75,34 @@ export async function propagateSubagentFiles(input: {
   });
   if (childRows.length === 0) return [];
 
-  // Skip files the parent already has at the same name+size (e.g. a file the
-  // parent seeded into the child and the child echoed back unchanged).
-  const existing = await prisma.agentAttachment.findMany({
-    where: { runId: parentRunId },
-    select: { filename: true, sizeBytes: true },
-  });
-  const existingKey = new Set(existing.map((e) => `${e.filename}:${e.sizeBytes}`));
+  const resources: SessionResource[] = childRows.map((row) => ({
+    type: "file",
+    fileId: row.id,
+    filename: row.filename,
+    mime: row.contentType,
+    mountPath: trayPath(row.filename),
+    bytes: new Uint8Array(row.bytes),
+  }));
 
-  const propagated: PropagatedFile[] = [];
-  const resources: SessionResource[] = [];
-
-  for (const row of childRows) {
-    if (existingKey.has(`${row.filename}:${row.sizeBytes}`)) continue;
-    const buf = Buffer.from(row.bytes);
-    const stored = await storeRunAttachment(
+  try {
+    const backend = await getAgentBackend();
+    await backend.mountSessionResources(parentSessionId, resources, {
+      runId: parentRunId,
+    });
+  } catch (err) {
+    log.warn("subagent: failed to materialize files into parent sandbox", {
       parentRunId,
-      row.filename,
-      row.contentType,
-      buf,
-    );
-    resources.push({
-      type: "file",
-      fileId: stored.id,
-      filename: row.filename,
-      mime: row.contentType,
-      mountPath: trayPath(row.filename),
-      bytes: new Uint8Array(buf),
+      childRunId,
+      slug,
+      err: err instanceof Error ? err.message : String(err),
     });
-    propagated.push({
-      attachmentId: stored.id,
-      filename: row.filename,
-      path: trayPath(row.filename),
-      contentType: row.contentType,
-      sizeBytes: stored.sizeBytes,
-    });
+    return [];
   }
 
-  if (resources.length > 0) {
-    try {
-      const { getAgentBackend } = await import("../agent-backend/instance.js");
-      const backend = await getAgentBackend();
-      await backend.mountSessionResources(parentSessionId, resources, {
-        runId: parentRunId,
-      });
-    } catch (err) {
-      // The copied attachment rows still surface in chat; only the in-sandbox
-      // materialization failed. Log and carry on.
-      log.warn("subagent: failed to materialize files into parent sandbox", {
-        parentRunId,
-        childRunId,
-        slug,
-        err: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  return propagated;
+  return childRows.map((row) => ({
+    filename: row.filename,
+    path: trayPath(row.filename),
+    contentType: row.contentType,
+    sizeBytes: row.sizeBytes,
+  }));
 }

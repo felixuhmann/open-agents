@@ -62,11 +62,12 @@ export function buildSubagentPiTools(
       "The subagent runs in a fresh, isolated workspace with NO access to this conversation — " +
       "include everything it needs in `prompt`. Use this to hand specialized work to a purpose-built " +
       "agent instead of doing it yourself.\n\n" +
-      "FILES: If a subagent produces a file, it attaches that file to the run. Any files it returns " +
-      "are automatically attached to this conversation AND copied into YOUR sandbox under " +
-      "`subagent_files/` — the tool result lists their exact paths. Read, reprocess, or pass those " +
-      "paths on to a later subagent (your current files are also seeded into every subagent you " +
-      "call). Never try to read a subagent's own sandbox paths directly; they do not exist in yours.\n\n" +
+      "FILES: Any files a subagent produces are copied into YOUR sandbox under `subagent_files/` — " +
+      "the tool result lists their exact paths. They are NOT shown to the user. Read, reprocess, or " +
+      "pass those paths on to a later subagent (your current files are also seeded into every " +
+      "subagent you call). To show a file to the user, YOU must attach it with attach_run_file — " +
+      "you decide what gets surfaced. Never try to read a subagent's own sandbox paths directly; " +
+      "they do not exist in yours.\n\n" +
       "Available subagents:\n" +
       roster,
     parameters: Type.Object({
