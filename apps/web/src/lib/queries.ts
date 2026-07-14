@@ -424,7 +424,18 @@ export type McpServerDto = {
   label: string;
   description: string | null;
   serverUrl: string;
+  authType: "none" | "bearer" | "oauth2";
   hasBearer: boolean;
+  oauth: {
+    provider: "google";
+    clientId: string;
+    connected: boolean;
+    subject: string | null;
+    scopes: string[];
+    expiresAt: string | null;
+    redirectUri: string;
+  } | null;
+  allowedTools: string[];
   agentCount: number;
   createdAt: string;
   updatedAt: string;
