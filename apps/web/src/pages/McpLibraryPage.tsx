@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   FileArrowUpIcon,
@@ -11,10 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   CreateMcpServerInput,
-  GOOGLE_DRIVE_MCP_PRESET,
   McpConnectorManifest,
-  type McpAuthType,
-  type McpOAuthStartResult,
   type McpProbeResult,
   UpdateMcpServerInput,
 } from "@open-agents/types";
@@ -49,14 +46,6 @@ import {
 } from "@/components/ui/empty";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -66,47 +55,15 @@ type McpFormState = {
   label: string;
   description: string;
   serverUrl: string;
-  authType: McpAuthType;
   bearer: string;
-  oauthClientId: string;
-  oauthClientSecret: string;
-  oauthScopes: string;
-  allowedTools: string;
 };
-
-const splitList = (value: string): string[] => [
-  ...new Set(
-    value
-      .split(/[\n,]/)
-      .map((item) => item.trim())
-      .filter(Boolean),
-  ),
-];
 
 const emptyForm = (): McpFormState => ({
   name: "",
   label: "",
   description: "",
   serverUrl: "",
-  authType: "none",
   bearer: "",
-  oauthClientId: "",
-  oauthClientSecret: "",
-  oauthScopes: "",
-  allowedTools: "",
-});
-
-const googleDriveForm = (): McpFormState => ({
-  name: GOOGLE_DRIVE_MCP_PRESET.name,
-  label: GOOGLE_DRIVE_MCP_PRESET.label,
-  description: GOOGLE_DRIVE_MCP_PRESET.description,
-  serverUrl: GOOGLE_DRIVE_MCP_PRESET.serverUrl,
-  authType: "oauth2",
-  bearer: "",
-  oauthClientId: "",
-  oauthClientSecret: "",
-  oauthScopes: GOOGLE_DRIVE_MCP_PRESET.scopes.join("\n"),
-  allowedTools: GOOGLE_DRIVE_MCP_PRESET.allowedTools.join("\n"),
 });
 
 function buildCreatePayload(values: McpFormState) {
@@ -115,21 +72,7 @@ function buildCreatePayload(values: McpFormState) {
     label: values.label.trim(),
     description: values.description.trim() || null,
     serverUrl: values.serverUrl.trim(),
-    authType: values.authType,
-    allowedTools: splitList(values.allowedTools),
-    ...(values.authType === "bearer" && values.bearer.trim()
-      ? { bearer: values.bearer.trim() }
-      : {}),
-    ...(values.authType === "oauth2"
-      ? {
-          oauth: {
-            provider: "google" as const,
-            clientId: values.oauthClientId.trim(),
-            clientSecret: values.oauthClientSecret,
-            scopes: splitList(values.oauthScopes),
-          },
-        }
-      : {}),
+    ...(values.bearer.trim() ? { bearer: values.bearer.trim() } : {}),
   };
 }
 
@@ -139,23 +82,7 @@ function buildUpdatePayload(values: McpFormState) {
     label: values.label.trim(),
     description: values.description.trim() || null,
     serverUrl: values.serverUrl.trim(),
-    authType: values.authType,
-    allowedTools: splitList(values.allowedTools),
-    ...(values.authType === "bearer" && values.bearer !== ""
-      ? { bearer: values.bearer }
-      : {}),
-    ...(values.authType === "oauth2"
-      ? {
-          oauth: {
-            provider: "google" as const,
-            clientId: values.oauthClientId.trim(),
-            scopes: splitList(values.oauthScopes),
-            ...(values.oauthClientSecret
-              ? { clientSecret: values.oauthClientSecret }
-              : {}),
-          },
-        }
-      : {}),
+    ...(values.bearer !== "" ? { bearer: values.bearer } : {}),
   };
 }
 
@@ -166,7 +93,6 @@ function McpServerForm({
   submitLabel,
   pending,
   serverId,
-  oauthRedirectUri,
   onSubmit,
   onCancel,
 }: {
@@ -176,7 +102,6 @@ function McpServerForm({
   submitLabel: string;
   pending: boolean;
   serverId?: string;
-  oauthRedirectUri: string;
   onSubmit: (values: McpFormState) => void;
   onCancel: () => void;
 }) {
@@ -188,26 +113,17 @@ function McpServerForm({
     mutationFn: async () => {
       const url = values.serverUrl.trim();
       if (!url) throw new ApiError(400, "Enter a server URL first.");
-      if (values.authType === "oauth2" && !serverId) {
-        throw new ApiError(400, "Create the OAuth server, connect Google, then test it.");
-      }
       if (serverId) {
         return api<McpProbeResult>(`/api/mcp-servers/${serverId}/probe`, {
           method: "POST",
-          json:
-            values.authType === "bearer" && values.bearer.trim()
-              ? { bearer: values.bearer.trim() }
-              : {},
+          json: values.bearer.trim() ? { bearer: values.bearer.trim() } : {},
         });
       }
       return api<McpProbeResult>("/api/mcp-servers/probe", {
         method: "POST",
         json: {
           serverUrl: url,
-          allowedTools: splitList(values.allowedTools),
-          ...(values.authType === "bearer" && values.bearer.trim()
-            ? { bearer: values.bearer.trim() }
-            : {}),
+          ...(values.bearer.trim() ? { bearer: values.bearer.trim() } : {}),
         },
       });
     },
@@ -242,7 +158,6 @@ function McpServerForm({
         label: m.label,
         description: m.description ?? "",
         serverUrl: m.serverUrl,
-        allowedTools: (m.allowedTools ?? []).join("\n"),
       }));
       setManifestText("");
       toast.success("Manifest imported", {
@@ -343,120 +258,18 @@ function McpServerForm({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="mcp-auth-type">Authentication</FieldLabel>
-            <Select
-              value={values.authType}
-              onValueChange={(value) =>
-                setValues((current) => ({ ...current, authType: value as McpAuthType }))
-              }
-            >
-              <SelectTrigger id="mcp-auth-type" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="bearer">Static bearer</SelectItem>
-                  <SelectItem value="oauth2">OAuth 2.0 (Google)</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          {values.authType === "bearer" ? (
-            <Field>
-              <FieldLabel htmlFor="mcp-bearer">Bearer token</FieldLabel>
-              <Input
-                id="mcp-bearer"
-                type="password"
-                autoComplete="off"
-                placeholder="Optional"
-                value={values.bearer}
-                onChange={(e) => setValues((v) => ({ ...v, bearer: e.target.value }))}
-              />
-              <FieldDescription>
-                Leave blank when editing to keep the encrypted stored token.
-              </FieldDescription>
-            </Field>
-          ) : null}
-          {values.authType === "oauth2" ? (
-            <>
-              <Field>
-                <FieldLabel htmlFor="mcp-oauth-callback">OAuth redirect URI</FieldLabel>
-                <Input
-                  id="mcp-oauth-callback"
-                  readOnly
-                  className="font-mono text-xs"
-                  value={oauthRedirectUri}
-                />
-                <FieldDescription>
-                  Register this exact URI on the Google Cloud OAuth web client.
-                </FieldDescription>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="mcp-oauth-client-id">
-                  Google OAuth client ID
-                </FieldLabel>
-                <Input
-                  id="mcp-oauth-client-id"
-                  required
-                  className="font-mono"
-                  autoComplete="off"
-                  value={values.oauthClientId}
-                  onChange={(e) =>
-                    setValues((v) => ({ ...v, oauthClientId: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="mcp-oauth-client-secret">
-                  Google OAuth client secret
-                </FieldLabel>
-                <Input
-                  id="mcp-oauth-client-secret"
-                  type="password"
-                  required={!serverId}
-                  autoComplete="off"
-                  placeholder={
-                    serverId ? "Leave blank to keep stored secret" : "Required"
-                  }
-                  value={values.oauthClientSecret}
-                  onChange={(e) =>
-                    setValues((v) => ({ ...v, oauthClientSecret: e.target.value }))
-                  }
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="mcp-oauth-scopes">Google OAuth scopes</FieldLabel>
-                <Textarea
-                  id="mcp-oauth-scopes"
-                  required
-                  rows={4}
-                  className="font-mono text-xs"
-                  value={values.oauthScopes}
-                  onChange={(e) =>
-                    setValues((v) => ({ ...v, oauthScopes: e.target.value }))
-                  }
-                />
-                <FieldDescription>
-                  One per line. The Google Drive preset starts read-only; add drive.file
-                  only when write access is required.
-                </FieldDescription>
-              </Field>
-            </>
-          ) : null}
-          <Field>
-            <FieldLabel htmlFor="mcp-allowed-tools">Allowed MCP tools</FieldLabel>
-            <Textarea
-              id="mcp-allowed-tools"
-              rows={5}
-              className="font-mono text-xs"
-              placeholder="One tool name per line. Empty exposes all tools."
-              value={values.allowedTools}
-              onChange={(e) => setValues((v) => ({ ...v, allowedTools: e.target.value }))}
+            <FieldLabel htmlFor="mcp-bearer">Bearer token</FieldLabel>
+            <Input
+              id="mcp-bearer"
+              type="password"
+              autoComplete="off"
+              placeholder="Optional"
+              value={values.bearer}
+              onChange={(e) => setValues((v) => ({ ...v, bearer: e.target.value }))}
             />
             <FieldDescription>
-              Server-wide least-privilege allowlist applied before tools are shown to
-              agents.
+              Leave blank when editing to keep the stored token. Enter an empty value to
+              clear.
             </FieldDescription>
           </Field>
           <div className="flex flex-col gap-3 border-t pt-3">
@@ -502,12 +315,7 @@ function formFromServer(server: McpServerDto): McpFormState {
     label: server.label,
     description: server.description ?? "",
     serverUrl: server.serverUrl,
-    authType: server.authType,
     bearer: "",
-    oauthClientId: server.oauth?.clientId ?? "",
-    oauthClientSecret: "",
-    oauthScopes: server.oauth?.scopes.join("\n") ?? "",
-    allowedTools: server.allowedTools.join("\n"),
   };
 }
 
@@ -519,10 +327,7 @@ function McpServerCard({
   onEdit,
   onDelete,
   onProbe,
-  onConnect,
-  onDisconnect,
   deletePending,
-  oauthPending,
 }: {
   server: McpServerDto;
   probeResult?: McpProbeResult | null;
@@ -531,10 +336,7 @@ function McpServerCard({
   onEdit: () => void;
   onDelete: () => void;
   onProbe: () => void;
-  onConnect: () => void;
-  onDisconnect: () => void;
   deletePending: boolean;
-  oauthPending: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -553,7 +355,7 @@ function McpServerCard({
               size="icon"
               variant="outline"
               aria-label={`Test ${server.label}`}
-              disabled={probePending || Boolean(server.oauth && !server.oauth.connected)}
+              disabled={probePending}
               onClick={onProbe}
             >
               {probePending ? <Spinner /> : <PlugsConnectedIcon />}
@@ -596,50 +398,10 @@ function McpServerCard({
             <McpProbeStatusBadge result={probeResult} pending={probePending} />
           ) : null}
           {server.hasBearer ? <Badge variant="secondary">bearer configured</Badge> : null}
-          {server.oauth ? (
-            <Badge variant={server.oauth.connected ? "secondary" : "outline"}>
-              Google {server.oauth.connected ? "connected" : "not connected"}
-            </Badge>
-          ) : null}
-          {server.allowedTools.length > 0 ? (
-            <Badge variant="outline">{server.allowedTools.length} allowed tools</Badge>
-          ) : null}
           <Badge variant="outline">
             {server.agentCount} agent{server.agentCount === 1 ? "" : "s"}
           </Badge>
         </div>
-        {server.oauth && isAdmin ? (
-          <div className="flex flex-col gap-2 border-t pt-3">
-            <div className="text-xs text-muted-foreground">
-              {server.oauth.connected
-                ? `Connected as ${server.oauth.subject ?? "Google account"}`
-                : "Authorize a dedicated, least-privileged Workspace account before use."}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={server.oauth.connected ? "outline" : "default"}
-                disabled={oauthPending}
-                onClick={onConnect}
-              >
-                {oauthPending ? <Spinner data-icon="inline-start" /> : null}
-                {server.oauth.connected ? "Reconnect Google" : "Connect Google"}
-              </Button>
-              {server.oauth.connected ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={oauthPending}
-                  onClick={onDisconnect}
-                >
-                  Disconnect
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
         {probeResult && isAdmin ? (
           <div className="flex flex-col gap-2">
             <Button
@@ -678,20 +440,9 @@ export default function McpLibraryPage() {
   const user = useCurrentUser();
   const isAdmin = user.data?.role === "admin";
   const qc = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
-  const [createInitial, setCreateInitial] = useState<McpFormState>(emptyForm);
   const [editing, setEditing] = useState<McpServerDto | null>(null);
   const [autoProbe, setAutoProbe] = useState(false);
-  const oauthConfig = useQuery({
-    queryKey: ["mcp-servers", "oauth-config"],
-    queryFn: () => api<{ redirectUri: string }>("/api/mcp-servers/oauth/config"),
-    enabled: Boolean(isAdmin),
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-  const oauthRedirectUri =
-    oauthConfig.data?.redirectUri ??
-    `${window.location.origin}/api/mcp-servers/oauth/callback`;
 
   const probeQueries = useQueries({
     queries: (servers.data ?? []).map((server) => ({
@@ -701,12 +452,7 @@ export default function McpLibraryPage() {
           method: "POST",
           json: {},
         }),
-      enabled: Boolean(
-        isAdmin &&
-        autoProbe &&
-        servers.data?.length &&
-        (!server.oauth || server.oauth.connected),
-      ),
+      enabled: Boolean(isAdmin && autoProbe && servers.data?.length),
       staleTime: 120_000,
       retry: false,
     })),
@@ -717,23 +463,6 @@ export default function McpLibraryPage() {
       setAutoProbe(true);
     }
   }, [isAdmin, servers.data?.length]);
-
-  useEffect(() => {
-    const oauthResult = searchParams.get("oauth");
-    if (!oauthResult) return;
-    const message = searchParams.get("message");
-    if (oauthResult === "connected") {
-      toast.success("Google Drive connected");
-    } else {
-      toast.error("Google Drive connection failed", {
-        description: message ?? undefined,
-      });
-    }
-    const next = new URLSearchParams(searchParams);
-    next.delete("oauth");
-    next.delete("message");
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["mcp-servers"] });
@@ -832,35 +561,6 @@ export default function McpLibraryPage() {
       }),
   });
 
-  const connectGoogle = useMutation({
-    mutationFn: async (id: string) => {
-      const result = await api<McpOAuthStartResult>(
-        `/api/mcp-servers/${id}/oauth/start`,
-        {
-          method: "POST",
-        },
-      );
-      window.location.assign(result.authorizationUrl);
-    },
-    onError: (e) =>
-      toast.error("Couldn't start Google authorization", {
-        description: e instanceof ApiError ? e.message : String(e),
-      }),
-  });
-
-  const disconnectGoogle = useMutation({
-    mutationFn: (id: string) =>
-      api(`/api/mcp-servers/${id}/oauth/disconnect`, { method: "POST" }),
-    onSuccess: async () => {
-      toast.success("Google Drive disconnected");
-      await invalidate();
-    },
-    onError: (e) =>
-      toast.error("Couldn't disconnect Google Drive", {
-        description: e instanceof ApiError ? e.message : String(e),
-      }),
-  });
-
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/mcp-servers/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
@@ -906,10 +606,7 @@ export default function McpLibraryPage() {
                 variant="outline"
                 disabled={probeAll.isPending}
                 onClick={() => {
-                  const ids =
-                    servers.data
-                      ?.filter((server) => !server.oauth || server.oauth.connected)
-                      .map((server) => server.id) ?? [];
+                  const ids = servers.data?.map((s) => s.id) ?? [];
                   if (ids.length) probeAll.mutate(ids);
                 }}
               >
@@ -918,26 +615,7 @@ export default function McpLibraryPage() {
               </Button>
             ) : null}
             {isAdmin ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCreateInitial(googleDriveForm());
-                  setCreateOpen(true);
-                }}
-              >
-                <PlusIcon data-icon="inline-start" />
-                Add Google Drive
-              </Button>
-            ) : null}
-            {isAdmin ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  setCreateInitial(emptyForm());
-                  setCreateOpen(true);
-                }}
-              >
+              <Button type="button" onClick={() => setCreateOpen(true)}>
                 <PlusIcon data-icon="inline-start" />
                 Add server
               </Button>
@@ -979,14 +657,7 @@ export default function McpLibraryPage() {
                   onEdit={() => setEditing(server)}
                   onDelete={() => remove.mutate(server.id)}
                   onProbe={() => probeServer.mutate(server.id)}
-                  onConnect={() => connectGoogle.mutate(server.id)}
-                  onDisconnect={() => disconnectGoogle.mutate(server.id)}
                   deletePending={remove.isPending}
-                  oauthPending={
-                    (connectGoogle.isPending && connectGoogle.variables === server.id) ||
-                    (disconnectGoogle.isPending &&
-                      disconnectGoogle.variables === server.id)
-                  }
                 />
               </li>
             );
@@ -1008,17 +679,9 @@ export default function McpLibraryPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <McpServerForm
-            key={`${createInitial.authType}:${createInitial.serverUrl}`}
-            title={
-              createInitial.authType === "oauth2" ? "Add Google Drive" : "Add MCP server"
-            }
-            description={
-              createInitial.authType === "oauth2"
-                ? "Connect Google's official Drive MCP with encrypted, refreshable OAuth credentials."
-                : "Credentials are encrypted at rest and never returned to the browser."
-            }
-            initial={createInitial}
-            oauthRedirectUri={oauthRedirectUri}
+            title="Add MCP server"
+            description="Credentials are encrypted at rest. Bearer tokens are never returned to the browser."
+            initial={emptyForm()}
             submitLabel="Create"
             pending={create.isPending}
             onCancel={() => setCreateOpen(false)}
@@ -1035,7 +698,6 @@ export default function McpLibraryPage() {
               title="Edit MCP server"
               description="Updating URL or label affects every agent that uses this server after the next publish."
               initial={formFromServer(editing)}
-              oauthRedirectUri={editing.oauth?.redirectUri ?? oauthRedirectUri}
               submitLabel="Save"
               pending={update.isPending}
               serverId={editing.id}

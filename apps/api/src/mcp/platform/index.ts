@@ -1,4 +1,5 @@
 import type { PlatformHandler } from "../types.js";
+import { googleDriveHandler } from "./googleDrive.js";
 import { memoryHandler } from "./memory.js";
 
 /**
@@ -6,7 +7,7 @@ import { memoryHandler } from "./memory.js";
  * handler is a code change here plus a `Tool` row (auto-seeded by
  * `services/seedToolCatalog.ts` from this list).
  */
-export const PLATFORM_HANDLERS: PlatformHandler[] = [memoryHandler];
+export const PLATFORM_HANDLERS: PlatformHandler[] = [memoryHandler, googleDriveHandler];
 
 const byKey = new Map(PLATFORM_HANDLERS.map((h) => [h.key, h]));
 

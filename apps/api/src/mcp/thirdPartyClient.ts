@@ -2,7 +2,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { log } from "../log.js";
-import { filterMcpTools } from "./toolFilter.js";
 
 const CONNECT_TIMEOUT_MS = 30_000;
 
@@ -79,7 +78,6 @@ export async function connectThirdPartyMcpServers(
     label: string;
     serverUrl: string;
     bearer?: string | null;
-    allowedTools?: string[];
   }>,
 ): Promise<ThirdPartyMcpConnection[]> {
   const connections: ThirdPartyMcpConnection[] = [];
@@ -109,17 +107,16 @@ export async function connectThirdPartyMcpServers(
       await Promise.race([connectPromise, timeout]);
 
       const listed = await client.listTools();
-      const tools = filterMcpTools(listed.tools ?? [], server.allowedTools ?? []);
       connections.push({
         label: server.label,
         serverUrl: server.serverUrl,
         client,
-        tools,
+        tools: listed.tools ?? [],
       });
       log.info("mcp: third-party connected", {
         label: server.label,
         serverUrl: server.serverUrl,
-        toolCount: tools.length,
+        toolCount: listed.tools?.length ?? 0,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

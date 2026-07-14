@@ -2,6 +2,7 @@ import { SetServiceSecretInput } from "@open-agents/types";
 import { Hono } from "hono";
 import { resetAgentBackend } from "../../agent-backend/instance.js";
 import { requireAdmin } from "../../auth/middleware.js";
+import { validateGoogleDriveServiceAccountJson } from "../../mcp/platform/googleDrive.js";
 import {
   deleteServiceSecret,
   getServiceSecret,
@@ -22,6 +23,7 @@ const ALLOWED: ServiceKey[] = [
   SERVICE_KEYS.MAILGUN_API_KEY,
   SERVICE_KEYS.MAILGUN_DOMAIN,
   SERVICE_KEYS.MAILGUN_SIGNING_KEY,
+  SERVICE_KEYS.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON,
 ];
 
 /**
@@ -46,6 +48,18 @@ secretsRoutes.put("/:key", async (c) => {
     return c.json({ error: "unknown secret key" }, 400);
   }
   const body = SetServiceSecretInput.parse(await c.req.json());
+  if (key === SERVICE_KEYS.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) {
+    try {
+      validateGoogleDriveServiceAccountJson(body.value);
+    } catch (error) {
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : "Invalid service-account JSON",
+        },
+        400,
+      );
+    }
+  }
   await setServiceSecret(key, body.value);
   invalidateServiceSecret(key);
   if (

@@ -6,13 +6,6 @@ import {
   UpdateMcpServerInput,
 } from "@open-agents/types";
 import { HttpError, requireAdmin, requireUser } from "../../auth/middleware.js";
-import { config } from "../../config.js";
-import { log } from "../../log.js";
-import {
-  completeMcpOAuthAuthorization,
-  createMcpOAuthAuthorizationUrl,
-  disconnectMcpOAuth,
-} from "../../mcp/oauth/mcpOAuthService.js";
 import type { AppVariables } from "../../server/types.js";
 import {
   createMcpServer,
@@ -26,45 +19,6 @@ import {
 } from "../../services/mcpServers.js";
 
 export const mcpServersRoutes = new Hono<{ Variables: AppVariables }>();
-
-function oauthResultRedirect(status: "connected" | "error", message?: string): string {
-  const url = new URL("/library/mcp", config.WEB_BASE_URL);
-  url.searchParams.set("oauth", status);
-  if (message) url.searchParams.set("message", message);
-  return url.toString();
-}
-
-/** OAuth callback metadata comes from backend configuration, not browser origin. */
-mcpServersRoutes.get("/oauth/config", (c) => {
-  requireAdmin(c);
-  return c.json({
-    redirectUri: `${config.PUBLIC_BASE_URL}/api/mcp-servers/oauth/callback`,
-  });
-});
-
-/** Google redirects here after administrator consent. Signed state identifies the server. */
-mcpServersRoutes.get("/oauth/callback", async (c) => {
-  requireAdmin(c);
-  const state = c.req.query("state");
-  const code = c.req.query("code");
-  const oauthError = c.req.query("error");
-  if (oauthError) {
-    return c.redirect(oauthResultRedirect("error", "Google authorization was cancelled"));
-  }
-  if (!state || !code) {
-    return c.redirect(
-      oauthResultRedirect("error", "Google OAuth callback was incomplete"),
-    );
-  }
-  try {
-    await completeMcpOAuthAuthorization({ state, code });
-    return c.redirect(oauthResultRedirect("connected"));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log.warn("mcp-oauth: callback failed", { err: message });
-    return c.redirect(oauthResultRedirect("error", message));
-  }
-});
 
 mcpServersRoutes.post("/probe", async (c) => {
   requireAdmin(c);
@@ -85,18 +39,6 @@ mcpServersRoutes.post("/:id/probe", async (c) => {
   const body = ProbeStoredMcpServerInput.parse(await c.req.json().catch(() => ({})));
   const result = await probeStoredMcpServer(id, body.bearer);
   return c.json(result);
-});
-
-mcpServersRoutes.post("/:id/oauth/start", async (c) => {
-  requireAdmin(c);
-  const authorizationUrl = await createMcpOAuthAuthorizationUrl(c.req.param("id"));
-  return c.json({ authorizationUrl });
-});
-
-mcpServersRoutes.post("/:id/oauth/disconnect", async (c) => {
-  requireAdmin(c);
-  await disconnectMcpOAuth(c.req.param("id"));
-  return c.json({ ok: true });
 });
 
 mcpServersRoutes.get("/:id", async (c) => {

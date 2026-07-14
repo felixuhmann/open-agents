@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 
 const LABELS: Record<string, string> = {
   anthropic_api_key: "Anthropic API key",
@@ -43,7 +44,10 @@ const LABELS: Record<string, string> = {
   mailgun_api_key: "Mailgun API key",
   mailgun_domain: "Mailgun domain (e.g. mg.example.com)",
   mailgun_signing_key: "Mailgun signing key (HTTP webhook signing)",
+  google_drive_service_account_json: "Google Drive service-account JSON",
 };
+
+const MULTILINE_SECRETS = new Set(["google_drive_service_account_json"]);
 
 export default function SecretsSettingsPage() {
   const secrets = useSecrets();
@@ -87,7 +91,7 @@ export default function SecretsSettingsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Service secrets"
-        description="Model, sandbox, and Mailgun credentials. Stored AES-GCM encrypted in the database. Saved values are never returned by the API."
+        description="Model, sandbox, Mailgun, and integration credentials. Stored AES-GCM encrypted in the database. Saved values are never returned by the API."
       />
 
       <ul className="flex flex-col gap-3">
@@ -127,17 +131,32 @@ export default function SecretsSettingsPage() {
                         setSecret.mutate({ key: s.key, value });
                       }}
                     >
-                      <Input
-                        type="password"
-                        className="flex-1"
-                        placeholder={
-                          s.configured ? "Rotate to a new value…" : "Enter value…"
-                        }
-                        value={drafts[s.key] ?? ""}
-                        onChange={(e) =>
-                          setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
-                        }
-                      />
+                      {MULTILINE_SECRETS.has(s.key) ? (
+                        <Textarea
+                          className="min-h-32 flex-1 font-mono text-xs"
+                          placeholder={
+                            s.configured
+                              ? "Paste replacement service-account JSON…"
+                              : "Paste the complete service-account JSON key…"
+                          }
+                          value={drafts[s.key] ?? ""}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        <Input
+                          type="password"
+                          className="flex-1"
+                          placeholder={
+                            s.configured ? "Rotate to a new value…" : "Enter value…"
+                          }
+                          value={drafts[s.key] ?? ""}
+                          onChange={(e) =>
+                            setDrafts((d) => ({ ...d, [s.key]: e.target.value }))
+                          }
+                        />
+                      )}
                       <div className="flex gap-2">
                         <Button
                           type="submit"

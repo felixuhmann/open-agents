@@ -105,7 +105,6 @@ export async function buildThirdPartyPiTools(
     label: binding.mcpServer.label,
     serverUrl: binding.mcpServer.serverUrl,
     bearer: thirdPartyBearer.get(binding.mcpServer.id) ?? null,
-    allowedTools: binding.mcpServer.allowedTools,
   }));
 
   if (!servers.length) {

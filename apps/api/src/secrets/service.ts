@@ -25,6 +25,7 @@ export const SERVICE_KEYS = {
   MAILGUN_API_KEY: "mailgun_api_key",
   MAILGUN_DOMAIN: "mailgun_domain",
   MAILGUN_SIGNING_KEY: "mailgun_signing_key",
+  GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: "google_drive_service_account_json",
   /** Legacy encrypted location for default outbound `From:` before it moved to AppSetting. */
   INBOUND_FROM: "inbound_from",
 } as const;

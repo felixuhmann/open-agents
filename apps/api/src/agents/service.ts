@@ -58,6 +58,21 @@ export function listAgentMcpServers(
 
 const cache = new Map<string, HydratedAgent>();
 
+function requiredToolConfigKeys(configSchema: Prisma.JsonValue): string[] {
+  if (
+    !configSchema ||
+    Array.isArray(configSchema) ||
+    typeof configSchema !== "object" ||
+    !("required" in configSchema) ||
+    !Array.isArray(configSchema.required)
+  ) {
+    return [];
+  }
+  return configSchema.required.filter(
+    (value): value is string => typeof value === "string",
+  );
+}
+
 /**
  * Read a fully-hydrated agent by slug, with a small in-process cache.
  * Routes that mutate the agent must call `invalidateAgent(slug)`.
@@ -285,13 +300,28 @@ export async function updateAgent(
     const ids = args.toolBindings.map((b) => b.toolId);
     const existing = await prisma.tool.findMany({
       where: { id: { in: ids } },
-      select: { id: true },
+      select: { id: true, name: true, configSchema: true },
     });
     const existingIds = new Set(existing.map((t) => t.id));
     const missing = ids.filter((tid) => !existingIds.has(tid));
     if (missing.length > 0) {
       log.warn("agents: dropping unknown tool ids on update", { agentId: id, missing });
       resolvedToolBindings = args.toolBindings.filter((b) => existingIds.has(b.toolId));
+    }
+    const toolById = new Map(existing.map((tool) => [tool.id, tool]));
+    for (const binding of resolvedToolBindings ?? []) {
+      const tool = toolById.get(binding.toolId);
+      if (!tool) continue;
+      const missingConfig = requiredToolConfigKeys(tool.configSchema).filter((key) => {
+        const value = binding.configJson?.[key];
+        return value === undefined || value === null || value === "";
+      });
+      if (missingConfig.length > 0) {
+        throw new HttpError(
+          400,
+          `${tool.name} is missing required configuration: ${missingConfig.join(", ")}`,
+        );
+      }
     }
   }
 
@@ -368,9 +398,7 @@ export async function updateAgent(
       select: { id: true },
     });
     const existingIds = new Set(existing.map((a) => a.id));
-    const missing = args.subagentIds.filter(
-      (sid) => sid === id || !existingIds.has(sid),
-    );
+    const missing = args.subagentIds.filter((sid) => sid === id || !existingIds.has(sid));
     if (missing.length > 0) {
       log.warn("agents: dropping invalid subagent ids on update", {
         agentId: id,

@@ -23,6 +23,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import {
   type FullAgentDto,
+  type Tool,
   useAgent,
   useAgentAccess,
   useAgents,
@@ -89,7 +90,7 @@ type EditState = {
   accessMode: "everyone" | "specific";
   accessUserIds: string[];
   inboundLocalPart: string;
-  toolIds: string[];
+  toolBindings: Array<{ toolId: string; configJson: Record<string, unknown> }>;
   skillBindings: Array<{ skillId: string; skillVersionId: string }>;
   mcpServerIds: string[];
   subagentIds: string[];
@@ -118,7 +119,10 @@ function fromDto(a: FullAgentDto): EditState {
     accessMode: a.accessMode,
     accessUserIds: a.accessUserIds,
     inboundLocalPart: a.inboundLocalPart,
-    toolIds: a.toolBindings.map((b) => b.toolId),
+    toolBindings: a.toolBindings.map((b) => ({
+      toolId: b.toolId,
+      configJson: b.configJson,
+    })),
     skillBindings:
       a.skillBindings ??
       a.skills.map((s) => ({ skillId: s.id, skillVersionId: s.versionId })),
@@ -141,6 +145,37 @@ function linesToPatterns(text: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+type ToolConfigField = {
+  key: string;
+  title: string;
+  description?: string;
+  required: boolean;
+};
+
+function stringConfigFields(tool: Tool): ToolConfigField[] {
+  const schema = tool.configSchema as {
+    properties?: Record<
+      string,
+      { type?: unknown; title?: unknown; description?: unknown }
+    >;
+    required?: unknown;
+  };
+  const required = new Set(
+    Array.isArray(schema.required)
+      ? schema.required.filter((value): value is string => typeof value === "string")
+      : [],
+  );
+  return Object.entries(schema.properties ?? {})
+    .filter(([, property]) => property.type === "string")
+    .map(([key, property]) => ({
+      key,
+      title: typeof property.title === "string" ? property.title : key,
+      description:
+        typeof property.description === "string" ? property.description : undefined,
+      required: required.has(key),
+    }));
 }
 
 export default function AgentEditPage() {
@@ -177,7 +212,7 @@ export default function AgentEditPage() {
           accessMode: s.accessMode,
           accessUserIds: s.accessUserIds,
           inboundLocalPart: s.inboundLocalPart,
-          toolBindings: s.toolIds.map((id) => ({ toolId: id })),
+          toolBindings: s.toolBindings,
           skillBindings: s.skillBindings,
           mcpServerIds: s.mcpServerIds,
           subagentIds: s.subagentIds,
@@ -671,22 +706,86 @@ export default function AgentEditPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
           {tools.data?.length ? (
-            <CheckboxGrid
-              items={(tools.data ?? [])
-                .filter((t) => !t.deprecated || state.toolIds.includes(t.id))
-                .map((t) => ({
-                  id: t.id,
-                  title: t.name,
-                  description: t.description,
-                }))}
-              selected={state.toolIds}
-              onToggle={(id, on) => {
-                const next = new Set(state.toolIds);
-                if (on) next.add(id);
-                else next.delete(id);
-                setS({ toolIds: [...next] });
-              }}
-            />
+            <>
+              <CheckboxGrid
+                items={(tools.data ?? [])
+                  .filter(
+                    (t) =>
+                      !t.deprecated ||
+                      state.toolBindings.some((binding) => binding.toolId === t.id),
+                  )
+                  .map((t) => ({
+                    id: t.id,
+                    title: t.name,
+                    description: t.description,
+                  }))}
+                selected={state.toolBindings.map((binding) => binding.toolId)}
+                onToggle={(id, on) => {
+                  setS({
+                    toolBindings: on
+                      ? [...state.toolBindings, { toolId: id, configJson: {} }]
+                      : state.toolBindings.filter((binding) => binding.toolId !== id),
+                  });
+                }}
+              />
+
+              {state.toolBindings.map((binding) => {
+                const tool = tools.data.find(
+                  (candidate) => candidate.id === binding.toolId,
+                );
+                if (!tool) return null;
+                const fields = stringConfigFields(tool);
+                if (fields.length === 0) return null;
+                return (
+                  <FieldSet key={binding.toolId} className="rounded-lg border p-4">
+                    <FieldLegend>{tool.name} configuration</FieldLegend>
+                    <FieldDescription>
+                      These values are frozen into the next published agent version.
+                      {tool.requiresSecrets
+                        ? " Its credential is managed separately under Service secrets."
+                        : ""}
+                    </FieldDescription>
+                    <FieldGroup>
+                      {fields.map((field) => {
+                        const inputId = `tool-${tool.key}-${field.key}`;
+                        const value = binding.configJson[field.key];
+                        return (
+                          <Field key={field.key}>
+                            <FieldLabel htmlFor={inputId}>
+                              {field.title}
+                              {field.required ? " *" : ""}
+                            </FieldLabel>
+                            <Input
+                              id={inputId}
+                              required={field.required}
+                              value={typeof value === "string" ? value : ""}
+                              onChange={(event) =>
+                                setS({
+                                  toolBindings: state.toolBindings.map((candidate) =>
+                                    candidate.toolId === binding.toolId
+                                      ? {
+                                          ...candidate,
+                                          configJson: {
+                                            ...candidate.configJson,
+                                            [field.key]: event.target.value,
+                                          },
+                                        }
+                                      : candidate,
+                                  ),
+                                })
+                              }
+                            />
+                            {field.description ? (
+                              <FieldDescription>{field.description}</FieldDescription>
+                            ) : null}
+                          </Field>
+                        );
+                      })}
+                    </FieldGroup>
+                  </FieldSet>
+                );
+              })}
+            </>
           ) : (
             <Empty className="py-6">
               <EmptyHeader>
@@ -1028,9 +1127,9 @@ export default function AgentEditPage() {
           </CardTitle>
           <CardDescription>
             Other agents this agent can delegate to with the <code>run_subagent</code>{" "}
-            tool. Each delegation runs the selected agent in a fresh, isolated
-            workspace and returns its final answer. The callee&apos;s published version
-            is pinned when you publish this agent.
+            tool. Each delegation runs the selected agent in a fresh, isolated workspace
+            and returns its final answer. The callee&apos;s published version is pinned
+            when you publish this agent.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

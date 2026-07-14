@@ -5,7 +5,7 @@ Every capability an agent can call is a row in the unified `Tool` catalog, regar
 | Runtime    | Where the code lives                                    | Stored as                                                                                         | Examples                                                                    |
 | ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `managed`  | Daytona sandbox tools exposed by `DaytonaAgentBackend`. | `AgentToolBinding` -> `Tool` row with `runtime = "managed"`.                                      | `bash`, `read`, `write`, `edit`, `glob`, `grep`, `web_fetch`, `web_search`. |
-| `platform` | This backend, invoked host-side by the Pi loop.         | `AgentToolBinding` -> `Tool` row with `runtime = "platform"`. `Tool.key` = `PlatformHandler.key`. | The shipped `memory` handler; future `drive`, `webhook`, ...                |
+| `platform` | This backend, invoked host-side by the Pi loop.         | `AgentToolBinding` -> `Tool` row with `runtime = "platform"`. `Tool.key` = `PlatformHandler.key`. | The shipped `memory` and scoped `google_drive` handlers.                    |
 
 External MCP servers live in the `McpServer` library and attach to agents through `AgentMcpBinding`. They are per-agent endpoints, not catalog rows. Daytona runs connect to them from the orchestrator, discover tools with the MCP SDK client, and expose those tools to Pi as native `AgentTool`s.
 
@@ -69,7 +69,7 @@ Implementation lives under `apps/api/src/mcp/`:
 
 Third-party MCP tools are exposed to the model as `<server-slug>_<tool-name>` (for example `firecrawl_firecrawl_scrape`). Names must match OpenAI’s `^[a-zA-Z0-9_-]+$` pattern, so the orchestrator slugifies the server label and sanitizes the MCP tool name before registering them with Pi.
 
-Platform tool secrets never enter the Daytona sandbox. External MCP bearer and OAuth tokens are decrypted on the API host and used only by the orchestrator-side MCP client. OAuth refresh tokens, client secrets, and access tokens are never serialized into agent prompts or version snapshots.
+Platform tool secrets never enter the Daytona sandbox. External MCP bearer tokens are decrypted on the API host and used only by the orchestrator-side MCP client.
 
 ## MCP library operator UX
 
@@ -83,41 +83,7 @@ The SPA **MCP** library (`/library/mcp`) is where admins register deployment-wid
 
 Probe responses (`McpProbeResult`) include connection status (`connected`, `auth_failure`, `unreachable`, `timeout`, `protocol_error`, `error`), latency, auth diagnostics (HTTP status, whether a bearer was sent), and a tool discovery preview (name, description, input schema per tool).
 
-Implementation: `apps/api/src/mcp/probeMcpServer.ts` connects with the same Streamable HTTP transport as runtime (`thirdPartyClient.ts`), lists tools, classifies failures, applies the configured server-wide tool allowlist, and always closes the client.
-
-### Google Drive with refreshable OAuth
-
-Use **Add Google Drive** to create a least-privilege connection to Google's official hosted endpoint:
-
-```text
-https://drivemcp.googleapis.com/mcp/v1
-```
-
-The preset requests `openid`, `email`, and `drive.readonly`. It exposes only the official read/search tools; `create_file` and `copy_file` are excluded. An empty allowlist on an existing generic MCP entry keeps the historical behavior of exposing all discovered tools.
-
-Before creating the connection:
-
-1. Create a Google Cloud **Web application** OAuth client.
-2. Enable `drive.googleapis.com` and `drivemcp.googleapis.com` in that project.
-3. Grant the calling identity `roles/mcp.toolUser` where required by Google Cloud MCP.
-4. Register the exact callback displayed by the UI:
-   `https://<deployment>/api/mcp-servers/oauth/callback`.
-5. Enter the OAuth client ID and secret, save the server, then click **Connect Google**.
-
-The backend signs OAuth `state`, derives a PKCE verifier, exchanges the authorization code server-side, encrypts the client secret and token set with `SECRET_ENCRYPTION_KEY`, and refreshes short-lived access tokens before probes and agent runs. Concurrent refreshes are coalesced within the API process. `invalid_grant` or revoked credentials surface as a failed probe and require **Reconnect Google**.
-
-For deployment-wide agent access, authorize a dedicated Workspace account that can see only the intended Shared Drive. Do not connect a personal or Workspace-admin account: `drive.readonly` covers every file visible to that identity and is not a folder-level boundary. Avoid domain-wide delegation unless cross-user impersonation is an explicit requirement.
-
-Add `https://www.googleapis.com/auth/drive.file` and the write tools only when agents genuinely need to create files. Drive content remains untrusted model input; combine least-privilege Google membership, the MCP tool allowlist, and human confirmation for consequential writes.
-
-OAuth lifecycle endpoints are admin-only except for the signed Google callback:
-
-| Action                   | API                                          |
-| ------------------------ | -------------------------------------------- |
-| Read configured callback | `GET /api/mcp-servers/oauth/config`          |
-| Start authorization      | `POST /api/mcp-servers/:id/oauth/start`      |
-| Google callback          | `GET /api/mcp-servers/oauth/callback`        |
-| Disconnect tokens        | `POST /api/mcp-servers/:id/oauth/disconnect` |
+Implementation: `apps/api/src/mcp/probeMcpServer.ts` connects with the same Streamable HTTP transport as runtime (`thirdPartyClient.ts`), lists tools, classifies failures, and always closes the client.
 
 ### Connector manifests
 
@@ -139,17 +105,34 @@ Deployment-specific MCP connector repos can export a small JSON manifest for fas
 
 ## The shipped catalog
 
-| Runtime    | `key`        | Tools                                                                                                 | Notes                                                          |
-| ---------- | ------------ | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `managed`  | `bash`       | `bash`                                                                                                | Runs inside the Daytona sandbox.                               |
-| `managed`  | `read`       | `read`                                                                                                | Reads files from the sandbox workspace.                        |
-| `managed`  | `write`      | `write`                                                                                               | Writes files in the sandbox workspace.                         |
-| `managed`  | `edit`       | `edit`                                                                                                | Edits files in the sandbox workspace.                          |
-| `managed`  | `glob`       | `glob`                                                                                                | File pattern matching in the sandbox workspace.                |
-| `managed`  | `grep`       | `grep`                                                                                                | Regex search in the sandbox workspace.                         |
-| `managed`  | `web_fetch`  | `web_fetch`                                                                                           | Fetches URL content from the sandbox.                          |
-| `managed`  | `web_search` | `web_search`                                                                                          | Placeholder row; use curl or a third-party MCP search server.  |
-| `platform` | `memory`     | `memory_collections`, `memory_create`, `memory_read`, `memory_list`, `memory_update`, `memory_delete` | Generic JSON-doc collection store scoped to the calling agent. |
+| Runtime    | `key`          | Tools                                                                                                                                                 | Notes                                                                                                            |
+| ---------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `managed`  | `bash`         | `bash`                                                                                                                                                | Runs inside the Daytona sandbox.                                                                                 |
+| `managed`  | `read`         | `read`                                                                                                                                                | Reads files from the sandbox workspace.                                                                          |
+| `managed`  | `write`        | `write`                                                                                                                                               | Writes files in the sandbox workspace.                                                                           |
+| `managed`  | `edit`         | `edit`                                                                                                                                                | Edits files in the sandbox workspace.                                                                            |
+| `managed`  | `glob`         | `glob`                                                                                                                                                | File pattern matching in the sandbox workspace.                                                                  |
+| `managed`  | `grep`         | `grep`                                                                                                                                                | Regex search in the sandbox workspace.                                                                           |
+| `managed`  | `web_fetch`    | `web_fetch`                                                                                                                                           | Fetches URL content from the sandbox.                                                                            |
+| `managed`  | `web_search`   | `web_search`                                                                                                                                          | Placeholder row; use curl or a third-party MCP search server.                                                    |
+| `platform` | `memory`       | `memory_collections`, `memory_create`, `memory_read`, `memory_list`, `memory_update`, `memory_delete`                                                 | Generic JSON-doc collection store scoped to the calling agent.                                                   |
+| `platform` | `google_drive` | `google_drive_list`, `google_drive_search`, `google_drive_read`, `google_drive_create_file`, `google_drive_create_folder`, `google_drive_update_file` | Service-account access restricted to one configured Shared Drive folder tree. No delete, move, or sharing tools. |
+
+## Google Drive folder setup
+
+The shipped Google Drive integration calls the regular Drive API from the API host. It does not use Google's hosted MCP preview or an end-user OAuth consent screen, so it does not depend on Google OAuth app verification.
+
+1. In the deployment's Google Cloud project, enable the **Google Drive API** and create a service account with a JSON key.
+2. In Google Drive, grant that service account access to the company Shared Drive or to the dedicated AI folder. Prefer a dedicated Shared Drive or a limited-access folder so Google's own ACL is as narrow as possible.
+3. In **Settings -> Service secrets**, save the complete JSON key as `google_drive_service_account_json`.
+4. On the agent edit page, enable **Google Drive folder** and set:
+   - **Shared Drive ID**: the Shared Drive identifier.
+   - **AI-accessible root folder ID**: the folder identifier at the boundary of the agent's access.
+5. Save and publish a new agent version.
+
+Every list, search, read, and write validates the target item's ancestry before proceeding. Searches are first scoped to the Shared Drive and then filtered to descendants of the configured root. Shortcuts are not followed, and the handler exposes no delete, move, permission, or sharing operation. The service-account credential is encrypted in the deployment database and never enters Daytona.
+
+The write tools create folders and regular UTF-8 files, and replace the contents of existing regular files. Google Docs, Sheets, and Slides can be read through export, but modifying Google-native document content is intentionally outside this first implementation.
 
 ## Common patterns
 
