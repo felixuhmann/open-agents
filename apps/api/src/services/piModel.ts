@@ -1,7 +1,4 @@
-import {
-  type Api,
-  type Model,
-} from "@earendil-works/pi-ai";
+import { type Api, type Model } from "@earendil-works/pi-ai";
 import {
   getBuiltinModels,
   getBuiltinProviders,
