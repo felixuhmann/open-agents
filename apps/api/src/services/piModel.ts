@@ -1,10 +1,12 @@
 import {
-  getModels,
-  getProviders,
   type Api,
-  type KnownProvider,
   type Model,
 } from "@earendil-works/pi-ai";
+import {
+  getBuiltinModels,
+  getBuiltinProviders,
+  type BuiltinProvider,
+} from "@earendil-works/pi-ai/providers/all";
 import { AgentBackendError } from "../agent-backend/types.js";
 import { getServiceSecret, SERVICE_KEYS, type ServiceKey } from "../secrets/service.js";
 
@@ -32,11 +34,11 @@ export function providerSecretKey(provider: string): ServiceKey | undefined {
  * the built-in pi-ai catalog.
  */
 export function resolvePiModel(modelProvider: string, modelId: string): Model<Api> {
-  const providers = getProviders();
-  if (!providers.includes(modelProvider as KnownProvider)) {
+  const providers = getBuiltinProviders();
+  if (!providers.includes(modelProvider as BuiltinProvider)) {
     throw new AgentBackendError(`Unknown model provider: ${modelProvider}`);
   }
-  const models = getModels(modelProvider as KnownProvider);
+  const models = getBuiltinModels(modelProvider as BuiltinProvider);
   const found = models.find((m) => m.id === modelId);
   if (!found) {
     throw new AgentBackendError(`Unknown model ${modelProvider}/${modelId}`);

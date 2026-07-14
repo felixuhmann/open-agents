@@ -1,4 +1,7 @@
-import { getModels, getProviders } from "@earendil-works/pi-ai";
+import {
+  getBuiltinModels,
+  getBuiltinProviders,
+} from "@earendil-works/pi-ai/providers/all";
 import type { ModelCatalogDto } from "@open-agents/types";
 import { getServiceSecret } from "../secrets/service.js";
 import {
@@ -39,7 +42,7 @@ const PROVIDER_ORDER = new Map<string, number>(
  * Only lists providers that have at least one tool-calling model.
  */
 export async function buildModelCatalog(): Promise<ModelCatalogDto> {
-  const providerIds = getProviders().sort((a, b) => {
+  const providerIds = getBuiltinProviders().sort((a, b) => {
     const ao = PROVIDER_ORDER.get(a) ?? 100;
     const bo = PROVIDER_ORDER.get(b) ?? 100;
     if (ao !== bo) return ao - bo;
@@ -51,7 +54,7 @@ export async function buildModelCatalog(): Promise<ModelCatalogDto> {
       const credentialSupported = isCredentialProvider(id);
       const secretKey = providerSecretKey(id);
       const configured = secretKey ? Boolean(await getServiceSecret(secretKey)) : false;
-      const models = getModels(id)
+      const models = getBuiltinModels(id)
         .map((m) => ({
           id: m.id,
           name: m.name,

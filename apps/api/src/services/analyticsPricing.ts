@@ -1,4 +1,7 @@
-import { getModels, getProviders } from "@earendil-works/pi-ai";
+import {
+  getBuiltinModels,
+  getBuiltinProviders,
+} from "@earendil-works/pi-ai/providers/all";
 
 export type ModelPriceUsdPerMillion = { input: number; output: number };
 
@@ -87,8 +90,8 @@ function resolveFamilyPrice(normalized: string): ModelPriceUsdPerMillion | null 
 
 function buildCatalogPriceIndex(): Map<string, ModelPriceUsdPerMillion> {
   const index = new Map<string, ModelPriceUsdPerMillion>();
-  for (const providerId of getProviders()) {
-    for (const model of getModels(providerId)) {
+  for (const providerId of getBuiltinProviders()) {
+    for (const model of getBuiltinModels(providerId)) {
       const normalized = normalizeModelKey(model.id);
       const price =
         EXPLICIT_PRICES[model.id] ??
