@@ -11,6 +11,7 @@
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "tsc -p tsconfig.json && mkdir -p dist/emails && cp -r src/emails/static dist/emails/ && mkdir -p dist/skills && cp -r ../../docs/skills/open-agents-control-plane dist/skills/",
     "start": "node --env-file-if-exists=.env dist/index.js",
+    "test": "tsx --test src/mcp/*.test.ts src/mcp/oauth/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
     "check": "pnpm typecheck && pnpm lint",

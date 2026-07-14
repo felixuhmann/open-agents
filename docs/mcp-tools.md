@@ -69,7 +69,7 @@ Implementation lives under `apps/api/src/mcp/`:
 
 Third-party MCP tools are exposed to the model as `<server-slug>_<tool-name>` (for example `firecrawl_firecrawl_scrape`). Names must match OpenAI’s `^[a-zA-Z0-9_-]+$` pattern, so the orchestrator slugifies the server label and sanitizes the MCP tool name before registering them with Pi.
 
-Platform tool secrets never enter the Daytona sandbox. External MCP bearer tokens are decrypted on the API host and used only by the orchestrator-side MCP client.
+Platform tool secrets never enter the Daytona sandbox. External MCP bearer and OAuth tokens are decrypted on the API host and used only by the orchestrator-side MCP client. OAuth refresh tokens, client secrets, and access tokens are never serialized into agent prompts or version snapshots.
 
 ## MCP library operator UX
 
@@ -83,7 +83,41 @@ The SPA **MCP** library (`/library/mcp`) is where admins register deployment-wid
 
 Probe responses (`McpProbeResult`) include connection status (`connected`, `auth_failure`, `unreachable`, `timeout`, `protocol_error`, `error`), latency, auth diagnostics (HTTP status, whether a bearer was sent), and a tool discovery preview (name, description, input schema per tool).
 
-Implementation: `apps/api/src/mcp/probeMcpServer.ts` connects with the same Streamable HTTP transport as runtime (`thirdPartyClient.ts`), lists tools, classifies failures, and always closes the client.
+Implementation: `apps/api/src/mcp/probeMcpServer.ts` connects with the same Streamable HTTP transport as runtime (`thirdPartyClient.ts`), lists tools, classifies failures, applies the configured server-wide tool allowlist, and always closes the client.
+
+### Google Drive with refreshable OAuth
+
+Use **Add Google Drive** to create a least-privilege connection to Google's official hosted endpoint:
+
+```text
+https://drivemcp.googleapis.com/mcp/v1
+```
+
+The preset requests `openid`, `email`, and `drive.readonly`. It exposes only the official read/search tools; `create_file` and `copy_file` are excluded. An empty allowlist on an existing generic MCP entry keeps the historical behavior of exposing all discovered tools.
+
+Before creating the connection:
+
+1. Create a Google Cloud **Web application** OAuth client.
+2. Enable `drive.googleapis.com` and `drivemcp.googleapis.com` in that project.
+3. Grant the calling identity `roles/mcp.toolUser` where required by Google Cloud MCP.
+4. Register the exact callback displayed by the UI:
+   `https://<deployment>/api/mcp-servers/oauth/callback`.
+5. Enter the OAuth client ID and secret, save the server, then click **Connect Google**.
+
+The backend signs OAuth `state`, derives a PKCE verifier, exchanges the authorization code server-side, encrypts the client secret and token set with `SECRET_ENCRYPTION_KEY`, and refreshes short-lived access tokens before probes and agent runs. Concurrent refreshes are coalesced within the API process. `invalid_grant` or revoked credentials surface as a failed probe and require **Reconnect Google**.
+
+For deployment-wide agent access, authorize a dedicated Workspace account that can see only the intended Shared Drive. Do not connect a personal or Workspace-admin account: `drive.readonly` covers every file visible to that identity and is not a folder-level boundary. Avoid domain-wide delegation unless cross-user impersonation is an explicit requirement.
+
+Add `https://www.googleapis.com/auth/drive.file` and the write tools only when agents genuinely need to create files. Drive content remains untrusted model input; combine least-privilege Google membership, the MCP tool allowlist, and human confirmation for consequential writes.
+
+OAuth lifecycle endpoints are admin-only except for the signed Google callback:
+
+| Action                   | API                                          |
+| ------------------------ | -------------------------------------------- |
+| Read configured callback | `GET /api/mcp-servers/oauth/config`          |
+| Start authorization      | `POST /api/mcp-servers/:id/oauth/start`      |
+| Google callback          | `GET /api/mcp-servers/oauth/callback`        |
+| Disconnect tokens        | `POST /api/mcp-servers/:id/oauth/disconnect` |
 
 ### Connector manifests
 

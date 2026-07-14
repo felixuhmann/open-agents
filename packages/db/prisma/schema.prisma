@@ -345,17 +345,43 @@ model AgentAccess {
 ///
 /// Deployment-wide third-party MCP server registry.
 model McpServer {
-  id           String            @id @default(cuid())
-  name         String            @unique
-  label        String
-  description  String?
-  serverUrl    String
-  bearerCipher Bytes?
-  bearerIv     Bytes?
-  bearerTag    Bytes?
-  bindings     AgentMcpBinding[]
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id              String              @id @default(cuid())
+  name            String              @unique
+  label           String
+  description     String?
+  serverUrl       String
+  /// `none`, `bearer`, or `oauth2`. Legacy rows are migrated based on whether
+  /// an encrypted bearer exists.
+  authType        String              @default("none")
+  bearerCipher    Bytes?
+  bearerIv        Bytes?
+  bearerTag       Bytes?
+  /// Empty means expose all discovered tools for backwards compatibility.
+  allowedTools    String[]            @default([])
+  oauthCredential McpOAuthCredential?
+  bindings        AgentMcpBinding[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+/// Deployment-wide OAuth identity for one remote MCP server. The encrypted
+/// JSON value contains client secret plus access/refresh tokens. Non-secret
+/// status fields are duplicated for operator UX without decrypting tokens.
+model McpOAuthCredential {
+  id             String    @id @default(cuid())
+  mcpServerId    String    @unique
+  mcpServer      McpServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  provider       String
+  clientId       String
+  encryptedValue Bytes
+  iv             Bytes
+  authTag        Bytes
+  scopes         String[]  @default([])
+  subject        String?
+  expiresAt      DateTime?
+  connectedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model AgentMcpBinding {

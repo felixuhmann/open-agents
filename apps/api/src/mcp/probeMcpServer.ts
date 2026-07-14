@@ -7,12 +7,14 @@ import type {
   McpProbeStatus,
   McpProbeTool,
 } from "@open-agents/types";
+import { filterMcpTools } from "./toolFilter.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type ProbeMcpServerOptions = {
   serverUrl: string;
   bearer?: string | null;
+  allowedTools?: string[];
   timeoutMs?: number;
 };
 
@@ -174,7 +176,7 @@ export async function probeMcpServer(
     await Promise.race([connectPromise, timeout]);
 
     const listed = await client.listTools();
-    const tools = listed.tools ?? [];
+    const tools = filterMcpTools(listed.tools ?? [], options.allowedTools ?? []);
     const latencyMs = Date.now() - started;
 
     let serverName: string | undefined;
