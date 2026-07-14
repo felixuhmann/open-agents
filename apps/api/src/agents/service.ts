@@ -149,6 +149,39 @@ export async function deleteAgent(id: string): Promise<void> {
   log.info("agents: deleted", { id });
 }
 
+/** Enable public chat without rotating an already-distributed link. */
+export async function enableAgentPublicShare(
+  id: string,
+  token: string,
+): Promise<HydratedAgent> {
+  const result = await prisma.agent.updateMany({
+    where: { id, publicShareToken: null },
+    data: { publicShareToken: token },
+  });
+  const updated = await prisma.agent.findUnique({
+    where: { id },
+    include: HYDRATED_INCLUDE,
+  });
+  if (!updated) throw new Error(`Agent not found: ${id}`);
+  cache.set(updated.slug, updated);
+  if (result.count > 0) {
+    log.info("agents: public sharing enabled", { id, slug: updated.slug });
+  }
+  return updated;
+}
+
+/** Disable public chat immediately, invalidating the link and public sessions. */
+export async function disableAgentPublicShare(id: string): Promise<HydratedAgent> {
+  const updated = await prisma.agent.update({
+    where: { id },
+    data: { publicShareToken: null },
+    include: HYDRATED_INCLUDE,
+  });
+  cache.set(updated.slug, updated);
+  log.info("agents: public sharing disabled", { id, slug: updated.slug });
+  return updated;
+}
+
 export type UpdateAgentArgs = {
   displayName?: string;
   description?: string | null;

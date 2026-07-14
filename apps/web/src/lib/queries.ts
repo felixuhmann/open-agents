@@ -297,6 +297,7 @@ export type FullAgentDto = {
   emailEnabled: boolean;
   webEnabled: boolean;
   profileAccessEnabled: boolean;
+  publicShareEnabled: boolean;
   accessMode: "everyone" | "specific";
   inboundLocalPart: string;
   mailgunDomain: string | null;

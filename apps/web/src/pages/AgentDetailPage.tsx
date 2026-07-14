@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { canOperateAgents, useAgent, useCurrentUser } from "@/lib/queries";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { AgentShareDialog } from "@/components/AgentShareDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -93,12 +94,15 @@ export default function AgentDetailPage() {
               </Link>
             </Button>
             {canManageAgents ? (
-              <Button asChild variant="outline">
-                <Link to={`/agents/${a.slug}/edit`}>
-                  <PencilSimpleIcon data-icon="inline-start" />
-                  Edit
-                </Link>
-              </Button>
+              <>
+                <AgentShareDialog slug={a.slug} enabled={a.publicShareEnabled} />
+                <Button asChild variant="outline">
+                  <Link to={`/agents/${a.slug}/edit`}>
+                    <PencilSimpleIcon data-icon="inline-start" />
+                    Edit
+                  </Link>
+                </Button>
+              </>
             ) : null}
           </>
         }
@@ -116,6 +120,13 @@ export default function AgentDetailPage() {
                   <GlobeIcon data-icon="inline-start" />
                   enabled
                 </Badge>
+              ) : (
+                <Badge variant="outline">disabled</Badge>
+              )}
+            </Row>
+            <Row label="Public link">
+              {a.publicShareEnabled ? (
+                <Badge>enabled</Badge>
               ) : (
                 <Badge variant="outline">disabled</Badge>
               )}

@@ -260,6 +260,11 @@ model Agent {
   /// the current request (web conversations directly, email by matching sender).
   profileAccessEnabled Boolean @default(false)
 
+  /// Capability token for the optional anonymous web-chat share link.
+  /// `NULL` disables public access immediately; rotating it invalidates all
+  /// previously issued links and their browser-local conversations.
+  publicShareToken String? @unique
+
   /// Draft sandbox network policy (internet, allowlist, internal protection).
   /// Published copies are frozen in `AgentVersion.payload.runtime.sandbox`.
   sandboxNetworkPolicy Json?
@@ -552,14 +557,18 @@ model AgentSandbox {
 model ChatConversation {
   id        String        @id @default(cuid())
   agentId   String
-  userId    String
+  /// Authenticated owner. Public share-link conversations deliberately have
+  /// no deployment user and are instead protected by `publicAccessTokenHash`.
+  userId    String?
+  /// SHA-256 of the browser-local capability token for an anonymous chat.
+  publicAccessTokenHash String? @unique
   /// Backend session id currently bound to this conversation.
   sessionId String?       @unique
   title     String        @default("New chat")
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   agent     Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  ChatMessage[]
   runs      AgentRun[]
   issues    Issue[]

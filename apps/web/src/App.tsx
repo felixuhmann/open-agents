@@ -31,6 +31,7 @@ const AgentsListPage = lazy(() => import("./pages/AgentsListPage"));
 const AgentDetailPage = lazy(() => import("./pages/AgentDetailPage"));
 const AgentEditPage = lazy(() => import("./pages/AgentEditPage"));
 const AgentChatPage = lazy(() => import("./pages/AgentChatPage"));
+const PublicAgentChatPage = lazy(() => import("./pages/PublicAgentChatPage"));
 const AgentConversationsPage = lazy(() => import("./pages/AgentConversationsPage"));
 const WorkflowsListPage = lazy(() => import("./pages/WorkflowsListPage"));
 const ScheduledTasksPage = lazy(() => import("./pages/ScheduledTasksPage"));
@@ -236,6 +237,7 @@ export function App() {
   const branding = usePublicBranding();
   const location = useLocation();
   const productName = branding.data?.productName ?? DEFAULT_PRODUCT_NAME;
+  const publicShareToken = new URLSearchParams(location.search).get("share");
 
   useEffect(() => {
     document.title = productName;
@@ -275,6 +277,16 @@ export function App() {
         <Route
           path="/issues/report"
           element={<EmailIssueReportPage productName={productName} />}
+        />
+        <Route
+          path="/agents/:slug/chat"
+          element={
+            publicShareToken ? (
+              <PublicAgentChatPage shareToken={publicShareToken} />
+            ) : (
+              <ProtectedRoutes />
+            )
+          }
         />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>

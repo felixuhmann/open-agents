@@ -1,4 +1,5 @@
 import { File } from "node:buffer";
+import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
 import { resolveDraftSandboxPolicy } from "../../services/sandboxPolicy.js";
@@ -6,6 +7,8 @@ import { parseStarterPrompts } from "../../agents/starterPrompts.js";
 import {
   createAgent,
   deleteAgent,
+  disableAgentPublicShare,
+  enableAgentPublicShare,
   getAgentById,
   getAgentBySlug,
   listAgents,
@@ -87,6 +90,7 @@ function toDto(
     emailEnabled: agent.emailEnabled,
     webEnabled: agent.webEnabled,
     profileAccessEnabled: agent.profileAccessEnabled,
+    publicShareEnabled: agent.publicShareToken !== null,
     accessMode: agent.accessMode,
     inboundLocalPart: agent.inboundLocalPart,
     mailgunDomain: mailgunDomain ?? null,
@@ -197,6 +201,37 @@ agentsRoutes.post("/:slug/publish", async (c) => {
   if (!agent) throw new HttpError(404, "agent not found");
   const published = await publishAgent(agent.id);
   return c.json(toDto(published));
+});
+
+/** Return the existing share token or create one on first use. */
+agentsRoutes.post("/:slug/share", async (c) => {
+  requireAgentOperator(c);
+  const slug = c.req.param("slug");
+  const agent = await getAgentBySlug(slug);
+  if (!agent) throw new HttpError(404, "agent not found");
+  if (!agent.webEnabled) {
+    throw new HttpError(400, "enable web chat before sharing this agent");
+  }
+  if (!agent.currentVersionId) {
+    throw new HttpError(400, "publish the agent before sharing it");
+  }
+  const updated = await enableAgentPublicShare(
+    agent.id,
+    randomBytes(32).toString("base64url"),
+  );
+  if (!updated.publicShareToken) {
+    throw new HttpError(409, "public sharing changed concurrently; try again");
+  }
+  return c.json({ enabled: true, shareToken: updated.publicShareToken });
+});
+
+agentsRoutes.delete("/:slug/share", async (c) => {
+  requireAgentOperator(c);
+  const slug = c.req.param("slug");
+  const agent = await getAgentBySlug(slug);
+  if (!agent) throw new HttpError(404, "agent not found");
+  await disableAgentPublicShare(agent.id);
+  return c.json({ enabled: false });
 });
 
 agentsRoutes.delete("/:slug", async (c) => {

@@ -43,6 +43,7 @@ export const AgentDto = z.object({
   emailEnabled: z.boolean(),
   webEnabled: z.boolean(),
   profileAccessEnabled: z.boolean(),
+  publicShareEnabled: z.boolean(),
   accessMode: AgentAccessMode,
   inboundLocalPart: z.string(),
   currentVersionNumber: z.number().int().positive().nullable().optional(),

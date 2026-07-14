@@ -8,6 +8,7 @@ import { controlPlaneSkillRoutes } from "../routes/api/controlPlaneSkill.js";
 import { conversationsRoutes } from "../routes/api/conversations.js";
 import { issuesRoutes } from "../routes/api/issues.js";
 import { profileRoutes } from "../routes/api/profile.js";
+import { publicChatRoutes } from "../routes/api/publicChat.js";
 import { runsRoutes } from "../routes/api/runs.js";
 import { sandboxesRoutes } from "../routes/api/sandboxes.js";
 import { scheduledTasksRoutes } from "../routes/api/scheduledTasks.js";
@@ -97,6 +98,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/conversations", conversationsRoutes);
   app.route("/api/issues", issuesRoutes);
   app.route("/api/profile", profileRoutes);
+  app.route("/api/public", publicChatRoutes);
   app.route("/api/runs", runsRoutes);
   app.route("/api/sandboxes", sandboxesRoutes);
   app.route("/api/scheduled-tasks", scheduledTasksRoutes);
