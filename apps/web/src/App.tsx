@@ -282,7 +282,7 @@ export function App() {
           path="/agents/:slug/chat"
           element={
             publicShareToken ? (
-              <PublicAgentChatPage shareToken={publicShareToken} />
+              <PublicAgentChatPage key={location.key} shareToken={publicShareToken} />
             ) : (
               <ProtectedRoutes />
             )

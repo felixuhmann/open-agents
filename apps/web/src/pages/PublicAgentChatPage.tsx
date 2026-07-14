@@ -60,26 +60,10 @@ function publicQuery(shareToken: string, accessToken?: string) {
   return query.toString();
 }
 
-function readSession(key: string): PublicSession | null {
-  try {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<PublicSession>;
-    return value.conversationId && value.accessToken
-      ? { conversationId: value.conversationId, accessToken: value.accessToken }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export default function PublicAgentChatPage({ shareToken }: Props) {
   const { slug } = useParams<{ slug: string }>();
   const queryClient = useQueryClient();
-  const storageKey = `public-chat:${slug ?? "unknown"}:${shareToken}`;
-  const [session, setSession] = useState<PublicSession | null>(() =>
-    readSession(storageKey),
-  );
+  const [session, setSession] = useState<PublicSession | null>(null);
   const sessionRef = useRef(session);
   const creatingSessionRef = useRef<Promise<PublicSession> | null>(null);
   const [draft, setDraft] = useState("");
@@ -132,7 +116,6 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
       `/api/public/agents/${slug}/conversations?${publicQuery(shareToken)}`,
       { method: "POST" },
     ).then((created) => {
-      sessionStorage.setItem(storageKey, JSON.stringify(created));
       sessionRef.current = created;
       setSession(created);
       return created;
