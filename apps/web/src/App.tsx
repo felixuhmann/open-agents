@@ -278,16 +278,14 @@ export function App() {
           path="/issues/report"
           element={<EmailIssueReportPage productName={productName} />}
         />
-        <Route
-          path="/agents/:slug/chat"
-          element={
-            publicShareToken ? (
+        {publicShareToken ? (
+          <Route
+            path="/agents/:slug/chat"
+            element={
               <PublicAgentChatPage key={location.key} shareToken={publicShareToken} />
-            ) : (
-              <ProtectedRoutes />
-            )
-          }
-        />
+            }
+          />
+        ) : null}
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </Suspense>
