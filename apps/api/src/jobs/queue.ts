@@ -1,3 +1,4 @@
+import type { QueueOptions } from "pg-boss";
 import { PgBoss } from "pg-boss";
 import { config } from "../config.js";
 import { log } from "../log.js";
@@ -13,6 +14,8 @@ import {
 
 let boss: PgBoss | null = null;
 
+const RUN_AGENT_QUEUE_POLICY = "singleton" as const;
+
 export async function getBoss(): Promise<PgBoss> {
   if (boss) return boss;
   const instance = new PgBoss({
@@ -27,14 +30,23 @@ export async function getBoss(): Promise<PgBoss> {
   // permits many conversations in parallel while preventing two turns from
   // racing the same durable Pi checkpoint. Unlike strict FIFO, a permanently
   // failed job does not block every later message in that conversation.
-  const runAgentQueueOptions = {
-    policy: "singleton" as const,
+  const runAgentQueueOptions: QueueOptions = {
     expireInSeconds: config.AGENT_STALE_RUN_SECONDS + 5 * 60,
     heartbeatSeconds: 60,
   };
-  await instance.createQueue(JOB_RUN_AGENT, runAgentQueueOptions);
+  await instance.createQueue(JOB_RUN_AGENT, {
+    ...runAgentQueueOptions,
+    policy: RUN_AGENT_QUEUE_POLICY,
+  });
+  const runAgentQueue = await instance.getQueue(JOB_RUN_AGENT);
+  if (runAgentQueue?.policy !== RUN_AGENT_QUEUE_POLICY) {
+    throw new Error(
+      `${JOB_RUN_AGENT} queue has unexpected policy ${runAgentQueue?.policy ?? "missing"}`,
+    );
+  }
   // `createQueue` is a no-op for an existing queue, so apply timing changes
-  // explicitly during every boot as well.
+  // explicitly during every boot as well. Policy is intentionally excluded:
+  // pg-boss rejects policy changes through `updateQueue`.
   await instance.updateQueue(JOB_RUN_AGENT, runAgentQueueOptions);
   await instance.createQueue(JOB_RUN_WORKFLOW);
   await instance.createQueue(JOB_SEND_EMAIL);
