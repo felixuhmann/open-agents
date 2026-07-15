@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  ArrowDownIcon,
-  ClockCounterClockwiseIcon,
-  TerminalWindowIcon,
-} from "@phosphor-icons/react";
+import { ClockCounterClockwiseIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import {
   canOperateAgents,
@@ -19,14 +15,22 @@ import {
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Markdown } from "@/components/Markdown";
-import { ChatMessage } from "@/components/chat/ChatMessage";
-import { Composer, type PendingUpload } from "@/components/chat/Composer";
-import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
-import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  AiChatComposer,
+  AiChatEmptyState,
+  AiChatMessage,
+  AiChatPendingMessage,
+  AiConversationDownload,
+  AiToolCall,
+  type PendingUpload,
+  type SubagentItem,
+} from "@/components/chat/AiChat";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
-import { ToolCallCard, type SubagentItem } from "@/components/chat/ToolCallCard";
-import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
 
 type StreamEvent = {
@@ -45,6 +49,7 @@ type LiveToolCall = {
   done: boolean;
   /** Redacted tool input from the `tool.use` event, if present. */
   args?: Record<string, unknown>;
+  isError?: boolean;
   /** Mirrored child activity, present only for `run_subagent` calls. */
   subagentSlug?: string;
   subagentItems?: SubagentItem[];
@@ -166,35 +171,11 @@ export default function AgentChatPage() {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const atBottomRef = useRef(true);
-  const [showScrollDown, setShowScrollDown] = useState(false);
 
   const messages: ChatMessageData[] = useMemo(
     () => conversation.data?.messages ?? [],
     [conversation.data],
   );
-
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  };
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const near = distance < 80;
-    atBottomRef.current = near;
-    setShowScrollDown(!near);
-  };
-
-  // Auto-follow new content only when the reader is already pinned to the
-  // bottom, so scrolling up to read history isn't yanked back down.
-  useEffect(() => {
-    if (atBottomRef.current) scrollToBottom("smooth");
-  }, [messages, streamingText, isReasoning, toolCalls, optimistic]);
 
   // Clear the optimistic user echo once the persisted message lands.
   useEffect(() => {
@@ -260,7 +241,7 @@ export default function AgentChatPage() {
     },
   });
 
-  const handleFilePick = async (files: FileList | null) => {
+  const handleFilePick = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const items = Array.from(files);
     setUploadingCount((n) => n + items.length);
@@ -400,7 +381,16 @@ export default function AgentChatPage() {
             const normalized =
               resultText && !resultText.endsWith("\n") ? `${resultText}\n` : resultText;
             if (idx < 0) {
-              return [...prev, { callId, toolName, output: normalized, done: true }];
+              return [
+                ...prev,
+                {
+                  callId,
+                  toolName,
+                  output: normalized,
+                  done: true,
+                  isError: data.payload.isError === true,
+                },
+              ];
             }
             const next = [...prev];
             const row = next[idx];
@@ -409,6 +399,7 @@ export default function AgentChatPage() {
               ...row,
               output: normalized || row.output,
               done: true,
+              isError: data.payload.isError === true,
             };
             return next;
           });
@@ -496,7 +487,6 @@ export default function AgentChatPage() {
         sizeBytes: u.sizeBytes,
       })),
     });
-    atBottomRef.current = true;
     if (!conversationId) {
       createConversation.mutate({ agentSlug: slug, firstMessage: text });
     } else {
@@ -556,109 +546,82 @@ export default function AgentChatPage() {
         </Button>
       </header>
 
-      <ChatFileDropZone
-        className="flex min-h-0 flex-1 flex-col gap-3"
-        disabled={sending || uploadingCount > 0}
-        onFiles={(files) => void handleFilePick(files)}
-      >
-        <div className="relative min-h-0 flex-1">
-          <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <Conversation className="min-h-0">
+          <ConversationContent className="mx-auto min-h-full w-full max-w-3xl gap-8 px-1 py-4">
             {empty ? (
-              <ChatEmptyState
-                agentDisplayName={agent.data.displayName}
-                agentAvatar={agent.data.avatar}
+              <AiChatEmptyState
+                displayName={agent.data.displayName}
+                avatar={agent.data.avatar}
                 starterPrompts={agent.data.starterPrompts}
-                onPick={(text) => setDraft(text)}
+                onPick={setDraft}
               />
             ) : (
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-1 py-4">
-                {messages.map((m) => (
-                  <ChatMessage
-                    key={m.id}
-                    role={m.role}
-                    content={m.content}
-                    createdAt={m.createdAt}
-                    attachments={m.attachments}
-                    agentDisplayName={agent.data.displayName}
-                    agentAvatar={agent.data.avatar}
+              <>
+                {messages.map((message) => (
+                  <AiChatMessage
+                    key={message.id}
+                    role={message.role}
+                    content={message.content}
+                    createdAt={message.createdAt}
+                    attachments={message.attachments}
                     footer={
-                      m.role === "assistant" && m.runId ? (
-                        <AssistantRunAttachments runId={m.runId} />
+                      message.role === "assistant" && message.runId ? (
+                        <AssistantRunAttachments runId={message.runId} />
                       ) : null
                     }
                   />
                 ))}
 
                 {showOptimistic ? (
-                  <ChatMessage
+                  <AiChatMessage
                     role="user"
                     content={optimistic.text}
                     attachments={optimistic.attachments}
-                    agentDisplayName={agent.data.displayName}
-                    agentAvatar={agent.data.avatar}
                   />
                 ) : null}
 
                 {streamingText || toolCalls.length > 0 || waitingFirstToken ? (
-                  <div className="group/msg flex w-full items-start gap-3">
-                    <AgentAvatar
-                      avatar={agent.data.avatar}
-                      displayName={agent.data.displayName}
-                      className="mt-0.5 size-7 shrink-0 border border-border"
-                    />
-                    <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {agent.data.displayName}
-                      </span>
-                      {toolCalls.length > 0 ? (
+                  <AiChatPendingMessage
+                    text={streamingText}
+                    reasoning={isReasoning}
+                    waiting={waitingFirstToken}
+                    tools={
+                      toolCalls.length > 0 ? (
                         <div className="flex flex-col gap-2">
-                          {toolCalls.map((tc) => (
-                            <ToolCallCard
-                              key={tc.callId}
-                              toolName={tc.toolName}
-                              output={tc.output}
-                              running={!tc.done}
-                              args={tc.args}
-                              subagentSlug={tc.subagentSlug}
-                              subagentItems={tc.subagentItems}
+                          {toolCalls.map((toolCall) => (
+                            <AiToolCall
+                              key={toolCall.callId}
+                              toolName={toolCall.toolName}
+                              output={toolCall.output}
+                              running={!toolCall.done}
+                              args={toolCall.args}
+                              isError={toolCall.isError}
+                              subagentSlug={toolCall.subagentSlug}
+                              subagentItems={toolCall.subagentItems}
                             />
                           ))}
                         </div>
-                      ) : null}
-                      {streamingText ? <StreamingMarkdown text={streamingText} /> : null}
-                      {isReasoning ? (
-                        <TypingIndicator label="Reasoning…" />
-                      ) : waitingFirstToken ? (
-                        <TypingIndicator />
-                      ) : null}
-                    </div>
-                  </div>
+                      ) : null
+                    }
+                  />
                 ) : null}
-                <div className="h-2" />
-              </div>
+              </>
             )}
-          </div>
-
-          {showScrollDown ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              onClick={() => scrollToBottom("smooth")}
-              aria-label="Scroll to latest"
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
-            >
-              <ArrowDownIcon className="size-4" />
-            </Button>
-          ) : null}
-        </div>
+          </ConversationContent>
+          <AiConversationDownload
+            messages={messages}
+            filename={`${slug ?? "conversation"}.md`}
+          />
+          <ConversationScrollButton aria-label="Scroll to latest" />
+        </Conversation>
 
         <div className="mx-auto w-full max-w-3xl">
-          <Composer
+          <AiChatComposer
             value={draft}
             onChange={setDraft}
             onSubmit={submit}
-            onFiles={(files) => void handleFilePick(files)}
+            onFiles={handleFilePick}
             pendingUploads={pendingUploads}
             onRemoveUpload={removePendingUpload}
             uploadingCount={uploadingCount}
@@ -666,19 +629,7 @@ export default function AgentChatPage() {
             placeholder={`Message ${agent.data.displayName}…`}
           />
         </div>
-      </ChatFileDropZone>
-    </div>
-  );
-}
-
-/**
- * Renders streaming markdown with a blinking caret appended so the reply
- * reads as "live" while tokens arrive.
- */
-function StreamingMarkdown({ text }: { text: string }) {
-  return (
-    <div className="streaming-markdown">
-      <Markdown>{text}</Markdown>
+      </div>
     </div>
   );
 }

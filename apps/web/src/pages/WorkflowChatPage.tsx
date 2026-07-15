@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowDownIcon,
   CaretDownIcon,
   CaretRightIcon,
   CheckCircleIcon,
   ClockCounterClockwiseIcon,
-  DownloadSimpleIcon,
-  FileIcon,
   FlowArrowIcon,
   PencilSimpleIcon,
   SpinnerGapIcon,
@@ -28,18 +25,30 @@ import {
 } from "@/lib/queries";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Markdown } from "@/components/Markdown";
-import { Composer, type PendingUpload } from "@/components/chat/Composer";
-import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
-import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  AiChatComposer,
+  AiChatEmptyState,
+  AiChatMessage,
+  AiConversationDownload,
+  AiRunAttachments,
+  AiToolCall,
+  type PendingUpload,
+} from "@/components/chat/AiChat";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
-import { ToolCallCard } from "@/components/chat/ToolCallCard";
-import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
-import { formatBytes } from "@/components/chat/utils";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-import { cn } from "@/lib/utils";
 
 type StreamEvent = {
   seq: number;
@@ -98,31 +107,9 @@ export default function WorkflowChatPage() {
     text: string;
     attachments: { filename: string; sizeBytes: number }[];
   } | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const atBottomRef = useRef(true);
-  const [showScrollDown, setShowScrollDown] = useState(false);
   const isOperator = canOperateAgents(me.data?.role);
 
   const messages = useMemo(() => conversation.data?.messages ?? [], [conversation.data]);
-
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior });
-  };
-
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const near = distance < 80;
-    atBottomRef.current = near;
-    setShowScrollDown(!near);
-  };
-
-  useEffect(() => {
-    if (atBottomRef.current) scrollToBottom("smooth");
-  }, [messages, steps, optimistic]);
 
   useEffect(() => {
     if (!optimistic) return;
@@ -140,7 +127,7 @@ export default function WorkflowChatPage() {
     return conv.id;
   };
 
-  const handleFilePick = async (files: FileList | null) => {
+  const handleFilePick = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const items = Array.from(files);
     setUploadingCount((n) => n + items.length);
@@ -414,7 +401,6 @@ export default function WorkflowChatPage() {
         sizeBytes: u.sizeBytes,
       })),
     });
-    atBottomRef.current = true;
     if (!conversationId) {
       createConversation.mutate({ firstMessage: text });
     } else {
@@ -485,49 +471,51 @@ export default function WorkflowChatPage() {
       </header>
 
       {notPublished ? (
-        <div className="flex items-center gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-          <WarningCircleIcon className="size-4 shrink-0" />
-          This workflow has no published version yet. Publish it from the editor before
-          running.
-        </div>
+        <Alert>
+          <WarningCircleIcon />
+          <AlertTitle>Publish before running</AlertTitle>
+          <AlertDescription>
+            This workflow has no published version yet. Publish it from the editor before
+            running.
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="relative min-h-0 flex-1">
-          <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto">
+        <Conversation className="min-h-0">
+          <ConversationContent className="mx-auto min-h-full w-full max-w-3xl gap-8 px-1 py-4">
             {empty ? (
-              <ChatEmptyState
-                agentDisplayName={workflow.data.displayName}
-                agentAvatar={null}
+              <AiChatEmptyState
+                displayName={workflow.data.displayName}
+                avatar={null}
                 starterPrompts={workflow.data.starterPrompts}
-                onPick={(text) => setDraft(text)}
+                onPick={setDraft}
               />
             ) : (
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-1 py-4">
-                {messages.map((m) =>
-                  m.role === "user" ? (
-                    <UserBubble
-                      key={m.id}
-                      content={m.content}
-                      attachments={m.attachments}
-                    />
-                  ) : (
-                    <AssistantBubble
-                      key={m.id}
-                      content={m.content}
-                      agentRunId={m.agentRunId}
-                    />
-                  ),
-                )}
+              <>
+                {messages.map((message) => (
+                  <AiChatMessage
+                    key={message.id}
+                    role={message.role}
+                    content={message.content}
+                    attachments={message.attachments}
+                    footer={
+                      message.role === "assistant" && message.agentRunId ? (
+                        <AssistantRunAttachments runId={message.agentRunId} />
+                      ) : null
+                    }
+                  />
+                ))}
 
                 {optimistic ? (
-                  <UserBubble
+                  <AiChatMessage
+                    role="user"
                     content={optimistic.text}
-                    attachments={optimistic.attachments.map((a, i) => ({
-                      id: `opt-${i}`,
-                      filename: a.filename,
+                    attachments={optimistic.attachments.map((attachment, index) => ({
+                      id: `optimistic-${index}`,
+                      filename: attachment.filename,
                       contentType: "application/octet-stream",
-                      sizeBytes: a.sizeBytes,
+                      sizeBytes: attachment.sizeBytes,
                     }))}
                   />
                 ) : null}
@@ -535,103 +523,43 @@ export default function WorkflowChatPage() {
                 {steps.length > 0 ? (
                   <PipelinePanel steps={steps} running={Boolean(activeRunId)} />
                 ) : sending ? (
-                  <TypingIndicator />
+                  <Message from="assistant">
+                    <MessageContent>
+                      <span className="text-sm text-muted-foreground">
+                        Starting workflow…
+                      </span>
+                    </MessageContent>
+                  </Message>
                 ) : null}
-                <div className="h-2" />
-              </div>
+              </>
             )}
-          </div>
-
-          {showScrollDown ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              onClick={() => scrollToBottom("smooth")}
-              aria-label="Scroll to latest"
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
-            >
-              <ArrowDownIcon className="size-4" />
-            </Button>
-          ) : null}
-        </div>
+          </ConversationContent>
+          <AiConversationDownload
+            messages={messages}
+            filename={`${slug ?? "workflow"}.md`}
+          />
+          <ConversationScrollButton aria-label="Scroll to latest" />
+        </Conversation>
 
         <div className="mx-auto w-full max-w-3xl">
-          <ChatFileDropZone
-            disabled={sending}
-            onFiles={(files) => void handleFilePick(files)}
-          >
-            <Composer
-              value={draft}
-              onChange={setDraft}
-              onSubmit={submit}
-              onFiles={(files) => void handleFilePick(files)}
-              pendingUploads={pendingUploads}
-              onRemoveUpload={(item) =>
-                setPendingUploads((prev) =>
-                  prev.filter((p) => p.chatAttachmentId !== item.chatAttachmentId),
-                )
-              }
-              uploadingCount={uploadingCount}
-              sending={sending}
-              placeholder={`Message ${workflow.data.displayName}…`}
-            />
-          </ChatFileDropZone>
+          <AiChatComposer
+            value={draft}
+            onChange={setDraft}
+            onSubmit={submit}
+            onFiles={handleFilePick}
+            pendingUploads={pendingUploads}
+            onRemoveUpload={(item) =>
+              setPendingUploads((prev) =>
+                prev.filter(
+                  (pending) => pending.chatAttachmentId !== item.chatAttachmentId,
+                ),
+              )
+            }
+            uploadingCount={uploadingCount}
+            sending={sending}
+            placeholder={`Message ${workflow.data.displayName}…`}
+          />
         </div>
-      </div>
-    </div>
-  );
-}
-
-function UserBubble({
-  content,
-  attachments,
-}: {
-  content: string;
-  attachments?: {
-    id: string;
-    filename: string;
-    contentType: string;
-    sizeBytes: number;
-  }[];
-}) {
-  return (
-    <div className="flex w-full justify-end">
-      <div className="max-w-[80%] space-y-2">
-        <div className="whitespace-pre-wrap bg-primary px-3 py-2 text-sm text-primary-foreground">
-          {content}
-        </div>
-        {attachments && attachments.length > 0 ? (
-          <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-            {attachments.map((a) => (
-              <li key={a.id} className="flex items-center gap-1.5 justify-end">
-                <FileIcon className="size-3.5 shrink-0" />
-                <span className="truncate">{a.filename}</span>
-                <span className="shrink-0">({formatBytes(a.sizeBytes)})</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function AssistantBubble({
-  content,
-  agentRunId,
-}: {
-  content: string;
-  agentRunId: string | null;
-}) {
-  return (
-    <div className="flex w-full items-start gap-3">
-      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground">
-        <FlowArrowIcon className="size-3.5" />
-      </span>
-      <div className="min-w-0 flex-1 overflow-hidden text-sm">
-        <Markdown>{content}</Markdown>
-        {agentRunId ? <AssistantRunAttachments runId={agentRunId} /> : null}
       </div>
     </div>
   );
@@ -737,11 +665,8 @@ function WorkflowActivityCard({ event }: { event: WorkflowActivityEvent }) {
 
 function PipelinePanel({ steps, running }: { steps: StepState[]; running: boolean }) {
   return (
-    <div className="flex w-full items-start gap-3">
-      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-foreground">
-        <FlowArrowIcon className="size-3.5" />
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+    <Message from="assistant">
+      <MessageContent className="w-full">
         <span className="text-xs font-medium text-muted-foreground">
           {running ? "Running pipeline…" : "Pipeline"}
         </span>
@@ -755,8 +680,8 @@ function PipelinePanel({ steps, running }: { steps: StepState[]; running: boolea
             />
           ))}
         </div>
-      </div>
-    </div>
+      </MessageContent>
+    </Message>
   );
 }
 
@@ -812,7 +737,7 @@ function StepCard({
           {step.toolCalls.length > 0 ? (
             <div className="flex flex-col gap-2">
               {step.toolCalls.map((tc) => (
-                <ToolCallCard
+                <AiToolCall
                   key={tc.callId}
                   toolName={tc.toolName}
                   output={tc.output}
@@ -823,35 +748,17 @@ function StepCard({
             </div>
           ) : null}
           {step.text.trim().length > 0 ? (
-            <div
-              className={cn(
-                "overflow-hidden text-sm",
-                step.status === "running" && "streaming-markdown",
-              )}
-            >
-              <Markdown>{step.text}</Markdown>
-            </div>
+            <MessageResponse isAnimating={step.status === "running"}>
+              {step.text}
+            </MessageResponse>
           ) : null}
           {step.attachments.length > 0 && step.runId ? (
-            <div className="flex flex-wrap gap-1.5">
-              {step.attachments.map((a) => (
-                <a
-                  key={a.id}
-                  href={runAttachmentDownloadUrl(step.runId!, a.id)}
-                  download={a.filename}
-                  className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
-                >
-                  <FileIcon className="size-3.5" />
-                  <span className="max-w-[18rem] truncate" title={a.filename}>
-                    {a.filename}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {formatBytes(a.sizeBytes)}
-                  </span>
-                  <DownloadSimpleIcon className="size-3.5" />
-                </a>
-              ))}
-            </div>
+            <AiRunAttachments
+              attachments={step.attachments.map((attachment) => ({
+                ...attachment,
+                href: runAttachmentDownloadUrl(step.runId!, attachment.id),
+              }))}
+            />
           ) : null}
         </div>
       ) : null}

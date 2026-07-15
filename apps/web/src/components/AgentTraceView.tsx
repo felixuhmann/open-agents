@@ -19,7 +19,7 @@ import {
   type IssueDetailRunEvent,
   type SessionTrace,
 } from "@/lib/queries";
-import { Markdown } from "@/components/Markdown";
+import { MessageResponse } from "@/components/ai-elements/message";
 import {
   Accordion,
   AccordionContent,
@@ -547,7 +547,11 @@ function MessageBubble({
                   : "bg-muted text-foreground",
             )}
           >
-            {mine || isSystem ? message.content : <Markdown>{message.content}</Markdown>}
+            {mine || isSystem ? (
+              message.content
+            ) : (
+              <MessageResponse>{message.content}</MessageResponse>
+            )}
           </div>
           <span className="text-xs text-muted-foreground">
             {new Date(message.createdAt).toLocaleString()}

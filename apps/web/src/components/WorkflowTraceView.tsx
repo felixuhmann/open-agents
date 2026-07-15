@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import type { IssueDetailRunEvent, WorkflowTrace, WorkflowTraceRun } from "@/lib/queries";
 import { filterDebugTraceEvents } from "@/lib/traceEventVisibility";
-import { Markdown } from "@/components/Markdown";
+import { MessageResponse } from "@/components/ai-elements/message";
 import {
   Accordion,
   AccordionContent,
@@ -250,7 +250,7 @@ function WorkflowConversation({ data }: { data: WorkflowTrace }) {
               ) : null}
             </div>
             <div className="text-sm">
-              <Markdown>{message.content}</Markdown>
+              <MessageResponse>{message.content}</MessageResponse>
             </div>
           </div>
         ))}

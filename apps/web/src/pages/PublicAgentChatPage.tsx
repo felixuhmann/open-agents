@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownIcon, DownloadSimpleIcon, FileIcon } from "@phosphor-icons/react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
-import { ChatFileDropZone } from "@/components/chat/ChatFileDropZone";
-import { ChatMessage } from "@/components/chat/ChatMessage";
-import { Composer, type PendingUpload } from "@/components/chat/Composer";
-import { TypingIndicator } from "@/components/chat/TypingIndicator";
-import { formatBytes } from "@/components/chat/utils";
-import { Markdown } from "@/components/Markdown";
-import { Button } from "@/components/ui/button";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  AiChatComposer,
+  AiChatEmptyState,
+  AiChatMessage,
+  AiChatPendingMessage,
+  AiConversationDownload,
+  AiRunAttachments,
+  type PendingUpload,
+} from "@/components/chat/AiChat";
 import {
   Empty,
   EmptyDescription,
@@ -73,9 +78,6 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const atBottomRef = useRef(true);
-  const [showScrollDown, setShowScrollDown] = useState(false);
 
   const agent = useQuery({
     enabled: Boolean(slug && shareToken),
@@ -152,16 +154,6 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
     },
   });
 
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    const element = scrollRef.current;
-    if (!element) return;
-    element.scrollTo({ top: element.scrollHeight, behavior });
-  };
-
-  useEffect(() => {
-    if (atBottomRef.current) scrollToBottom();
-  }, [messages, optimistic, streamingText, isReasoning]);
-
   useEffect(() => {
     if (!optimistic) return;
     const lastUser = [...messages].reverse().find((message) => message.role === "user");
@@ -222,7 +214,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
     return () => source.close();
   }, [activeRunId, queryClient, session, shareToken]);
 
-  const handleFilePick = async (files: FileList | null) => {
+  const handleFilePick = async (files: FileList | File[] | null) => {
     if (!files?.length) return;
     const selected = Array.from(files);
     setUploadingCount((count) => count + selected.length);
@@ -276,7 +268,6 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
         sizeBytes: upload.sizeBytes,
       })),
     });
-    atBottomRef.current = true;
     sendMessage.mutate(text);
     setDraft("");
   };
@@ -326,42 +317,25 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
         </h1>
       </header>
 
-      <ChatFileDropZone
-        className="flex min-h-0 flex-1 flex-col"
-        disabled={sending || uploadingCount > 0}
-        onFiles={(files) => void handleFilePick(files)}
-      >
-        <div className="relative min-h-0 flex-1">
-          <div
-            ref={scrollRef}
-            className="h-full overflow-y-auto"
-            onScroll={() => {
-              const element = scrollRef.current;
-              if (!element) return;
-              const nearBottom =
-                element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-              atBottomRef.current = nearBottom;
-              setShowScrollDown(!nearBottom);
-            }}
-          >
+      <div className="flex min-h-0 flex-1 flex-col">
+        <Conversation className="min-h-0">
+          <ConversationContent className="mx-auto min-h-full w-full max-w-3xl gap-8 px-4 py-6">
             {empty ? (
-              <ChatEmptyState
-                agentDisplayName={agent.data.displayName}
-                agentAvatar={agent.data.avatar}
+              <AiChatEmptyState
+                displayName={agent.data.displayName}
+                avatar={agent.data.avatar}
                 starterPrompts={agent.data.starterPrompts}
                 onPick={setDraft}
               />
             ) : (
-              <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
+              <>
                 {messages.map((message) => (
-                  <ChatMessage
+                  <AiChatMessage
                     key={message.id}
                     role={message.role}
                     content={message.content}
                     createdAt={message.createdAt}
                     attachments={message.attachments}
-                    agentDisplayName={agent.data.displayName}
-                    agentAvatar={agent.data.avatar}
                     footer={
                       message.role === "assistant" && message.runId && session ? (
                         <PublicRunAttachments
@@ -374,61 +348,35 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
                   />
                 ))}
                 {optimistic ? (
-                  <ChatMessage
+                  <AiChatMessage
                     role="user"
                     content={optimistic.text}
                     attachments={optimistic.attachments}
-                    agentDisplayName={agent.data.displayName}
-                    agentAvatar={agent.data.avatar}
                   />
                 ) : null}
                 {streamingText || waitingForReply ? (
-                  <div className="flex w-full items-start gap-3">
-                    <AgentAvatar
-                      avatar={agent.data.avatar}
-                      displayName={agent.data.displayName}
-                      className="mt-0.5 size-7 shrink-0 border border-border"
-                    />
-                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {agent.data.displayName}
-                      </span>
-                      {streamingText ? (
-                        <div className="streaming-markdown">
-                          <Markdown>{streamingText}</Markdown>
-                        </div>
-                      ) : null}
-                      {isReasoning ? (
-                        <TypingIndicator label="Reasoning…" />
-                      ) : waitingForReply ? (
-                        <TypingIndicator />
-                      ) : null}
-                    </div>
-                  </div>
+                  <AiChatPendingMessage
+                    text={streamingText}
+                    reasoning={isReasoning}
+                    waiting={waitingForReply}
+                  />
                 ) : null}
-              </div>
+              </>
             )}
-          </div>
-          {showScrollDown ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 shadow-md"
-              aria-label="Scroll to latest"
-              onClick={() => scrollToBottom()}
-            >
-              <ArrowDownIcon />
-            </Button>
-          ) : null}
-        </div>
+          </ConversationContent>
+          <AiConversationDownload
+            messages={messages}
+            filename={`${slug ?? "conversation"}.md`}
+          />
+          <ConversationScrollButton aria-label="Scroll to latest" />
+        </Conversation>
 
         <div className="mx-auto w-full max-w-3xl px-4 pt-3 pb-4">
-          <Composer
+          <AiChatComposer
             value={draft}
             onChange={setDraft}
             onSubmit={submit}
-            onFiles={(files) => void handleFilePick(files)}
+            onFiles={handleFilePick}
             pendingUploads={pendingUploads}
             onRemoveUpload={(upload) =>
               setPendingUploads((items) =>
@@ -440,7 +388,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
             placeholder={`Message ${agent.data.displayName}…`}
           />
         </div>
-      </ChatFileDropZone>
+      </div>
     </main>
   );
 }
@@ -464,24 +412,11 @@ function PublicRunAttachments({
   });
   if (!attachments.data?.length) return null;
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {attachments.data.map((attachment) => (
-        <a
-          key={attachment.id}
-          href={`/api/public/conversations/${session.conversationId}/runs/${runId}/attachments/${attachment.id}?${query}`}
-          download={attachment.filename}
-          className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs hover:bg-muted"
-        >
-          <FileIcon />
-          <span className="max-w-[18rem] truncate" title={attachment.filename}>
-            {attachment.filename}
-          </span>
-          <span className="text-muted-foreground">
-            {formatBytes(attachment.sizeBytes)}
-          </span>
-          <DownloadSimpleIcon />
-        </a>
-      ))}
-    </div>
+    <AiRunAttachments
+      attachments={attachments.data.map((attachment) => ({
+        ...attachment,
+        href: `/api/public/conversations/${session.conversationId}/runs/${runId}/attachments/${attachment.id}?${query}`,
+      }))}
+    />
   );
 }
