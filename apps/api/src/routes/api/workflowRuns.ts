@@ -15,6 +15,7 @@ import {
   subscribeWorkflow,
 } from "../../runs/workflowEvents.js";
 import type { AppVariables } from "../../server/types.js";
+import { requestWorkflowRunCancellation } from "../../services/runCancellation.js";
 
 export const workflowRunsRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -40,6 +41,14 @@ async function resolveWorkflowRunForCaller(
   }
   return run;
 }
+
+workflowRunsRoutes.post("/:workflowRunId/stop", async (c) => {
+  const workflowRunId = c.req.param("workflowRunId");
+  const run = await resolveWorkflowRunForCaller(c, workflowRunId);
+  await requireWorkflowAccess(c, run.workflowId);
+  const status = await requestWorkflowRunCancellation(workflowRunId);
+  return c.json({ workflowRunId, status });
+});
 
 workflowRunsRoutes.get("/:workflowRunId/events", async (c) => {
   const workflowRunId = c.req.param("workflowRunId");
@@ -111,7 +120,11 @@ workflowRunsRoutes.get("/:workflowRunId/events", async (c) => {
       const refreshed = await prisma.workflowRun.findUnique({
         where: { id: workflowRunId },
       });
-      if (refreshed?.status === "succeeded" || refreshed?.status === "failed") {
+      if (
+        refreshed?.status === "succeeded" ||
+        refreshed?.status === "failed" ||
+        refreshed?.status === "cancelled"
+      ) {
         unsubscribe();
         return;
       }

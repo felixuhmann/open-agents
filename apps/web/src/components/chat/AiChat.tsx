@@ -359,14 +359,27 @@ function PromptAttachmentUploads({
   );
 }
 
-function PromptSubmitState({ canSend, sending }: { canSend: boolean; sending: boolean }) {
+function PromptSubmitState({
+  canSend,
+  sending,
+  running,
+  stopping,
+  onStop,
+}: {
+  canSend: boolean;
+  sending: boolean;
+  running: boolean;
+  stopping: boolean;
+  onStop?: () => void;
+}) {
   const attachments = usePromptInputAttachments();
   const filesAreStaged = attachments.files.length === 0;
 
   return (
     <PromptInputSubmit
-      disabled={!canSend || !filesAreStaged}
-      status={sending ? "submitted" : "ready"}
+      disabled={running ? stopping : !canSend || !filesAreStaged}
+      status={running && !stopping ? "streaming" : sending ? "submitted" : "ready"}
+      onStop={running && !stopping ? onStop : undefined}
     />
   );
 }
@@ -380,6 +393,9 @@ export function AiChatComposer({
   onRemoveUpload,
   uploadingCount,
   sending,
+  running = false,
+  stopping = false,
+  onStop,
   placeholder = "Send a message…",
 }: {
   value: string;
@@ -390,6 +406,9 @@ export function AiChatComposer({
   onRemoveUpload: (upload: PendingUpload) => void;
   uploadingCount: number;
   sending: boolean;
+  running?: boolean;
+  stopping?: boolean;
+  onStop?: () => void;
   placeholder?: string;
 }) {
   const canSend =
@@ -446,7 +465,13 @@ export function AiChatComposer({
             Enter to send · Shift+Enter for a new line
           </span>
         </PromptInputTools>
-        <PromptSubmitState canSend={canSend} sending={sending} />
+        <PromptSubmitState
+          canSend={canSend}
+          sending={sending}
+          running={running}
+          stopping={stopping}
+          onStop={onStop}
+        />
       </PromptInputFooter>
     </PromptInput>
   );
@@ -476,6 +501,12 @@ export function AiToolCall({
   subagentSlug?: string;
   subagentItems?: SubagentItem[];
 }) {
+  const [open, setOpen] = useState(running);
+
+  useEffect(() => {
+    setOpen(running);
+  }, [running]);
+
   const state = running
     ? ("input-available" as const)
     : isError
@@ -483,7 +514,7 @@ export function AiToolCall({
       : ("output-available" as const);
 
   return (
-    <Tool defaultOpen={running || isError}>
+    <Tool open={open} onOpenChange={setOpen}>
       <ToolHeader
         type="dynamic-tool"
         toolName={toolName}

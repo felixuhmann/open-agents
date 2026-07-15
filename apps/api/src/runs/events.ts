@@ -36,7 +36,7 @@ const runEventLog = createDurableEventLog<
   notifyChannel: NOTIFY_CHANNEL,
   idKey: "runId",
   emitterPrefix: "run",
-  terminalTypes: ["run.succeeded", "run.failed"],
+  terminalTypes: ["run.succeeded", "run.failed", "run.cancelled"],
   readRow: (runId, seq) =>
     prisma.runEvent.findUnique({
       where: { runId_seq: { runId, seq } },

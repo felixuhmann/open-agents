@@ -567,6 +567,7 @@ export function runAttachmentDownloadUrl(runId: string, attachmentId: string): s
 export type ConversationDetail = {
   id: string;
   title: string;
+  activeRunId?: string | null;
   agent: { id: string; slug: string; displayName: string; avatar: string | null };
   messages: ChatMessage[];
 };

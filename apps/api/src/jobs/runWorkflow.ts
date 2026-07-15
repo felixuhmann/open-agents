@@ -6,7 +6,7 @@ import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
-import { appendWorkflowEvent } from "../runs/workflowEvents.js";
+import { appendWorkflowEvent, subscribeWorkflow } from "../runs/workflowEvents.js";
 import { redactToolArgs } from "../services/runObservability.js";
 import {
   loadWorkflowUserUploadResources,
@@ -15,6 +15,13 @@ import {
   uploadedToSessionResources,
 } from "../services/workflowAttachments.js";
 import { buildRunUserMessage } from "../services/runUserMessage.js";
+import {
+  finalizeAgentRunCancellation,
+  finalizeWorkflowRunCancellation,
+  isRunCancelledError,
+  RunCancelledError,
+  throwIfRunCancelled,
+} from "../services/runCancellation.js";
 import { streamRunWithEvents } from "../services/runStream.js";
 import { resolveWorkflowStepSession } from "../services/workflowSessions.js";
 import { loadWorkflowSnapshotForRun } from "../workflows/snapshot.js";
@@ -64,15 +71,65 @@ async function handleRunWorkflow(job: Job<RunWorkflowJobData>): Promise<void> {
     return;
   }
 
-  await prisma.workflowRun.update({
-    where: { id: workflowRunId },
+  if (run.status === "cancelled" || run.status === "cancelling") {
+    await finalizeWorkflowRunCancellation(workflowRunId);
+    return;
+  }
+  if (run.status === "succeeded" || run.status === "failed") return;
+
+  const controller = new AbortController();
+  const unsubscribe = subscribeWorkflow(workflowRunId, (event) => {
+    if (
+      event.type === "workflow.run.cancel.requested" ||
+      event.type === "workflow.run.cancelled"
+    ) {
+      controller.abort();
+    }
+  });
+  const cancellationPoll = setInterval(() => {
+    void prisma.workflowRun
+      .findUnique({ where: { id: workflowRunId }, select: { status: true } })
+      .then((current) => {
+        if (current?.status === "cancelling" || current?.status === "cancelled") {
+          controller.abort();
+        }
+      })
+      .catch(() => undefined);
+  }, 1_000);
+  const claimed = await prisma.workflowRun.updateMany({
+    where: {
+      id: workflowRunId,
+      status: { notIn: ["succeeded", "failed", "cancelling", "cancelled"] },
+    },
     data: { status: "running" },
   });
+  if (claimed.count === 0) {
+    clearInterval(cancellationPoll);
+    unsubscribe();
+    return;
+  }
 
   try {
-    await runPipeline(workflowRunId, job.data);
+    await runPipeline(workflowRunId, job.data, controller.signal);
     log.info("run-workflow: done", { workflowRunId, durationMs: Date.now() - start });
   } catch (err) {
+    const latest = await prisma.workflowRun.findUnique({
+      where: { id: workflowRunId },
+      select: { status: true },
+    });
+    if (
+      isRunCancelledError(err) ||
+      controller.signal.aborted ||
+      latest?.status === "cancelling" ||
+      latest?.status === "cancelled"
+    ) {
+      await finalizeWorkflowRunCancellation(workflowRunId);
+      log.info("run-workflow: cancelled", {
+        workflowRunId,
+        durationMs: Date.now() - start,
+      });
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     const position = err instanceof WorkflowStepError ? err.position : null;
     log.error("run-workflow: failed", {
@@ -102,12 +159,16 @@ async function handleRunWorkflow(job: Job<RunWorkflowJobData>): Promise<void> {
     }
     // Intentionally not re-thrown: a workflow run has many side effects
     // (sandboxes, step rows, messages); auto-retry would re-run partially.
+  } finally {
+    clearInterval(cancellationPoll);
+    unsubscribe();
   }
 }
 
 async function runPipeline(
   workflowRunId: string,
   jobData: RunWorkflowJobData,
+  signal: AbortSignal,
 ): Promise<void> {
   const run = await prisma.workflowRun.findUnique({
     where: { id: workflowRunId },
@@ -169,6 +230,7 @@ async function runPipeline(
   let finalRunId: string | null = null;
 
   for (const step of snapshot.steps) {
+    throwIfRunCancelled(signal);
     const baseAgent = await getAgentById(step.agentId);
     if (!baseAgent) {
       throw new WorkflowStepError(
@@ -269,6 +331,7 @@ async function runPipeline(
           surface: "workflow",
           agentId: step.agentId,
           agentVersionId: step.agentVersionId,
+          signal,
         },
         (event) => {
           if (event.kind === "delta") {
@@ -299,10 +362,12 @@ async function runPipeline(
         },
       );
 
-      await prisma.agentRun.update({
-        where: { id: agentRun.id },
+      throwIfRunCancelled(signal, output);
+      const completed = await prisma.agentRun.updateMany({
+        where: { id: agentRun.id, status: "running" },
         data: { status: "succeeded", completedAt: new Date(), output },
       });
+      if (completed.count === 0) throw new RunCancelledError(output);
       await appendEvent({
         runId: agentRun.id,
         type: "run.succeeded",
@@ -335,6 +400,34 @@ async function runPipeline(
       lastOutput = output;
       finalRunId = agentRun.id;
     } catch (err) {
+      if (isRunCancelledError(err) || signal.aborted) {
+        await finalizeAgentRunCancellation(
+          agentRun.id,
+          isRunCancelledError(err) ? err.partialOutput : "",
+        );
+        await prisma.workflowStepRun
+          .update({
+            where: { id: stepRun.id },
+            data: {
+              status: "cancelled",
+              error: "Stopped by user",
+              ...(isRunCancelledError(err) && err.partialOutput
+                ? { output: err.partialOutput }
+                : {}),
+            },
+          })
+          .catch(() => undefined);
+        await appendWorkflowEvent({
+          workflowRunId,
+          type: "workflow.step.cancelled",
+          payload: {
+            type: "workflow.step.cancelled",
+            position: step.position,
+            runId: agentRun.id,
+          },
+        }).catch(() => undefined);
+        throw isRunCancelledError(err) ? err : new RunCancelledError();
+      }
       const message = err instanceof Error ? err.message : String(err);
       await prisma.agentRun
         .update({
@@ -354,10 +447,11 @@ async function runPipeline(
     }
   }
 
-  await prisma.workflowRun.update({
-    where: { id: workflowRunId },
+  const completed = await prisma.workflowRun.updateMany({
+    where: { id: workflowRunId, status: "running" },
     data: { status: "succeeded", completedAt: new Date(), output: lastOutput },
   });
+  if (completed.count === 0) throw new RunCancelledError(lastOutput);
 
   if (run.conversationId && lastOutput.trim().length > 0) {
     await prisma.workflowMessage.create({

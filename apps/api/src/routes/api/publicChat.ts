@@ -11,6 +11,7 @@ import { log } from "../../log.js";
 import { isTerminalEvent, readBacklog, subscribe } from "../../runs/events.js";
 import type { AppVariables } from "../../server/types.js";
 import { enqueueChatTurn } from "../../services/chat.js";
+import { requestAgentRunCancellation } from "../../services/runCancellation.js";
 
 export const publicChatRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -280,6 +281,15 @@ async function requirePublicRun(
   return run;
 }
 
+publicChatRoutes.post("/conversations/:id/runs/:runId/stop", async (c) => {
+  const shareToken = requireQueryToken(c, "token");
+  const accessToken = requireQueryToken(c, "access_token");
+  const runId = c.req.param("runId");
+  await requirePublicRun(c.req.param("id"), runId, shareToken, accessToken);
+  const status = await requestAgentRunCancellation(runId);
+  return c.json({ runId, status });
+});
+
 publicChatRoutes.get("/conversations/:id/runs/:runId/events", async (c) => {
   const shareToken = requireQueryToken(c, "token");
   const accessToken = requireQueryToken(c, "access_token");
@@ -339,7 +349,11 @@ publicChatRoutes.get("/conversations/:id/runs/:runId/events", async (c) => {
         }
       }
       const refreshed = await prisma.agentRun.findUnique({ where: { id: runId } });
-      if (refreshed?.status === "succeeded" || refreshed?.status === "failed") {
+      if (
+        refreshed?.status === "succeeded" ||
+        refreshed?.status === "failed" ||
+        refreshed?.status === "cancelled"
+      ) {
         unsubscribe();
         return;
       }

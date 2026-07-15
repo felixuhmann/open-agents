@@ -5,7 +5,7 @@ import { config } from "../config.js";
 import { loadAgentForRun } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
-import { appendEvent } from "../runs/events.js";
+import { appendEvent, subscribe } from "../runs/events.js";
 import { streamRunWithEvents } from "../services/runStream.js";
 import { uploadPendingChatAttachments } from "../services/chatAttachments.js";
 import { uploadPendingAttachments } from "../services/attachments.js";
@@ -15,6 +15,11 @@ import {
   type ResolvedSession,
 } from "../services/sessions.js";
 import { buildRunUserMessage } from "../services/runUserMessage.js";
+import {
+  finalizeAgentRunCancellation,
+  isRunCancelledError,
+  RunCancelledError,
+} from "../services/runCancellation.js";
 import { getBoss } from "./queue.js";
 import {
   JOB_RUN_AGENT,
@@ -80,19 +85,70 @@ async function handleRunAgent(job: Job<RunAgentJobData>): Promise<void> {
     return;
   }
 
-  await prisma.agentRun.update({
-    where: { id: runId },
+  if (run.status === "cancelled") {
+    await finalizeAgentRunCancellation(runId);
+    return;
+  }
+  if (run.status === "cancelling") {
+    await finalizeAgentRunCancellation(runId);
+    return;
+  }
+
+  const controller = new AbortController();
+  const unsubscribe = subscribe(runId, (event) => {
+    if (event.type === "run.cancel.requested" || event.type === "run.cancelled") {
+      controller.abort();
+    }
+  });
+  const cancellationPoll = setInterval(() => {
+    void prisma.agentRun
+      .findUnique({ where: { id: runId }, select: { status: true } })
+      .then((current) => {
+        if (current?.status === "cancelling" || current?.status === "cancelled") {
+          controller.abort();
+        }
+      })
+      .catch(() => undefined);
+  }, 1_000);
+  const claimed = await prisma.agentRun.updateMany({
+    where: {
+      id: runId,
+      status: { notIn: ["succeeded", "cancelled", "cancelling"] },
+    },
     data: { status: "running", startedAt: new Date(), completedAt: null, error: null },
   });
+  if (claimed.count === 0) {
+    clearInterval(cancellationPoll);
+    unsubscribe();
+    return;
+  }
 
   try {
     if (surface === "email") {
-      await runEmailTurn(run.id, job.data);
+      await runEmailTurn(run.id, job.data, controller.signal);
     } else {
-      await runChatTurn(run.id, job.data);
+      await runChatTurn(run.id, job.data, controller.signal);
     }
     log.info("run-agent: done", { runId, durationMs: Date.now() - runStart });
   } catch (err) {
+    const latest = await prisma.agentRun.findUnique({
+      where: { id: runId },
+      select: { status: true },
+    });
+    if (
+      isRunCancelledError(err) ||
+      controller.signal.aborted ||
+      latest?.status === "cancelling" ||
+      latest?.status === "cancelled"
+    ) {
+      const partialOutput = isRunCancelledError(err) ? err.partialOutput : "";
+      await finalizeAgentRunCancellation(runId, partialOutput);
+      log.info("run-agent: cancelled", {
+        runId,
+        durationMs: Date.now() - runStart,
+      });
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? (err.stack ?? err.message) : String(err);
     log.error("run-agent: failed", {
@@ -119,10 +175,17 @@ async function handleRunAgent(job: Job<RunAgentJobData>): Promise<void> {
       // best-effort
     });
     throw err;
+  } finally {
+    clearInterval(cancellationPoll);
+    unsubscribe();
   }
 }
 
-async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void> {
+async function runEmailTurn(
+  runId: string,
+  data: RunAgentJobData,
+  signal: AbortSignal,
+): Promise<void> {
   if (!data.emailMessageId) {
     throw new Error("email surface requires emailMessageId");
   }
@@ -174,12 +237,10 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
     agentId: agent.id,
     agentVersionId: agent.agentVersionId,
     emailMessageId: data.emailMessageId,
+    signal,
   });
 
-  await prisma.agentRun.update({
-    where: { id: runId },
-    data: { status: "succeeded", completedAt: new Date(), output },
-  });
+  await markAgentRunSucceeded(runId, output);
   await appendEvent({
     runId,
     type: "run.succeeded",
@@ -198,7 +259,11 @@ async function runEmailTurn(runId: string, data: RunAgentJobData): Promise<void>
   await boss.send(JOB_SEND_EMAIL, sendJob);
 }
 
-async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> {
+async function runChatTurn(
+  runId: string,
+  data: RunAgentJobData,
+  signal: AbortSignal,
+): Promise<void> {
   if (!data.chatMessageId) {
     throw new Error("chat surface requires chatMessageId");
   }
@@ -256,12 +321,10 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     agentId: agent.id,
     agentVersionId: agent.agentVersionId,
     chatMessageId: data.chatMessageId,
+    signal,
   });
 
-  await prisma.agentRun.update({
-    where: { id: runId },
-    data: { status: "succeeded", completedAt: new Date(), output },
-  });
+  await markAgentRunSucceeded(runId, output);
 
   if (output.trim().length > 0) {
     await prisma.chatMessage.create({
@@ -279,6 +342,23 @@ async function runChatTurn(runId: string, data: RunAgentJobData): Promise<void> 
     type: "run.succeeded",
     payload: { type: "run.succeeded", output },
   });
+}
+
+async function markAgentRunSucceeded(runId: string, output: string): Promise<void> {
+  const completed = await prisma.agentRun.updateMany({
+    where: { id: runId, status: "running" },
+    data: { status: "succeeded", completedAt: new Date(), output },
+  });
+  if (completed.count > 0) return;
+
+  const run = await prisma.agentRun.findUnique({
+    where: { id: runId },
+    select: { status: true },
+  });
+  if (run?.status === "cancelling" || run?.status === "cancelled") {
+    throw new RunCancelledError(output);
+  }
+  throw new Error(`AgentRun ${runId} could not be completed from status ${run?.status}`);
 }
 
 async function appendRunStarted(runId: string, resolved: ResolvedSession): Promise<void> {

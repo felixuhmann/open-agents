@@ -53,6 +53,8 @@ export const RunEventTypes = z.enum([
   "model.request",
   "session.error",
   "subagent.event",
+  "run.cancel.requested",
+  "run.cancelled",
   "run.succeeded",
   "run.failed",
 ]);
@@ -194,6 +196,13 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     /** Callee slug, for the panel header. */
     slug: z.string(),
     inner: SubagentInnerEvent,
+  }),
+  z.object({
+    type: z.literal("run.cancel.requested"),
+  }),
+  z.object({
+    type: z.literal("run.cancelled"),
+    reason: z.string(),
   }),
   z.object({
     type: z.literal("run.succeeded"),

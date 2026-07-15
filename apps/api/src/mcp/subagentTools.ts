@@ -78,7 +78,7 @@ export function buildSubagentPiTools(
       }),
     }),
     executionMode: "sequential",
-    execute: async (id: string, params: Static<TSchema>) => {
+    execute: async (id: string, params: Static<TSchema>, signal?: AbortSignal) => {
       const p = params as { subagent: string; prompt: string };
       const callee = bySlug.get(p.subagent);
       if (!callee) {
@@ -101,6 +101,7 @@ export function buildSubagentPiTools(
           depth: runtime.depth,
           ancestors: runtime.ancestors,
           toolCallId: id,
+          signal,
         },
         callee: {
           subagentId: callee.subagentId,

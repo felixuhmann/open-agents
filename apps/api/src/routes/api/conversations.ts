@@ -105,6 +105,12 @@ conversationsRoutes.get("/:id", async (c) => {
           },
         },
       },
+      runs: {
+        where: { status: { in: ["pending", "running", "cancelling"] } },
+        orderBy: { startedAt: "desc" },
+        take: 1,
+        select: { id: true },
+      },
     },
   });
   if (!conv) throw new HttpError(404, "conversation not found");
@@ -115,6 +121,7 @@ conversationsRoutes.get("/:id", async (c) => {
     id: conv.id,
     title: conv.title,
     agent: conv.agent,
+    activeRunId: conv.runs[0]?.id ?? null,
     messages: conv.messages.map((m) => ({
       id: m.id,
       role: m.role,

@@ -86,6 +86,8 @@ export type AgentRunContext = {
   delegationAncestors?: string[];
   /** AgentRun that spawned this run via `run_subagent`, when applicable. */
   parentRunId?: string;
+  /** Aborts the active provider request and prevents further tool/model turns. */
+  signal?: AbortSignal;
 };
 
 /**

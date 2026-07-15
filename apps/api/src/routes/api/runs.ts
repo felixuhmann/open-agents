@@ -11,6 +11,7 @@ import { prisma } from "../../db.js";
 import { log } from "../../log.js";
 import { isTerminalEvent, readBacklog, subscribe } from "../../runs/events.js";
 import type { AppVariables } from "../../server/types.js";
+import { requestAgentRunCancellation } from "../../services/runCancellation.js";
 
 export const runsRoutes = new Hono<{ Variables: AppVariables }>();
 
@@ -58,6 +59,14 @@ async function resolveRunForCaller(c: Parameters<typeof requireUser>[0], runId: 
   }
   return { run, user };
 }
+
+runsRoutes.post("/:runId/stop", async (c) => {
+  const runId = c.req.param("runId");
+  const { run } = await resolveRunForCaller(c, runId);
+  await requireAgentAccess(c, run.agentId);
+  const status = await requestAgentRunCancellation(runId);
+  return c.json({ runId, status });
+});
 
 /**
  * SSE endpoint for live run events with `Last-Event-ID` replay. Browser
@@ -130,7 +139,11 @@ runsRoutes.get("/:runId/events", async (c) => {
       }
 
       const refreshed = await prisma.agentRun.findUnique({ where: { id: runId } });
-      if (refreshed?.status === "succeeded" || refreshed?.status === "failed") {
+      if (
+        refreshed?.status === "succeeded" ||
+        refreshed?.status === "failed" ||
+        refreshed?.status === "cancelled"
+      ) {
         unsubscribe();
         return;
       }

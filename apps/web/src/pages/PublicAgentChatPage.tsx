@@ -73,11 +73,31 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   const creatingSessionRef = useRef<Promise<PublicSession> | null>(null);
   const [draft, setDraft] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [stoppingRunId, setStoppingRunId] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [isReasoning, setIsReasoning] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
+
+  const stopRun = useMutation({
+    mutationFn: async (runId: string) => {
+      if (!session) throw new Error("Public chat session is unavailable");
+      return api<{ runId: string; status: string }>(
+        `/api/public/conversations/${session.conversationId}/runs/${runId}/stop?${publicQuery(
+          shareToken,
+          session.accessToken,
+        )}`,
+        { method: "POST" },
+      );
+    },
+    onError: (error) => {
+      setStoppingRunId(null);
+      toast.error("Couldn’t stop the run", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
 
   const agent = useQuery({
     enabled: Boolean(slug && shareToken),
@@ -186,10 +206,15 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
           setIsReasoning(false);
           buffer = data.payload.text;
           setStreamingText(buffer);
-        } else if (data.type === "run.succeeded" || data.type === "run.failed") {
+        } else if (
+          data.type === "run.succeeded" ||
+          data.type === "run.failed" ||
+          data.type === "run.cancelled"
+        ) {
           source.close();
           const finishedRunId = activeRunId;
           setActiveRunId(null);
+          setStoppingRunId(null);
           setStreamingText("");
           setIsReasoning(false);
           void queryClient.invalidateQueries({
@@ -211,6 +236,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
     source.addEventListener("agent.message", handle as EventListener);
     source.addEventListener("run.succeeded", handle as EventListener);
     source.addEventListener("run.failed", handle as EventListener);
+    source.addEventListener("run.cancelled", handle as EventListener);
     return () => source.close();
   }, [activeRunId, queryClient, session, shareToken]);
 
@@ -270,6 +296,12 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
     });
     sendMessage.mutate(text);
     setDraft("");
+  };
+
+  const stop = () => {
+    if (!activeRunId || stoppingRunId === activeRunId) return;
+    setStoppingRunId(activeRunId);
+    stopRun.mutate(activeRunId);
   };
 
   if (agent.isLoading) {
@@ -385,6 +417,9 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
             }
             uploadingCount={uploadingCount}
             sending={sending}
+            running={Boolean(activeRunId)}
+            stopping={stoppingRunId === activeRunId}
+            onStop={stop}
             placeholder={`Message ${agent.data.displayName}…`}
           />
         </div>

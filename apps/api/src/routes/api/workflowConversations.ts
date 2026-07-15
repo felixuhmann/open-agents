@@ -108,7 +108,7 @@ workflowConversationsRoutes.get("/:id", async (c) => {
         },
       },
       runs: {
-        where: { status: { in: ["pending", "running"] } },
+        where: { status: { in: ["pending", "running", "cancelling"] } },
         orderBy: { startedAt: "desc" },
         take: 1,
         select: { id: true },

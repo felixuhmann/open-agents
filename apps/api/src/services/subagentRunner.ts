@@ -11,6 +11,12 @@ import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
 import { truncateText } from "./daytonaLimits.js";
 import { summarizeToolResultForRunLog } from "./runObservability.js";
+import {
+  finalizeAgentRunCancellation,
+  isRunCancelledError,
+  RunCancelledError,
+  throwIfRunCancelled,
+} from "./runCancellation.js";
 import { streamRunWithEvents } from "./runStream.js";
 import { loadRunFileResources, materializeSubagentFiles } from "./subagentFiles.js";
 
@@ -40,6 +46,7 @@ export type SubagentCallParams = {
      * to this id so the chat UI can nest it under the tool card.
      */
     toolCallId?: string;
+    signal?: AbortSignal;
   };
   callee: {
     subagentId: string;
@@ -60,7 +67,7 @@ export type SubagentCallResult = {
 
 type MirrorController = {
   handler: AgentEventHandler;
-  status: (status: "started" | "succeeded" | "failed") => void;
+  status: (status: "started" | "succeeded" | "failed" | "cancelled") => void;
 };
 
 function clip(text: string | undefined): string {
@@ -161,6 +168,7 @@ export async function runSubagent(
 ): Promise<SubagentCallResult> {
   const { parent, callee, prompt } = params;
   const childDepth = parent.depth + 1;
+  throwIfRunCancelled(parent.signal);
 
   if (childDepth > MAX_SUBAGENT_DEPTH) {
     return {
@@ -283,6 +291,7 @@ export async function runSubagent(
         delegationDepth: childDepth,
         delegationAncestors: [...parent.ancestors, base.id],
         parentRunId: parent.runId,
+        signal: parent.signal,
       },
       mirror.handler,
     );
@@ -313,10 +322,12 @@ export async function runSubagent(
     }
 
     const finalOutput = files.length > 0 ? appendFileSummary(output, files) : output;
-    await prisma.agentRun.update({
-      where: { id: childRun.id },
+    throwIfRunCancelled(parent.signal, finalOutput);
+    const completed = await prisma.agentRun.updateMany({
+      where: { id: childRun.id, status: "running" },
       data: { status: "succeeded", completedAt: new Date(), output: finalOutput },
     });
+    if (completed.count === 0) throw new RunCancelledError(finalOutput);
     await appendEvent({
       runId: childRun.id,
       type: "run.succeeded",
@@ -325,6 +336,14 @@ export async function runSubagent(
     mirror.status("succeeded");
     return { ok: true, runId: childRun.id, output: finalOutput };
   } catch (err) {
+    if (isRunCancelledError(err) || parent.signal?.aborted) {
+      await finalizeAgentRunCancellation(
+        childRun.id,
+        isRunCancelledError(err) ? err.partialOutput : "",
+      );
+      mirror.status("cancelled");
+      throw isRunCancelledError(err) ? err : new RunCancelledError();
+    }
     const message = err instanceof Error ? err.message : String(err);
     await prisma.agentRun
       .update({

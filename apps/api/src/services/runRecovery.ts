@@ -2,6 +2,10 @@ import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
+import {
+  finalizeAgentRunCancellation,
+  finalizeWorkflowRunCancellation,
+} from "./runCancellation.js";
 
 const STALE_RUN_BATCH_SIZE = 200;
 
@@ -13,7 +17,7 @@ const STALE_RUN_BATCH_SIZE = 200;
 export async function reconcileStaleAgentRuns(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - config.AGENT_STALE_RUN_SECONDS * 1_000);
   const stale = await prisma.agentRun.findMany({
-    where: { status: "running", startedAt: { lt: cutoff } },
+    where: { status: { in: ["running", "cancelling"] }, startedAt: { lt: cutoff } },
     orderBy: { startedAt: "asc" },
     select: { id: true, startedAt: true },
     take: STALE_RUN_BATCH_SIZE,
@@ -22,6 +26,15 @@ export async function reconcileStaleAgentRuns(now = new Date()): Promise<number>
   let repaired = 0;
   const error = `Agent run exceeded the ${config.AGENT_STALE_RUN_SECONDS}-second stale-run limit`;
   for (const run of stale) {
+    const current = await prisma.agentRun.findUnique({
+      where: { id: run.id },
+      select: { status: true },
+    });
+    if (current?.status === "cancelling") {
+      await finalizeAgentRunCancellation(run.id);
+      repaired += 1;
+      continue;
+    }
     const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.agentRun.updateMany({
         where: { id: run.id, status: "running" },
@@ -53,6 +66,16 @@ export async function reconcileStaleAgentRuns(now = new Date()): Promise<number>
       startedAt: run.startedAt.toISOString(),
       cutoff: cutoff.toISOString(),
     });
+  }
+
+  const cancellingWorkflows = await prisma.workflowRun.findMany({
+    where: { status: "cancelling", startedAt: { lt: cutoff } },
+    orderBy: { startedAt: "asc" },
+    select: { id: true },
+    take: STALE_RUN_BATCH_SIZE,
+  });
+  for (const workflow of cancellingWorkflows) {
+    await finalizeWorkflowRunCancellation(workflow.id);
   }
 
   return repaired;

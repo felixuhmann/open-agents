@@ -38,6 +38,11 @@ import {
 } from "../services/sandboxPolicy.js";
 import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
 import { buildAuthorProfileContext } from "../services/userProfileContext.js";
+import {
+  isRunCancelledError,
+  RunCancelledError,
+  throwIfRunCancelled,
+} from "../services/runCancellation.js";
 import { wrapDaytonaError } from "./daytonaErrors.js";
 import { piHistoryTokenBudget, trimPiContext } from "./piSessionContext.js";
 import {
@@ -344,6 +349,9 @@ export class DaytonaAgentBackend implements AgentBackend {
           let runTimeout: ReturnType<typeof setTimeout> | undefined;
           let timeoutReason: string | undefined;
           let rejectTimeout: ((reason: Error) => void) | undefined;
+          let abortActiveAgent: (() => void) | undefined;
+
+          throwIfRunCancelled(context?.signal);
 
           const clearRequestTimeout = () => {
             if (requestTimeout) clearTimeout(requestTimeout);
@@ -402,6 +410,9 @@ export class DaytonaAgentBackend implements AgentBackend {
               },
             });
             piAgent = activeAgent;
+            abortActiveAgent = () => activeAgent.abort();
+            context?.signal?.addEventListener("abort", abortActiveAgent, { once: true });
+            if (context?.signal?.aborted) activeAgent.abort();
 
             activeAgent.subscribe((event) => {
               this.handlePiEvent(event, onEvent, (text) => {
@@ -447,6 +458,7 @@ export class DaytonaAgentBackend implements AgentBackend {
             }, config.AGENT_RUN_TIMEOUT_SECONDS * 1_000);
             await Promise.race([activeAgent.prompt(promptMessage), timeoutPromise]);
             const output = finalText || deltaText;
+            if (context?.signal?.aborted) throw new RunCancelledError(output);
             if (lastModelError && output.trim().length === 0) {
               throw new AgentBackendError(lastModelError);
             }
@@ -458,6 +470,9 @@ export class DaytonaAgentBackend implements AgentBackend {
             }
             return output;
           } finally {
+            if (abortActiveAgent) {
+              context?.signal?.removeEventListener("abort", abortActiveAgent);
+            }
             clearRequestTimeout();
             if (runTimeout) clearTimeout(runTimeout);
             await closeThirdPartyMcpConnections(mcpConnections);
@@ -466,6 +481,7 @@ export class DaytonaAgentBackend implements AgentBackend {
         context?.runId,
       );
     } catch (err) {
+      if (isRunCancelledError(err)) throw err;
       const wrapped = wrapDaytonaError(err, "Daytona sandbox run failed");
       onEvent?.({
         kind: "session_error",

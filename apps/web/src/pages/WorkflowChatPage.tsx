@@ -57,7 +57,7 @@ type StreamEvent = {
   payload: Record<string, unknown>;
 };
 
-type StepStatus = "pending" | "running" | "succeeded" | "failed";
+type StepStatus = "pending" | "running" | "cancelled" | "succeeded" | "failed";
 
 type LiveToolCall = {
   callId: string;
@@ -102,6 +102,7 @@ export default function WorkflowChatPage() {
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [stoppingRunId, setStoppingRunId] = useState<string | null>(null);
   const [steps, setSteps] = useState<StepState[]>([]);
   const [optimistic, setOptimistic] = useState<{
     text: string;
@@ -235,6 +236,19 @@ export default function WorkflowChatPage() {
     },
   });
 
+  const stopRun = useMutation({
+    mutationFn: (runId: string) =>
+      api<{ workflowRunId: string; status: string }>(`/api/workflow-runs/${runId}/stop`, {
+        method: "POST",
+      }),
+    onError: (error) => {
+      setStoppingRunId(null);
+      toast.error("Couldn’t stop the workflow", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+
   useEffect(() => {
     if (!activeRunId) return;
     setSteps([]);
@@ -305,6 +319,21 @@ export default function WorkflowChatPage() {
                 : s,
             ),
           );
+        } else if (data.type === "workflow.step.cancelled") {
+          const pos = p.position as number;
+          const event = toActivityEvent(data);
+          setSteps((prev) =>
+            prev.map((step) =>
+              step.position === pos
+                ? {
+                    ...step,
+                    status: "cancelled",
+                    toolCalls: step.toolCalls.map((tool) => ({ ...tool, done: true })),
+                    events: [...step.events, event],
+                  }
+                : step,
+            ),
+          );
         } else if (data.type === "workflow.step.tool") {
           const pos = p.position as number;
           const toolName = (p.toolName as string) || "tool";
@@ -339,6 +368,7 @@ export default function WorkflowChatPage() {
         } else if (data.type === "workflow.run.succeeded") {
           source.close();
           setActiveRunId(null);
+          setStoppingRunId(null);
           void qc.invalidateQueries({
             queryKey: ["workflow-conversations", conversationId],
           });
@@ -361,9 +391,17 @@ export default function WorkflowChatPage() {
             );
           }
           setActiveRunId(null);
+          setStoppingRunId(null);
           toast.error("Workflow run failed", {
             description: (p.error as string) ?? "A step stopped unexpectedly.",
           });
+          void qc.invalidateQueries({
+            queryKey: ["workflow-conversations", conversationId],
+          });
+        } else if (data.type === "workflow.run.cancelled") {
+          source.close();
+          setActiveRunId(null);
+          setStoppingRunId(null);
           void qc.invalidateQueries({
             queryKey: ["workflow-conversations", conversationId],
           });
@@ -379,8 +417,10 @@ export default function WorkflowChatPage() {
       "workflow.step.delta",
       "workflow.step.tool",
       "workflow.step.succeeded",
+      "workflow.step.cancelled",
       "workflow.run.succeeded",
       "workflow.run.failed",
+      "workflow.run.cancelled",
     ]) {
       source.addEventListener(type, handle as EventListener);
     }
@@ -407,6 +447,12 @@ export default function WorkflowChatPage() {
       sendMessage.mutate(text);
     }
     setDraft("");
+  };
+
+  const stop = () => {
+    if (!activeRunId || stoppingRunId === activeRunId) return;
+    setStoppingRunId(activeRunId);
+    stopRun.mutate(activeRunId);
   };
 
   if (!workflow.data) {
@@ -557,6 +603,9 @@ export default function WorkflowChatPage() {
             }
             uploadingCount={uploadingCount}
             sending={sending}
+            running={Boolean(activeRunId)}
+            stopping={stoppingRunId === activeRunId}
+            onStop={stop}
             placeholder={`Message ${workflow.data.displayName}…`}
           />
         </div>
@@ -605,6 +654,7 @@ function summariseWorkflowEvent(event: StreamEvent): string {
       typeof p.output === "string" ? p.output.replace(/\s+/g, " ").trim() : "";
     return output ? `Completed: ${truncate(output, 96)}` : "Completed";
   }
+  if (event.type === "workflow.step.cancelled") return "Stopped";
   if (event.type === "workflow.run.failed") {
     return typeof p.error === "string" ? p.error : "Failed";
   }
@@ -626,6 +676,8 @@ function StepStatusIcon({ status }: { status: StepStatus }) {
     return <CheckCircleIcon className="size-4 text-emerald-600" weight="fill" />;
   if (status === "failed")
     return <XCircleIcon className="size-4 text-destructive" weight="fill" />;
+  if (status === "cancelled")
+    return <XCircleIcon className="size-4 text-muted-foreground" weight="fill" />;
   return <span className="size-2 rounded-full bg-muted-foreground/40" />;
 }
 

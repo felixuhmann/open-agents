@@ -168,6 +168,7 @@ export default function AgentChatPage() {
   const [isReasoning, setIsReasoning] = useState(false);
   const [toolCalls, setToolCalls] = useState<LiveToolCall[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [stoppingRunId, setStoppingRunId] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
@@ -176,6 +177,11 @@ export default function AgentChatPage() {
     () => conversation.data?.messages ?? [],
     [conversation.data],
   );
+
+  useEffect(() => {
+    const active = conversation.data?.activeRunId;
+    if (active && !activeRunId) setActiveRunId(active);
+  }, [activeRunId, conversation.data?.activeRunId]);
 
   // Clear the optimistic user echo once the persisted message lands.
   useEffect(() => {
@@ -237,6 +243,19 @@ export default function AgentChatPage() {
       setOptimistic(null);
       toast.error("Couldn't send message", {
         description: e instanceof ApiError ? e.message : String(e),
+      });
+    },
+  });
+
+  const stopRun = useMutation({
+    mutationFn: (runId: string) =>
+      api<{ runId: string; status: string }>(`/api/runs/${runId}/stop`, {
+        method: "POST",
+      }),
+    onError: (error) => {
+      setStoppingRunId(null);
+      toast.error("Couldn’t stop the run", {
+        description: error instanceof Error ? error.message : String(error),
       });
     },
   });
@@ -432,10 +451,15 @@ export default function AgentChatPage() {
           const slug = data.payload.slug;
           const inner = data.payload.inner as SubagentInner;
           setToolCalls((prev) => applySubagentEvent(prev, toolCallId, slug, inner));
-        } else if (data.type === "run.succeeded" || data.type === "run.failed") {
+        } else if (
+          data.type === "run.succeeded" ||
+          data.type === "run.failed" ||
+          data.type === "run.cancelled"
+        ) {
           source.close();
           const finishedRunId = activeRunId;
           setActiveRunId(null);
+          setStoppingRunId(null);
           setStreamingText("");
           setIsReasoning(false);
           setToolCalls([]);
@@ -468,6 +492,7 @@ export default function AgentChatPage() {
     source.addEventListener("run.started", handle as EventListener);
     source.addEventListener("run.succeeded", handle as EventListener);
     source.addEventListener("run.failed", handle as EventListener);
+    source.addEventListener("run.cancelled", handle as EventListener);
     source.onerror = () => {
       // EventSource auto-reconnects
     };
@@ -493,6 +518,12 @@ export default function AgentChatPage() {
       sendMessage.mutate(text);
     }
     setDraft("");
+  };
+
+  const stop = () => {
+    if (!activeRunId || stoppingRunId === activeRunId) return;
+    setStoppingRunId(activeRunId);
+    stopRun.mutate(activeRunId);
   };
 
   if (!agent.data) {
@@ -626,6 +657,9 @@ export default function AgentChatPage() {
             onRemoveUpload={removePendingUpload}
             uploadingCount={uploadingCount}
             sending={sending}
+            running={Boolean(activeRunId)}
+            stopping={stoppingRunId === activeRunId}
+            onStop={stop}
             placeholder={`Message ${agent.data.displayName}…`}
           />
         </div>

@@ -12,6 +12,9 @@ export const WorkflowRunEventTypes = z.enum([
   "workflow.step.delta",
   "workflow.step.tool",
   "workflow.step.succeeded",
+  "workflow.step.cancelled",
+  "workflow.run.cancel.requested",
+  "workflow.run.cancelled",
   "workflow.run.succeeded",
   "workflow.run.failed",
 ]);
@@ -63,6 +66,18 @@ export const WorkflowRunEventPayload = z.discriminatedUnion("type", [
     runId: z.string(),
     output: z.string(),
     attachments: z.array(WorkflowRunAttachment),
+  }),
+  z.object({
+    type: z.literal("workflow.step.cancelled"),
+    position: z.number().int().nonnegative(),
+    runId: z.string(),
+  }),
+  z.object({
+    type: z.literal("workflow.run.cancel.requested"),
+  }),
+  z.object({
+    type: z.literal("workflow.run.cancelled"),
+    reason: z.string(),
   }),
   z.object({
     type: z.literal("workflow.run.succeeded"),
