@@ -641,6 +641,10 @@ model AgentRun {
   error           String?
   /// Final aggregated assistant text. Populated for both surfaces.
   output          String?
+  /// Replayable Pi agent context after a successful application turn. Contains
+  /// full assistant/tool messages (including provider reasoning metadata), not
+  /// just the user-facing text transcript.
+  piContext       Json?
   startedAt       DateTime          @default(now())
   completedAt     DateTime?
   agent           Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
@@ -657,6 +661,8 @@ model AgentRun {
   @@index([agentVersionId])
   @@index([threadId])
   @@index([conversationId])
+  @@index([threadId, status, startedAt])
+  @@index([conversationId, status, startedAt])
   @@index([parentRunId])
   @@index([status])
 }

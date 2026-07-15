@@ -45,7 +45,9 @@ export async function enqueueChatTurn(args: EnqueueChatTurnArgs): Promise<string
     surface: "chat",
     chatMessageId: args.userMessageId,
   };
-  await boss.send(JOB_RUN_AGENT, data);
+  await boss.send(JOB_RUN_AGENT, data, {
+    singletonKey: `chat:${conversation.id}`,
+  });
 
   return run.id;
 }

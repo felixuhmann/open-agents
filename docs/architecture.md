@@ -35,6 +35,8 @@ The Pi loop receives all selected capabilities as native Pi tools from `mcp/piTo
 
 Web chat and email are separate surfaces. Each has its own conversation/thread table and session id. Attachments are stored in Postgres, uploaded to the backend file store, and mounted into the Daytona sandbox. Agent-created files are returned with `attach_run_file` and stored as `AgentAttachment` rows.
 
+A Pi `Agent` object is deliberately created for each application turn. It is an ephemeral runner, not the durable conversation. Before each turn the worker restores the latest successful `AgentRun.piContext`; after Pi becomes idle it checkpoints the replayable context, including assistant tool calls, tool results, and provider reasoning metadata. Chat/email jobs use conversation-scoped queue keys with at most one active turn per conversation so two turns cannot race the same checkpoint. See [Agent sessions and context](agent-sessions.md) for the lifecycle and retention contract.
+
 ## Data model highlights
 
 - `Agent` — draft config, surfaces, ACL, sandbox policy, and `currentVersionId`.

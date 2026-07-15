@@ -23,7 +23,12 @@ export async function getBoss(): Promise<PgBoss> {
     log.error("pg-boss error", { err: String(err) }),
   );
   await instance.start();
+  // Each chat/email send supplies a conversation-scoped singletonKey. This
+  // permits many conversations in parallel while preventing two turns from
+  // racing the same durable Pi checkpoint. Unlike strict FIFO, a permanently
+  // failed job does not block every later message in that conversation.
   const runAgentQueueOptions = {
+    policy: "singleton" as const,
     expireInSeconds: config.AGENT_STALE_RUN_SECONDS + 5 * 60,
     heartbeatSeconds: 60,
   };

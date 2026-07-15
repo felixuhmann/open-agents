@@ -39,6 +39,11 @@ import {
 import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
 import { buildAuthorProfileContext } from "../services/userProfileContext.js";
 import { wrapDaytonaError } from "./daytonaErrors.js";
+import { piHistoryTokenBudget, trimPiContext } from "./piSessionContext.js";
+import {
+  loadPiSessionCheckpoint,
+  savePiSessionCheckpoint,
+} from "./piSessionPersistence.js";
 import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
 import { loadVersionedAgent, type VersionedAgent } from "../agents/snapshot.js";
@@ -297,9 +302,16 @@ export class DaytonaAgentBackend implements AgentBackend {
         sessionId,
         async (sandbox, workspaceDir) => {
           const model = resolvePiModel(agent.modelProvider, agent.modelId);
-          const priorMessages = context
-            ? await loadPriorMessages(context, model)
-            : ([] satisfies Message[]);
+          const historyBudget = piHistoryTokenBudget(model.contextWindow);
+          const checkpoint = context
+            ? await loadPiSessionCheckpoint(context.runId)
+            : { context: null, providerSessionId: sessionId };
+          const restoredMessages =
+            checkpoint.context ??
+            (context
+              ? await loadLegacyPriorMessages(context, model)
+              : ([] satisfies Message[]));
+          const priorMessages = trimPiContext(restoredMessages, historyBudget);
           const thirdPartyBearer = loadMcpServerBearerMap(listAgentMcpServers(agent));
           const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
             agent,
@@ -363,7 +375,9 @@ export class DaytonaAgentBackend implements AgentBackend {
                 messages: priorMessages,
                 tools,
               },
-              sessionId,
+              sessionId: checkpoint.providerSessionId,
+              transformContext: (messages) =>
+                Promise.resolve(trimPiContext(messages, historyBudget)),
               toolExecution: "sequential",
               getApiKey: (provider) => resolvePiProviderApiKey(provider),
               onPayload: (_payload, requestModel) => {
@@ -435,6 +449,12 @@ export class DaytonaAgentBackend implements AgentBackend {
             const output = finalText || deltaText;
             if (lastModelError && output.trim().length === 0) {
               throw new AgentBackendError(lastModelError);
+            }
+            if (context) {
+              await savePiSessionCheckpoint(
+                context.runId,
+                trimPiContext(activeAgent.state.messages, historyBudget),
+              );
             }
             return output;
           } finally {
@@ -605,7 +625,7 @@ async function buildPromptMessage(
   return `${profileContext}\n\nUser request:\n${userMessage}`;
 }
 
-async function loadPriorMessages(
+async function loadLegacyPriorMessages(
   context: AgentRunContext,
   model: { api: AssistantMessage["api"]; provider: string; id: string },
 ): Promise<Message[]> {
@@ -659,49 +679,63 @@ async function loadPriorMessages(
   if (context.surface === "chat") {
     const run = await prisma.agentRun.findUnique({ where: { id: context.runId } });
     if (!run?.conversationId) return [];
+    const currentMessage = context.chatMessageId
+      ? await prisma.chatMessage.findUnique({
+          where: { id: context.chatMessageId },
+          select: { createdAt: true },
+        })
+      : null;
     const rows = await prisma.chatMessage.findMany({
-      where: { conversationId: run.conversationId },
+      where: {
+        conversationId: run.conversationId,
+        ...(currentMessage ? { createdAt: { lt: currentMessage.createdAt } } : {}),
+      },
       orderBy: { createdAt: "asc" },
     });
-    return rows
-      .filter((row) => row.id !== context.chatMessageId)
-      .flatMap((row): Message[] => {
-        if (row.role === "user") {
-          return [
-            { role: "user", content: row.content, timestamp: row.createdAt.getTime() },
-          ];
-        }
-        if (row.role === "assistant") {
-          return [
-            {
-              ...assistantStub(),
-              content: [{ type: "text", text: row.content }],
-              timestamp: row.createdAt.getTime(),
-            },
-          ];
-        }
-        return [];
-      });
+    return rows.flatMap((row): Message[] => {
+      if (row.role === "user") {
+        return [
+          { role: "user", content: row.content, timestamp: row.createdAt.getTime() },
+        ];
+      }
+      if (row.role === "assistant") {
+        return [
+          {
+            ...assistantStub(),
+            content: [{ type: "text", text: row.content }],
+            timestamp: row.createdAt.getTime(),
+          },
+        ];
+      }
+      return [];
+    });
   }
 
   const run = await prisma.agentRun.findUnique({ where: { id: context.runId } });
   if (!run?.threadId) return [];
+  const currentMessage = context.emailMessageId
+    ? await prisma.emailMessage.findUnique({
+        where: { id: context.emailMessageId },
+        select: { createdAt: true },
+      })
+    : null;
   const rows = await prisma.emailMessage.findMany({
-    where: { threadId: run.threadId },
+    where: {
+      threadId: run.threadId,
+      ...(currentMessage ? { createdAt: { lt: currentMessage.createdAt } } : {}),
+    },
     orderBy: { createdAt: "asc" },
   });
-  return rows
-    .filter((row) => row.id !== context.emailMessageId)
-    .map((row): Message => {
-      if (row.direction === "outbound") {
-        return {
-          ...assistantStub(),
-          content: [{ type: "text", text: row.body }],
-          timestamp: row.createdAt.getTime(),
-        };
-      }
-      return { role: "user", content: row.body, timestamp: row.createdAt.getTime() };
-    });
+  return rows.map((row): Message => {
+    if (row.direction === "outbound") {
+      return {
+        ...assistantStub(),
+        content: [{ type: "text", text: row.body }],
+        timestamp: row.createdAt.getTime(),
+      };
+    }
+    return { role: "user", content: row.body, timestamp: row.createdAt.getTime() };
+  });
 }
 
 function emptyUsage(): AssistantMessage["usage"] {
