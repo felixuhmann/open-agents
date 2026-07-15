@@ -1,3 +1,4 @@
+import type { Prisma } from "@open-agents/db";
 import type {
   WorkflowRunEventEnvelope,
   WorkflowRunEventPayload,
@@ -56,7 +57,7 @@ const workflowEventLog = createDurableEventLog<
         workflowRunId: input.workflowRunId,
         seq,
         type: input.type,
-        payload: input.payload,
+        payload: input.payload as Prisma.InputJsonValue,
       },
       select: { seq: true, type: true, payload: true, createdAt: true },
     });
