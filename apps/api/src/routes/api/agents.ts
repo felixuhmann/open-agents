@@ -1,7 +1,11 @@
 import { File } from "node:buffer";
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
-import { CreateAgentInput, UpdateAgentInput } from "@open-agents/types";
+import {
+  CreateAgentInput,
+  ReasoningLevelSchema,
+  UpdateAgentInput,
+} from "@open-agents/types";
 import { resolveDraftSandboxPolicy } from "../../services/sandboxPolicy.js";
 import { parseStarterPrompts } from "../../agents/starterPrompts.js";
 import {
@@ -86,6 +90,7 @@ function toDto(
     systemPrompt: agent.systemPrompt,
     modelProvider: agent.modelProvider,
     modelId: agent.modelId,
+    reasoningLevel: ReasoningLevelSchema.parse(agent.reasoningLevel),
     avatar: agent.avatar,
     emailEnabled: agent.emailEnabled,
     webEnabled: agent.webEnabled,

@@ -156,3 +156,28 @@ void test("search surfaces Drive API failures instead of looking like no results
 
   await assert.rejects(client.searchFiles("plan", 10), /permission denied/);
 });
+
+void test("rejects unsupported binary files instead of decoding them as UTF-8", async () => {
+  const fetchImpl: typeof fetch = (input) => {
+    const url = fetchUrl(input);
+    if (url.pathname.endsWith("/files/root")) {
+      return Promise.resolve(json(file("root", "AI", FOLDER)));
+    }
+    if (url.pathname.endsWith("/files/report")) {
+      return Promise.resolve(
+        json(file("report", "report.pdf", "application/pdf", ["root"])),
+      );
+    }
+    return Promise.resolve(json({ error: { message: "not found" } }, 404));
+  };
+  const client = new ScopedGoogleDriveClient(
+    "token",
+    { sharedDriveId: "drive-1", rootFolderId: "root" },
+    fetchImpl,
+  );
+
+  await assert.rejects(
+    client.readFile("report", 10_000),
+    /Unsupported binary file type for text extraction: application\/pdf/,
+  );
+});

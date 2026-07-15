@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { ReasoningLevel } from "@open-agents/types";
 import { toast } from "sonner";
 import {
   ArrowLeftIcon,
@@ -84,6 +85,7 @@ type EditState = {
   systemPrompt: string;
   modelProvider: string;
   modelId: string;
+  reasoningLevel: ReasoningLevel;
   emailEnabled: boolean;
   webEnabled: boolean;
   profileAccessEnabled: boolean;
@@ -113,6 +115,7 @@ function fromDto(a: FullAgentDto): EditState {
     systemPrompt: a.systemPrompt,
     modelProvider: a.modelProvider,
     modelId: a.modelId,
+    reasoningLevel: a.reasoningLevel,
     emailEnabled: a.emailEnabled,
     webEnabled: a.webEnabled,
     profileAccessEnabled: a.profileAccessEnabled,
@@ -206,6 +209,7 @@ export default function AgentEditPage() {
           systemPrompt: s.systemPrompt,
           modelProvider: s.modelProvider,
           modelId: s.modelId,
+          reasoningLevel: s.reasoningLevel,
           emailEnabled: s.emailEnabled,
           webEnabled: s.webEnabled,
           profileAccessEnabled: s.profileAccessEnabled,
@@ -688,9 +692,17 @@ export default function AgentEditPage() {
         </CardHeader>
         <CardContent>
           <ModelPicker
-            value={{ modelProvider: state.modelProvider, modelId: state.modelId }}
+            value={{
+              modelProvider: state.modelProvider,
+              modelId: state.modelId,
+              reasoningLevel: state.reasoningLevel,
+            }}
             onChange={(model: ModelSelection) =>
-              setS({ modelProvider: model.modelProvider, modelId: model.modelId })
+              setS({
+                modelProvider: model.modelProvider,
+                modelId: model.modelId,
+                reasoningLevel: model.reasoningLevel,
+              })
             }
           />
         </CardContent>

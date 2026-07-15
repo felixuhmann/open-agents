@@ -1,6 +1,7 @@
 import type { Job } from "pg-boss";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
+import { reconcileStaleAgentRuns } from "../services/runRecovery.js";
 import {
   enqueueScheduledTask,
   executeScheduledTaskRun,
@@ -67,5 +68,6 @@ async function handleDispatch(_job: Job<ScheduledTaskDispatchJobData>): Promise<
 }
 
 async function handleMonitor(_job: Job<ScheduledTaskMonitorJobData>): Promise<void> {
+  await reconcileStaleAgentRuns();
   await syncScheduledTaskRunStatuses();
 }

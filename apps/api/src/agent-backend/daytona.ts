@@ -14,7 +14,11 @@ import {
   type TSchema,
 } from "@earendil-works/pi-ai";
 import { Daytona, type Sandbox } from "@daytona/sdk";
-import type { SandboxPolicyBundle, SandboxResourceMounted } from "@open-agents/types";
+import {
+  ReasoningLevelSchema,
+  type SandboxPolicyBundle,
+  type SandboxResourceMounted,
+} from "@open-agents/types";
 import {
   buildDaytonaSessionId,
   ensureDaytonaSandboxReady,
@@ -39,6 +43,7 @@ import type { HydratedAgent } from "../agents/service.js";
 import { getAgentById } from "../agents/service.js";
 import { loadVersionedAgent, type VersionedAgent } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
+import { config } from "../config.js";
 import { log } from "../log.js";
 import { buildMcpPiTools, closeThirdPartyMcpConnections } from "../mcp/piTools.js";
 import { buildSubagentPiTools } from "../mcp/subagentTools.js";
@@ -322,6 +327,26 @@ export class DaytonaAgentBackend implements AgentBackend {
           let finalText = "";
           let deltaText = "";
           let lastModelError: string | undefined;
+          let piAgent: Agent | undefined;
+          let requestTimeout: ReturnType<typeof setTimeout> | undefined;
+          let runTimeout: ReturnType<typeof setTimeout> | undefined;
+          let timeoutReason: string | undefined;
+          let rejectTimeout: ((reason: Error) => void) | undefined;
+
+          const clearRequestTimeout = () => {
+            if (requestTimeout) clearTimeout(requestTimeout);
+            requestTimeout = undefined;
+          };
+          const failForTimeout = (message: string) => {
+            if (timeoutReason) return;
+            timeoutReason = message;
+            clearRequestTimeout();
+            piAgent?.abort();
+            rejectTimeout?.(new AgentBackendError(message));
+          };
+          const timeoutPromise = new Promise<never>((_resolve, reject) => {
+            rejectTimeout = reject;
+          });
 
           try {
             const runtimePrompt = buildRuntimePrompt(
@@ -330,24 +355,46 @@ export class DaytonaAgentBackend implements AgentBackend {
               session.sandboxId,
               workspaceDir,
             );
-            const piAgent = new Agent({
+            const activeAgent = new Agent({
               initialState: {
                 systemPrompt: runtimePrompt,
                 model,
-                thinkingLevel: "high",
+                thinkingLevel: ReasoningLevelSchema.parse(agent.reasoningLevel),
                 messages: priorMessages,
                 tools,
               },
               sessionId,
               toolExecution: "sequential",
               getApiKey: (provider) => resolvePiProviderApiKey(provider),
+              onPayload: (_payload, requestModel) => {
+                clearRequestTimeout();
+                onEvent?.({
+                  kind: "model_request_started",
+                  rawType: "pi.request_start",
+                  model: requestModel.id,
+                  provider: requestModel.provider,
+                });
+                log.info("daytona: model request started", {
+                  runId: context?.runId,
+                  model: requestModel.id,
+                  provider: requestModel.provider,
+                });
+                requestTimeout = setTimeout(() => {
+                  failForTimeout(
+                    `Model request timed out after ${config.AGENT_MODEL_REQUEST_TIMEOUT_SECONDS} seconds`,
+                  );
+                }, config.AGENT_MODEL_REQUEST_TIMEOUT_SECONDS * 1_000);
+                return undefined;
+              },
             });
+            piAgent = activeAgent;
 
-            piAgent.subscribe((event) => {
+            activeAgent.subscribe((event) => {
               this.handlePiEvent(event, onEvent, (text) => {
                 deltaText += text;
               });
               if (event.type === "message_end" && isAssistantMessage(event.message)) {
+                clearRequestTimeout();
                 finalText = readTextBlocks(event.message);
               }
               if (event.type === "turn_end" && isAssistantMessage(event.message)) {
@@ -379,13 +426,20 @@ export class DaytonaAgentBackend implements AgentBackend {
               agent.profileAccessEnabled,
               context,
             );
-            await piAgent.prompt(promptMessage);
+            runTimeout = setTimeout(() => {
+              failForTimeout(
+                `Agent run timed out after ${config.AGENT_RUN_TIMEOUT_SECONDS} seconds`,
+              );
+            }, config.AGENT_RUN_TIMEOUT_SECONDS * 1_000);
+            await Promise.race([activeAgent.prompt(promptMessage), timeoutPromise]);
             const output = finalText || deltaText;
             if (lastModelError && output.trim().length === 0) {
               throw new AgentBackendError(lastModelError);
             }
             return output;
           } finally {
+            clearRequestTimeout();
+            if (runTimeout) clearTimeout(runTimeout);
             await closeThirdPartyMcpConnections(mcpConnections);
           }
         },
@@ -488,7 +542,19 @@ export class DaytonaAgentBackend implements AgentBackend {
   ): void {
     if (event.type === "message_update") {
       const update = event.assistantMessageEvent;
-      if (update.type === "text_delta" && update.delta) {
+      if (update.type === "thinking_start") {
+        onEvent?.({
+          kind: "reasoning",
+          active: true,
+          rawType: "pi.thinking_start",
+        });
+      } else if (update.type === "thinking_end") {
+        onEvent?.({
+          kind: "reasoning",
+          active: false,
+          rawType: "pi.thinking_end",
+        });
+      } else if (update.type === "text_delta" && update.delta) {
         onDelta(update.delta);
         onEvent?.({ kind: "delta", text: update.delta, rawType: "pi.text_delta" });
       }

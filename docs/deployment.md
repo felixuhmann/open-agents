@@ -79,7 +79,9 @@ unified deploy serves API and SPA from one origin.
 | `WEB_BASE_URL`          | SPA origin (same as `PUBLIC_BASE_URL` in Docker deploy) |
 
 Optional: `PORT` (default `3000`), `LOG_LEVEL`, `MAILGUN_BASE_URL`,
-`SKILL_BUNDLE_DIR` (absolute or relative to `apps/api`).
+`SKILL_BUNDLE_DIR` (absolute or relative to `apps/api`), and the agent timeout
+controls `AGENT_MODEL_REQUEST_TIMEOUT_SECONDS`, `AGENT_RUN_TIMEOUT_SECONDS`,
+and `AGENT_STALE_RUN_SECONDS`.
 
 Service credentials are stored in the encrypted `Secret` table, not env.
 Configure them through the setup wizard and **Settings → Secrets**:

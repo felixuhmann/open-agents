@@ -69,6 +69,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   const [draft, setDraft] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
+  const [isReasoning, setIsReasoning] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
@@ -159,7 +160,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
 
   useEffect(() => {
     if (atBottomRef.current) scrollToBottom();
-  }, [messages, optimistic, streamingText]);
+  }, [messages, optimistic, streamingText, isReasoning]);
 
   useEffect(() => {
     if (!optimistic) return;
@@ -170,6 +171,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   useEffect(() => {
     if (!activeRunId || !session) return;
     setStreamingText("");
+    setIsReasoning(false);
     const url = `/api/public/conversations/${session.conversationId}/runs/${activeRunId}/events?${publicQuery(
       shareToken,
       session.accessToken,
@@ -179,13 +181,17 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
     const handle = (event: MessageEvent<string>) => {
       try {
         const data = JSON.parse(event.data) as StreamEvent;
-        if (data.type === "agent.delta" && typeof data.payload.text === "string") {
+        if (data.type === "agent.reasoning" && typeof data.payload.active === "boolean") {
+          setIsReasoning(data.payload.active);
+        } else if (data.type === "agent.delta" && typeof data.payload.text === "string") {
+          setIsReasoning(false);
           buffer += data.payload.text;
           setStreamingText(buffer);
         } else if (
           data.type === "agent.message" &&
           typeof data.payload.text === "string"
         ) {
+          setIsReasoning(false);
           buffer = data.payload.text;
           setStreamingText(buffer);
         } else if (data.type === "run.succeeded" || data.type === "run.failed") {
@@ -193,6 +199,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
           const finishedRunId = activeRunId;
           setActiveRunId(null);
           setStreamingText("");
+          setIsReasoning(false);
           void queryClient.invalidateQueries({
             queryKey: ["public-conversation", session.conversationId],
           });
@@ -207,6 +214,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
         // Ignore malformed events; EventSource will keep the durable stream alive.
       }
     };
+    source.addEventListener("agent.reasoning", handle as EventListener);
     source.addEventListener("agent.delta", handle as EventListener);
     source.addEventListener("agent.message", handle as EventListener);
     source.addEventListener("run.succeeded", handle as EventListener);
@@ -389,9 +397,12 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
                         <div className="streaming-markdown">
                           <Markdown>{streamingText}</Markdown>
                         </div>
-                      ) : (
+                      ) : null}
+                      {isReasoning ? (
+                        <TypingIndicator label="Reasoning…" />
+                      ) : waitingForReply ? (
                         <TypingIndicator />
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

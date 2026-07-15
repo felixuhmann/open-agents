@@ -1,12 +1,14 @@
 import type { Agent, Prisma } from "@open-agents/db";
-import type {
-  SandboxCommandPolicy,
-  SandboxNetworkPolicy,
-  StarterPrompts,
+import {
+  ReasoningLevelSchema,
+  type ReasoningLevel,
+  type SandboxCommandPolicy,
+  type SandboxNetworkPolicy,
+  type StarterPrompts,
 } from "@open-agents/types";
 import { HttpError } from "../auth/middleware.js";
 import { AgentBackendError } from "../agent-backend/types.js";
-import { resolvePiModel } from "../services/piModel.js";
+import { normalizeReasoningLevelForModel, resolvePiModel } from "../services/piModel.js";
 import {
   parseSandboxCommandPolicy,
   parseSandboxNetworkPolicy,
@@ -205,6 +207,7 @@ export type UpdateAgentArgs = {
   systemPrompt?: string;
   modelProvider?: string;
   modelId?: string;
+  reasoningLevel?: ReasoningLevel;
   emailEnabled?: boolean;
   webEnabled?: boolean;
   profileAccessEnabled?: boolean;
@@ -255,16 +258,30 @@ export async function updateAgent(
     scalarUpdate.starterPrompts = args.starterPrompts;
   }
   if (args.systemPrompt !== undefined) scalarUpdate.systemPrompt = args.systemPrompt;
-  if (args.modelProvider !== undefined || args.modelId !== undefined) {
+  const updatesModel = args.modelProvider !== undefined || args.modelId !== undefined;
+  if (updatesModel) {
     if (!args.modelProvider || !args.modelId) {
       throw new HttpError(400, "modelProvider and modelId must be updated together");
     }
+  }
+  if (updatesModel || args.reasoningLevel !== undefined) {
     try {
-      resolvePiModel(args.modelProvider, args.modelId);
+      const model = resolvePiModel(
+        args.modelProvider ?? existing.modelProvider,
+        args.modelId ?? existing.modelId,
+      );
+      const requestedLevel =
+        args.reasoningLevel ?? ReasoningLevelSchema.parse(existing.reasoningLevel);
+      scalarUpdate.reasoningLevel = normalizeReasoningLevelForModel(
+        model,
+        requestedLevel,
+      );
     } catch (err) {
       const message = err instanceof AgentBackendError ? err.message : String(err);
       throw new HttpError(400, message);
     }
+  }
+  if (updatesModel) {
     scalarUpdate.modelProvider = args.modelProvider;
     scalarUpdate.modelId = args.modelId;
   }

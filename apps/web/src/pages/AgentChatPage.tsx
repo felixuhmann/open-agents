@@ -158,6 +158,7 @@ export default function AgentChatPage() {
   const isOperator = canOperateAgents(me.data?.role);
   const [draft, setDraft] = useState("");
   const [streamingText, setStreamingText] = useState("");
+  const [isReasoning, setIsReasoning] = useState(false);
   const [toolCalls, setToolCalls] = useState<LiveToolCall[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
@@ -191,7 +192,7 @@ export default function AgentChatPage() {
   // bottom, so scrolling up to read history isn't yanked back down.
   useEffect(() => {
     if (atBottomRef.current) scrollToBottom("smooth");
-  }, [messages, streamingText, toolCalls, optimistic]);
+  }, [messages, streamingText, isReasoning, toolCalls, optimistic]);
 
   // Clear the optimistic user echo once the persisted message lands.
   useEffect(() => {
@@ -325,6 +326,7 @@ export default function AgentChatPage() {
   useEffect(() => {
     if (!activeRunId) return;
     setStreamingText("");
+    setIsReasoning(false);
     setToolCalls([]);
     const url = `/api/runs/${activeRunId}/events`;
     const source = new EventSource(url, { withCredentials: true });
@@ -332,19 +334,24 @@ export default function AgentChatPage() {
     const handle = (e: MessageEvent<string>) => {
       try {
         const data = JSON.parse(e.data) as StreamEvent;
-        if (data.type === "agent.delta" && typeof data.payload.text === "string") {
+        if (data.type === "agent.reasoning" && typeof data.payload.active === "boolean") {
+          setIsReasoning(data.payload.active);
+        } else if (data.type === "agent.delta" && typeof data.payload.text === "string") {
+          setIsReasoning(false);
           buffer += data.payload.text;
           setStreamingText(buffer);
         } else if (
           data.type === "agent.message" &&
           typeof data.payload.text === "string"
         ) {
+          setIsReasoning(false);
           buffer = data.payload.text;
           setStreamingText(buffer);
         } else if (
           data.type === "tool.use" &&
           typeof data.payload.toolName === "string"
         ) {
+          setIsReasoning(false);
           const callId =
             typeof data.payload.callId === "string"
               ? data.payload.callId
@@ -432,6 +439,7 @@ export default function AgentChatPage() {
           const finishedRunId = activeRunId;
           setActiveRunId(null);
           setStreamingText("");
+          setIsReasoning(false);
           setToolCalls([]);
           void qc.invalidateQueries({
             queryKey: ["conversations", conversationId],
@@ -452,6 +460,7 @@ export default function AgentChatPage() {
         console.warn("SSE parse error", err);
       }
     };
+    source.addEventListener("agent.reasoning", handle as EventListener);
     source.addEventListener("agent.message", handle as EventListener);
     source.addEventListener("agent.delta", handle as EventListener);
     source.addEventListener("tool.use", handle as EventListener);
@@ -608,8 +617,9 @@ export default function AgentChatPage() {
                           ))}
                         </div>
                       ) : null}
-                      {streamingText ? (
-                        <StreamingMarkdown text={streamingText} />
+                      {streamingText ? <StreamingMarkdown text={streamingText} /> : null}
+                      {isReasoning ? (
+                        <TypingIndicator label="Reasoning…" />
                       ) : waitingFirstToken ? (
                         <TypingIndicator />
                       ) : null}

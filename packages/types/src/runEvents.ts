@@ -43,11 +43,13 @@ export const RunEventTypes = z.enum([
   "sandbox.deleted",
   "sandbox.resource_mounted",
   "skills.materialized",
+  "agent.reasoning",
   "agent.delta",
   "agent.message",
   "tool.use",
   "tool.output",
   "tool.result",
+  "model.request.started",
   "model.request",
   "session.error",
   "subagent.event",
@@ -125,6 +127,11 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     skills: z.array(SkillMaterializationEntry),
   }),
   z.object({
+    type: z.literal("agent.reasoning"),
+    active: z.boolean(),
+    rawType: z.string().optional(),
+  }),
+  z.object({
     type: z.literal("agent.delta"),
     text: z.string(),
     rawType: z.string().optional(),
@@ -155,6 +162,12 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     callId: z.string().optional(),
     result: z.unknown().optional(),
     isError: z.boolean().optional(),
+    rawType: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("model.request.started"),
+    model: z.string().nullable().optional(),
+    provider: z.string().optional(),
     rawType: z.string().optional(),
   }),
   z.object({

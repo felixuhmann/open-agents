@@ -23,7 +23,14 @@ export async function getBoss(): Promise<PgBoss> {
     log.error("pg-boss error", { err: String(err) }),
   );
   await instance.start();
-  await instance.createQueue(JOB_RUN_AGENT);
+  const runAgentQueueOptions = {
+    expireInSeconds: config.AGENT_STALE_RUN_SECONDS + 5 * 60,
+    heartbeatSeconds: 60,
+  };
+  await instance.createQueue(JOB_RUN_AGENT, runAgentQueueOptions);
+  // `createQueue` is a no-op for an existing queue, so apply timing changes
+  // explicitly during every boot as well.
+  await instance.updateQueue(JOB_RUN_AGENT, runAgentQueueOptions);
   await instance.createQueue(JOB_RUN_WORKFLOW);
   await instance.createQueue(JOB_SEND_EMAIL);
   await instance.createQueue(JOB_SANDBOX_RECONCILE);

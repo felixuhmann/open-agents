@@ -94,6 +94,7 @@ export type AgentRunContext = {
  * upstream event `type` through `rawType` for observability.
  */
 export type AgentStreamEvent =
+  | { kind: "reasoning"; active: boolean; rawType: string }
   | { kind: "delta"; text: string; rawType: string }
   | { kind: "message"; text: string; rawType: string }
   | {
@@ -118,6 +119,12 @@ export type AgentStreamEvent =
       callId?: string;
       result?: unknown;
       isError?: boolean;
+    }
+  | {
+      kind: "model_request_started";
+      rawType: string;
+      model?: string | null;
+      provider?: string;
     }
   | {
       kind: "model_request";

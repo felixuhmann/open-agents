@@ -45,7 +45,7 @@ async function handleRunAgent(job: Job<RunAgentJobData>): Promise<void> {
 
   await prisma.agentRun.update({
     where: { id: runId },
-    data: { status: "running" },
+    data: { status: "running", startedAt: new Date(), completedAt: null, error: null },
   });
 
   try {

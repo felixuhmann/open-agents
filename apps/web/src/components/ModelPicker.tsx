@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { WarningCircleIcon } from "@phosphor-icons/react";
+import type { ReasoningLevel } from "@open-agents/types";
 import { useModelCatalog } from "@/lib/queries";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,27 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 export type ModelSelection = {
   modelProvider: string;
   modelId: string;
+  reasoningLevel: ReasoningLevel;
 };
+
+const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Maximum",
+};
+
+function preferredReasoningLevel(
+  supported: ReasoningLevel[],
+  current: ReasoningLevel,
+): ReasoningLevel {
+  if (supported.includes(current)) return current;
+  if (supported.includes("high")) return "high";
+  return supported.find((level) => level !== "off") ?? "off";
+}
 
 type Props = {
   value: ModelSelection;
@@ -80,6 +101,10 @@ export function ModelPicker({ value, onChange }: Props) {
             onChange({
               modelProvider,
               modelId: firstModel?.id ?? "",
+              reasoningLevel: preferredReasoningLevel(
+                firstModel?.supportedReasoningLevels ?? ["off"],
+                value.reasoningLevel,
+              ),
             });
             setQuery("");
           }}
@@ -135,7 +160,19 @@ export function ModelPicker({ value, onChange }: Props) {
         />
         <Select
           value={value.modelId}
-          onValueChange={(modelId) => onChange({ ...value, modelId })}
+          onValueChange={(modelId) => {
+            const nextModel = activeProvider?.models.find(
+              (model) => model.id === modelId,
+            );
+            onChange({
+              ...value,
+              modelId,
+              reasoningLevel: preferredReasoningLevel(
+                nextModel?.supportedReasoningLevels ?? ["off"],
+                value.reasoningLevel,
+              ),
+            });
+          }}
           disabled={!activeProvider || filteredModels.length === 0}
         >
           <SelectTrigger id="model-id" className="w-full sm:w-96">
@@ -172,6 +209,36 @@ export function ModelPicker({ value, onChange }: Props) {
         ) : (
           <FieldDescription>Choose a model from the catalog.</FieldDescription>
         )}
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="reasoning-level">Reasoning effort</FieldLabel>
+        <Select
+          value={preferredReasoningLevel(
+            activeModel?.supportedReasoningLevels ?? ["off"],
+            value.reasoningLevel,
+          )}
+          onValueChange={(reasoningLevel) =>
+            onChange({ ...value, reasoningLevel: reasoningLevel as ReasoningLevel })
+          }
+          disabled={!activeModel?.reasoning}
+        >
+          <SelectTrigger id="reasoning-level" className="w-full sm:w-72">
+            <SelectValue placeholder="Select reasoning effort" />
+          </SelectTrigger>
+          <SelectContent>
+            {(activeModel?.supportedReasoningLevels ?? ["off"]).map((level) => (
+              <SelectItem key={level} value={level}>
+                {REASONING_LEVEL_LABELS[level]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          {activeModel?.reasoning
+            ? "Higher effort can improve difficult tasks but increases latency and token usage."
+            : "This model does not support configurable reasoning."}
+        </FieldDescription>
       </Field>
     </div>
   );

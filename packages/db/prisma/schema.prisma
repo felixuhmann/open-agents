@@ -248,6 +248,8 @@ model Agent {
   modelProvider  String  @default("anthropic")
   /// Model id within the provider catalog (e.g. `claude-opus-4-7`, `gpt-4o-mini`).
   modelId        String  @default("claude-opus-4-7")
+  /// Provider-neutral Pi reasoning effort; published versions freeze this value.
+  reasoningLevel String  @default("high")
 
   emailEnabled         Boolean @default(false)
   webEnabled           Boolean @default(true)

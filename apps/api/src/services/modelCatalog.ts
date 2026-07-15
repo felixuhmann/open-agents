@@ -8,6 +8,7 @@ import {
   CREDENTIAL_PROVIDERS,
   isCredentialProvider,
   providerSecretKey,
+  supportedReasoningLevelsForModel,
 } from "./piModel.js";
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -63,6 +64,7 @@ export async function buildModelCatalog(): Promise<ModelCatalogDto> {
           contextWindow: m.contextWindow,
           maxTokens: m.maxTokens,
           reasoning: m.reasoning,
+          supportedReasoningLevels: supportedReasoningLevelsForModel(m),
           inputModalities: m.input,
         }))
         .sort((a, b) => a.name.localeCompare(b.name));

@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+/** Provider-neutral reasoning effort understood by the Pi runtime. */
+export const ReasoningLevelSchema = z.enum([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+export type ReasoningLevel = z.infer<typeof ReasoningLevelSchema>;
+
 /** Pi model row exposed to the agent editor and catalog API. */
 export const ModelCatalogEntryDto = z.object({
   id: z.string(),
@@ -9,6 +21,7 @@ export const ModelCatalogEntryDto = z.object({
   contextWindow: z.number().int().positive(),
   maxTokens: z.number().int().positive(),
   reasoning: z.boolean(),
+  supportedReasoningLevels: z.array(ReasoningLevelSchema).min(1),
   inputModalities: z.array(z.enum(["text", "image"])),
 });
 export type ModelCatalogEntryDto = z.infer<typeof ModelCatalogEntryDto>;

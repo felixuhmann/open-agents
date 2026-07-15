@@ -3,6 +3,7 @@ import {
   SandboxCommandPolicySchema,
   SandboxNetworkPolicySchema,
 } from "./sandboxPolicy.js";
+import { ReasoningLevelSchema } from "./modelCatalog.js";
 
 /** Discriminator for the frozen config payload schema. */
 export const AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION = 1 as const;
@@ -70,6 +71,8 @@ export const AgentConfigSnapshot = z.object({
   systemPrompt: z.string(),
   modelProvider: z.string().min(1),
   modelId: z.string().min(1),
+  /** Requested Pi reasoning effort. Defaults preserve pre-field snapshots. */
+  reasoningLevel: ReasoningLevelSchema.default("high"),
   profileAccessEnabled: z.boolean().default(false),
   managedTools: z.array(AgentConfigToolBinding),
   platformTools: z.array(AgentConfigToolBinding),

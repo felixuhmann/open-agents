@@ -4,6 +4,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { log } from "../log.js";
 
 const CONNECT_TIMEOUT_MS = 30_000;
+const CLOSE_TIMEOUT_MS = 5_000;
 
 export type ThirdPartyMcpConnection = {
   label: string;
@@ -136,10 +137,18 @@ export async function closeThirdPartyMcpConnections(
 ): Promise<void> {
   await Promise.all(
     connections.map(async (conn) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await conn.client.close();
+        await Promise.race([
+          conn.client.close(),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, CLOSE_TIMEOUT_MS);
+          }),
+        ]);
       } catch {
         // ignore close errors
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }),
   );

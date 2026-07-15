@@ -4,6 +4,7 @@ import type {
   AnalyticsSummary,
   McpConnectionInfo,
   ModelCatalogDto,
+  ReasoningLevel,
   WorkflowDto,
   WorkflowSummaryDto,
 } from "@open-agents/types";
@@ -293,6 +294,7 @@ export type FullAgentDto = {
   systemPrompt: string;
   modelProvider: string;
   modelId: string;
+  reasoningLevel: ReasoningLevel;
   avatar: string | null;
   emailEnabled: boolean;
   webEnabled: boolean;

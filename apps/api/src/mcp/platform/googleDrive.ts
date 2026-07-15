@@ -1,6 +1,7 @@
 import { createHash, createSign } from "node:crypto";
 import { z } from "zod";
 import { defineTool, type PlatformHandler } from "../types.js";
+import { extractOfficeText } from "./officeText.js";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
@@ -10,6 +11,22 @@ const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut";
 const GOOGLE_APPS_PREFIX = "application/vnd.google-apps.";
 const MAX_READ_BYTES = 1_000_000;
+const MAX_OFFICE_FILE_BYTES = 20_000_000;
+const OFFICE_MIME_TYPES = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel.sheet.macroEnabled.12",
+]);
+
+function isTextMimeType(mimeType: string): boolean {
+  return (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    mimeType === "application/xml" ||
+    mimeType === "application/javascript"
+  );
+}
 
 const ServiceAccountCredentials = z.object({
   client_email: z.string().email(),
@@ -280,9 +297,39 @@ export class ScopedGoogleDriveClient {
       }
       const query = new URLSearchParams({ mimeType: exportMime });
       url = `${DRIVE_API}/files/${encodeURIComponent(file.id)}/export?${query.toString()}`;
-    } else {
+    } else if (OFFICE_MIME_TYPES.has(file.mimeType)) {
+      const declaredBytes = Number(file.size);
+      if (Number.isFinite(declaredBytes) && declaredBytes > MAX_OFFICE_FILE_BYTES) {
+        throw new Error(
+          `Office file is too large to extract safely (${declaredBytes} bytes; limit ${MAX_OFFICE_FILE_BYTES})`,
+        );
+      }
       const query = new URLSearchParams({ alt: "media", supportsAllDrives: "true" });
       url = `${DRIVE_API}/files/${encodeURIComponent(file.id)}?${query.toString()}`;
+      const response = await this.request(url);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.byteLength > MAX_OFFICE_FILE_BYTES) {
+        throw new Error(
+          `Office file is too large to extract safely (${bytes.byteLength} bytes; limit ${MAX_OFFICE_FILE_BYTES})`,
+        );
+      }
+      const content = await extractOfficeText(
+        file.mimeType as Parameters<typeof extractOfficeText>[0],
+        bytes,
+      );
+      return {
+        file,
+        content: content.slice(0, maxChars),
+        truncated: content.length > maxChars,
+        bytesRead: bytes.byteLength,
+      };
+    } else if (isTextMimeType(file.mimeType)) {
+      const query = new URLSearchParams({ alt: "media", supportsAllDrives: "true" });
+      url = `${DRIVE_API}/files/${encodeURIComponent(file.id)}?${query.toString()}`;
+    } else {
+      throw new Error(
+        `Unsupported binary file type for text extraction: ${file.mimeType}`,
+      );
     }
 
     const response = await this.request(url, {

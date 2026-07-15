@@ -16,7 +16,7 @@ export type RunStatus = z.infer<typeof RunStatus>;
 export const UserRole = z.enum(["admin", "contributor", "member"]);
 export type UserRole = z.infer<typeof UserRole>;
 
-import { AgentModelSelection } from "./modelCatalog.js";
+import { AgentModelSelection, ReasoningLevelSchema } from "./modelCatalog.js";
 
 /** Chat empty-state suggestion chips (web surface only). */
 export const StarterPromptsSchema = z.array(z.string().trim().min(1).max(200)).max(8);
@@ -32,6 +32,7 @@ export const AgentDto = z.object({
   systemPrompt: z.string(),
   modelProvider: z.string(),
   modelId: z.string(),
+  reasoningLevel: ReasoningLevelSchema,
   /**
    * Stored avatar reference. Either a bare filename inside the bundled
    * `apps/api/src/emails/static/` directory, a `/static/...` URL path
@@ -103,6 +104,7 @@ export const UpdateAgentInput = z.object({
   systemPrompt: z.string().max(20000).optional(),
   modelProvider: AgentModelSelection.shape.modelProvider.optional(),
   modelId: AgentModelSelection.shape.modelId.optional(),
+  reasoningLevel: ReasoningLevelSchema.optional(),
   emailEnabled: z.boolean().optional(),
   webEnabled: z.boolean().optional(),
   profileAccessEnabled: z.boolean().optional(),

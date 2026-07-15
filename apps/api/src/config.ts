@@ -52,6 +52,30 @@ const schema = z.object({
    * Optional override for log level filtering (currently informational).
    */
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+
+  /** Maximum wall time for one provider model request before Pi is aborted. */
+  AGENT_MODEL_REQUEST_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(30)
+    .max(60 * 60)
+    .default(5 * 60),
+
+  /** Maximum wall time for one complete agent turn, including tool calls. */
+  AGENT_RUN_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(22 * 60 * 60)
+    .default(30 * 60),
+
+  /** Age after which a still-running AgentRun is repaired as failed. */
+  AGENT_STALE_RUN_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(23 * 60 * 60)
+    .default(35 * 60),
 });
 
 export type Config = z.infer<typeof schema>;
@@ -63,6 +87,19 @@ function load(): Config {
       .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
       .join("\n");
     throw new Error(`Invalid environment configuration:\n${issues}`);
+  }
+  if (
+    parsed.data.AGENT_MODEL_REQUEST_TIMEOUT_SECONDS >=
+    parsed.data.AGENT_RUN_TIMEOUT_SECONDS
+  ) {
+    throw new Error(
+      "Invalid environment configuration:\n  - AGENT_MODEL_REQUEST_TIMEOUT_SECONDS must be less than AGENT_RUN_TIMEOUT_SECONDS",
+    );
+  }
+  if (parsed.data.AGENT_STALE_RUN_SECONDS <= parsed.data.AGENT_RUN_TIMEOUT_SECONDS) {
+    throw new Error(
+      "Invalid environment configuration:\n  - AGENT_STALE_RUN_SECONDS must be greater than AGENT_RUN_TIMEOUT_SECONDS",
+    );
   }
   return parsed.data;
 }

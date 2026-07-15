@@ -25,7 +25,17 @@ export async function streamRunWithEvents(
     userMessage,
     (event) => {
       extraHandler?.(event);
-      if (event.kind === "delta") {
+      if (event.kind === "reasoning") {
+        void appendEvent({
+          runId,
+          type: "agent.reasoning",
+          payload: {
+            type: "agent.reasoning",
+            active: event.active,
+            rawType: event.rawType,
+          },
+        }).catch(() => undefined);
+      } else if (event.kind === "delta") {
         void appendEvent({
           runId,
           type: "agent.delta",
@@ -83,6 +93,17 @@ export async function streamRunWithEvents(
               ? { result: summarizeToolResultForRunLog(event.result) }
               : {}),
             ...(event.isError !== undefined ? { isError: event.isError } : {}),
+          },
+        }).catch(() => undefined);
+      } else if (event.kind === "model_request_started") {
+        void appendEvent({
+          runId,
+          type: "model.request.started",
+          payload: {
+            type: "model.request.started",
+            model: event.model,
+            provider: event.provider,
+            rawType: event.rawType,
           },
         }).catch(() => undefined);
       } else if (event.kind === "model_request") {

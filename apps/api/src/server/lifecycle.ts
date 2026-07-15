@@ -12,6 +12,7 @@ import { log } from "../log.js";
 import { stopRunEventsListener } from "../runs/events.js";
 import { stopWorkflowEventsListener } from "../runs/workflowEvents.js";
 import { seedToolCatalog } from "../services/seedToolCatalog.js";
+import { reconcileStaleAgentRuns } from "../services/runRecovery.js";
 import { buildApp } from "./app.js";
 import { setAppInstance } from "./appHolder.js";
 
@@ -35,6 +36,10 @@ export async function bootstrap(): Promise<void> {
 
   await prisma.$connect();
   await seedToolCatalog();
+  const recoveredRuns = await reconcileStaleAgentRuns();
+  if (recoveredRuns > 0) {
+    log.warn("repaired stale agent runs during startup", { count: recoveredRuns });
+  }
   await getBoss();
   await registerRunAgentWorker();
   await registerRunWorkflowWorker();

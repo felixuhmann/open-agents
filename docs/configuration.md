@@ -44,10 +44,13 @@ template for the bootstrap layer.
 
 ### Optional overrides
 
-| Variable           | Default                   | Notes                                       |
-| ------------------ | ------------------------- | ------------------------------------------- |
-| `MAILGUN_BASE_URL` | `https://api.mailgun.net` | Use `https://api.eu.mailgun.net` for EU.    |
-| `LOG_LEVEL`        | `info`                    | One of `debug` / `info` / `warn` / `error`. |
+| Variable                              | Default                   | Notes                                                                      |
+| ------------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| `MAILGUN_BASE_URL`                    | `https://api.mailgun.net` | Use `https://api.eu.mailgun.net` for EU.                                   |
+| `LOG_LEVEL`                           | `info`                    | One of `debug` / `info` / `warn` / `error`.                                |
+| `AGENT_MODEL_REQUEST_TIMEOUT_SECONDS` | `300`                     | Aborts a provider request that has not completed in time.                  |
+| `AGENT_RUN_TIMEOUT_SECONDS`           | `1800`                    | Maximum wall time for a complete agent turn, including tools.              |
+| `AGENT_STALE_RUN_SECONDS`             | `2100`                    | Repairs older `running` agent rows as failed; must exceed the run timeout. |
 
 ## Service credentials (managed in the UI)
 
