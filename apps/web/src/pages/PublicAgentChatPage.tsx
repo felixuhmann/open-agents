@@ -12,11 +12,12 @@ import {
   AiChatComposer,
   AiChatEmptyState,
   AiChatMessage,
-  AiChatPendingMessage,
   AiConversationDownload,
   AiRunAttachments,
   type PendingUpload,
 } from "@/components/chat/AiChat";
+import { AgentRunActivity } from "@/components/chat/AgentRunActivity";
+import { useAgentRunStream } from "@/components/chat/useAgentRunStream";
 import {
   Empty,
   EmptyDescription,
@@ -46,12 +47,6 @@ type PublicAgent = {
 
 type PublicSession = { conversationId: string; accessToken: string };
 
-type StreamEvent = {
-  seq: number;
-  type: string;
-  payload: Record<string, unknown>;
-};
-
 type OptimisticMessage = {
   text: string;
   attachments: ChatAttachmentSummary[];
@@ -74,8 +69,6 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   const [draft, setDraft] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRunId, setStoppingRunId] = useState<string | null>(null);
-  const [streamingText, setStreamingText] = useState("");
-  const [isReasoning, setIsReasoning] = useState(false);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [optimistic, setOptimistic] = useState<OptimisticMessage | null>(null);
@@ -165,6 +158,12 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
     onSuccess: (result) => {
       setActiveRunId(result.runId);
       setPendingUploads([]);
+      const current = sessionRef.current;
+      if (current) {
+        void queryClient.invalidateQueries({
+          queryKey: ["public-conversation", current.conversationId],
+        });
+      }
     },
     onError: (error) => {
       setOptimistic(null);
@@ -181,64 +180,41 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   }, [messages, optimistic]);
 
   useEffect(() => {
-    if (!activeRunId || !session) return;
-    setStreamingText("");
-    setIsReasoning(false);
-    const url = `/api/public/conversations/${session.conversationId}/runs/${activeRunId}/events?${publicQuery(
-      shareToken,
-      session.accessToken,
-    )}`;
-    const source = new EventSource(url);
-    let buffer = "";
-    const handle = (event: MessageEvent<string>) => {
-      try {
-        const data = JSON.parse(event.data) as StreamEvent;
-        if (data.type === "agent.reasoning" && typeof data.payload.active === "boolean") {
-          setIsReasoning(data.payload.active);
-        } else if (data.type === "agent.delta" && typeof data.payload.text === "string") {
-          setIsReasoning(false);
-          buffer += data.payload.text;
-          setStreamingText(buffer);
-        } else if (
-          data.type === "agent.message" &&
-          typeof data.payload.text === "string"
-        ) {
-          setIsReasoning(false);
-          buffer = data.payload.text;
-          setStreamingText(buffer);
-        } else if (
-          data.type === "run.succeeded" ||
-          data.type === "run.failed" ||
-          data.type === "run.cancelled"
-        ) {
-          source.close();
-          const finishedRunId = activeRunId;
-          setActiveRunId(null);
-          setStoppingRunId(null);
-          setStreamingText("");
-          setIsReasoning(false);
-          void queryClient.invalidateQueries({
-            queryKey: ["public-conversation", session.conversationId],
-          });
-          void queryClient.invalidateQueries({
-            queryKey: ["public-run-attachments", finishedRunId],
-          });
-          if (data.type === "run.failed") {
-            toast.error("The agent stopped unexpectedly");
-          }
-        }
-      } catch {
-        // Ignore malformed events; EventSource will keep the durable stream alive.
+    const active = conversation.data?.activeRunId;
+    if (active && !activeRunId) setActiveRunId(active);
+  }, [activeRunId, conversation.data?.activeRunId]);
+
+  const runEventUrl =
+    activeRunId && session
+      ? `/api/public/conversations/${session.conversationId}/runs/${activeRunId}/events?${publicQuery(
+          shareToken,
+          session.accessToken,
+        )}`
+      : null;
+  const runState = useAgentRunStream({
+    runId: activeRunId,
+    eventUrl: runEventUrl,
+    onTerminal: (event, finishedRunId) => {
+      setActiveRunId(null);
+      setStoppingRunId(null);
+      if (session) {
+        void queryClient.invalidateQueries({
+          queryKey: ["public-conversation", session.conversationId],
+        });
       }
-    };
-    source.addEventListener("agent.reasoning", handle as EventListener);
-    source.addEventListener("agent.delta", handle as EventListener);
-    source.addEventListener("agent.message", handle as EventListener);
-    source.addEventListener("run.succeeded", handle as EventListener);
-    source.addEventListener("run.failed", handle as EventListener);
-    source.addEventListener("run.cancelled", handle as EventListener);
-    return () => source.close();
-  }, [activeRunId, queryClient, session, shareToken]);
+      void queryClient.invalidateQueries({
+        queryKey: ["public-run-attachments", finishedRunId],
+      });
+      if (event.type === "run.failed") {
+        toast.error("Run failed", {
+          description:
+            typeof event.payload.error === "string"
+              ? event.payload.error
+              : "The agent stopped unexpectedly.",
+        });
+      }
+    },
+  });
 
   const handleFilePick = async (files: FileList | File[] | null) => {
     if (!files?.length) return;
@@ -333,8 +309,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
   }
 
   const sending = sendMessage.isPending || Boolean(activeRunId);
-  const empty = messages.length === 0 && !optimistic && !streamingText && !sending;
-  const waitingForReply = Boolean(activeRunId) && !streamingText;
+  const empty = messages.length === 0 && !optimistic && !runState.text && !sending;
 
   return (
     <main className="flex h-dvh flex-col bg-background">
@@ -386,13 +361,7 @@ export default function PublicAgentChatPage({ shareToken }: Props) {
                     attachments={optimistic.attachments}
                   />
                 ) : null}
-                {streamingText || waitingForReply ? (
-                  <AiChatPendingMessage
-                    text={streamingText}
-                    reasoning={isReasoning}
-                    waiting={waitingForReply}
-                  />
-                ) : null}
+                <AgentRunActivity state={runState} running={Boolean(activeRunId)} />
               </>
             )}
           </ConversationContent>

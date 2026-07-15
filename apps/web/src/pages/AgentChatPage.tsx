@@ -24,133 +24,20 @@ import {
   AiChatComposer,
   AiChatEmptyState,
   AiChatMessage,
-  AiChatPendingMessage,
   AiConversationDownload,
-  AiToolCall,
   type PendingUpload,
-  type SubagentItem,
 } from "@/components/chat/AiChat";
+import { AgentRunActivity } from "@/components/chat/AgentRunActivity";
+import { useAgentRunStream } from "@/components/chat/useAgentRunStream";
 import { ReportIssueDialog } from "@/components/chat/ReportIssueDialog";
 import { AssistantRunAttachments } from "@/components/chat/AssistantRunAttachments";
 
-type StreamEvent = {
-  seq: number;
-  type: string;
-  createdAt: string;
-  payload: Record<string, unknown>;
-};
-
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-
-type LiveToolCall = {
-  callId: string;
-  toolName: string;
-  output: string;
-  done: boolean;
-  /** Redacted tool input from the `tool.use` event, if present. */
-  args?: Record<string, unknown>;
-  isError?: boolean;
-  /** Mirrored child activity, present only for `run_subagent` calls. */
-  subagentSlug?: string;
-  subagentItems?: SubagentItem[];
-};
 
 type OptimisticMessage = {
   text: string;
   attachments: ChatAttachmentSummary[];
 };
-
-function appendToolOutput(
-  prev: LiveToolCall[],
-  callId: string,
-  toolName: string,
-  chunk: string,
-): LiveToolCall[] {
-  const idx = prev.findIndex((tc) => tc.callId === callId);
-  if (idx < 0) {
-    return [...prev, { callId, toolName, output: chunk, done: false }];
-  }
-  const next = [...prev];
-  const row = next[idx];
-  if (!row) return prev;
-  next[idx] = { ...row, output: row.output + chunk };
-  return next;
-}
-
-type SubagentInner = {
-  kind: string;
-  toolName?: string;
-  text?: string;
-  callId?: string;
-  isError?: boolean;
-  stream?: "stdout" | "stderr";
-  status?: string;
-};
-
-/** Fold one mirrored child event into the parent `run_subagent` tool card. */
-function applySubagentEvent(
-  prev: LiveToolCall[],
-  toolCallId: string,
-  slug: string,
-  inner: SubagentInner,
-): LiveToolCall[] {
-  const idx = prev.findIndex((tc) => tc.callId === toolCallId);
-  if (idx < 0) return prev;
-  const row = prev[idx];
-  if (!row) return prev;
-  const items = [...(row.subagentItems ?? [])];
-
-  const upsertTool = (mut: (tool: Extract<SubagentItem, { type: "tool" }>) => void) => {
-    const ti = items.findIndex(
-      (it) => it.type === "tool" && it.callId === (inner.callId ?? ""),
-    );
-    if (ti >= 0) {
-      const existing = items[ti] as Extract<SubagentItem, { type: "tool" }>;
-      const clone = { ...existing };
-      mut(clone);
-      items[ti] = clone;
-    } else {
-      const created: Extract<SubagentItem, { type: "tool" }> = {
-        type: "tool",
-        callId: inner.callId ?? `sub-${items.length}`,
-        toolName: inner.toolName ?? "tool",
-        output: "",
-        done: false,
-      };
-      mut(created);
-      items.push(created);
-    }
-  };
-
-  switch (inner.kind) {
-    case "tool_use":
-      upsertTool(() => {});
-      break;
-    case "tool_output":
-      upsertTool((t) => {
-        const prefix = inner.stream === "stderr" ? "[stderr] " : "";
-        t.output += `${prefix}${inner.text ?? ""}`;
-      });
-      break;
-    case "tool_result":
-      upsertTool((t) => {
-        t.done = true;
-        if (inner.text) t.output = inner.text;
-      });
-      break;
-    case "message":
-      if (inner.text) items.push({ type: "message", text: inner.text });
-      break;
-    case "session_error":
-      if (inner.text) items.push({ type: "message", text: inner.text, isError: true });
-      break;
-    // run_status is reflected via the parent tool card's running/done state.
-  }
-
-  const next = [...prev];
-  next[idx] = { ...row, subagentSlug: slug, subagentItems: items };
-  return next;
-}
 
 export default function AgentChatPage() {
   const { slug, conversationId } = useParams<{
@@ -164,9 +51,6 @@ export default function AgentChatPage() {
   const conversation = useConversation(conversationId);
   const isOperator = canOperateAgents(me.data?.role);
   const [draft, setDraft] = useState("");
-  const [streamingText, setStreamingText] = useState("");
-  const [isReasoning, setIsReasoning] = useState(false);
-  const [toolCalls, setToolCalls] = useState<LiveToolCall[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stoppingRunId, setStoppingRunId] = useState<string | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
@@ -325,179 +209,26 @@ export default function AgentChatPage() {
     );
   };
 
-  useEffect(() => {
-    if (!activeRunId) return;
-    setStreamingText("");
-    setIsReasoning(false);
-    setToolCalls([]);
-    const url = `/api/runs/${activeRunId}/events`;
-    const source = new EventSource(url, { withCredentials: true });
-    let buffer = "";
-    const handle = (e: MessageEvent<string>) => {
-      try {
-        const data = JSON.parse(e.data) as StreamEvent;
-        if (data.type === "agent.reasoning" && typeof data.payload.active === "boolean") {
-          setIsReasoning(data.payload.active);
-        } else if (data.type === "agent.delta" && typeof data.payload.text === "string") {
-          setIsReasoning(false);
-          buffer += data.payload.text;
-          setStreamingText(buffer);
-        } else if (
-          data.type === "agent.message" &&
-          typeof data.payload.text === "string"
-        ) {
-          setIsReasoning(false);
-          buffer = data.payload.text;
-          setStreamingText(buffer);
-        } else if (
-          data.type === "tool.use" &&
-          typeof data.payload.toolName === "string"
-        ) {
-          setIsReasoning(false);
-          const callId =
-            typeof data.payload.callId === "string"
-              ? data.payload.callId
-              : `seq-${data.seq}`;
-          const args =
-            typeof data.payload.args === "object" && data.payload.args !== null
-              ? (data.payload.args as Record<string, unknown>)
-              : undefined;
-          setToolCalls((prev) => {
-            if (prev.some((tc) => tc.callId === callId)) return prev;
-            return [
-              ...prev,
-              {
-                callId,
-                toolName:
-                  typeof data.payload.toolName === "string"
-                    ? data.payload.toolName
-                    : "tool",
-                output: "",
-                done: false,
-                args,
-              },
-            ];
-          });
-        } else if (
-          data.type === "tool.result" &&
-          typeof data.payload.toolName === "string"
-        ) {
-          const callId =
-            typeof data.payload.callId === "string"
-              ? data.payload.callId
-              : `seq-${data.seq}`;
-          const toolName = data.payload.toolName;
-          const resultText =
-            typeof data.payload.result === "string"
-              ? data.payload.result
-              : data.payload.result !== undefined
-                ? JSON.stringify(data.payload.result, null, 2)
-                : data.payload.isError
-                  ? "[tool error]"
-                  : "";
-          setToolCalls((prev) => {
-            const idx = prev.findIndex((tc) => tc.callId === callId);
-            const normalized =
-              resultText && !resultText.endsWith("\n") ? `${resultText}\n` : resultText;
-            if (idx < 0) {
-              return [
-                ...prev,
-                {
-                  callId,
-                  toolName,
-                  output: normalized,
-                  done: true,
-                  isError: data.payload.isError === true,
-                },
-              ];
-            }
-            const next = [...prev];
-            const row = next[idx];
-            if (!row) return prev;
-            next[idx] = {
-              ...row,
-              output: normalized || row.output,
-              done: true,
-              isError: data.payload.isError === true,
-            };
-            return next;
-          });
-        } else if (
-          data.type === "tool.output" &&
-          typeof data.payload.toolName === "string" &&
-          typeof data.payload.text === "string"
-        ) {
-          const stream = data.payload.stream === "stderr" ? "[stderr] " : "";
-          const chunk = `${stream}${data.payload.text}`;
-          const toolName =
-            typeof data.payload.toolName === "string" ? data.payload.toolName : "";
-          if (!toolName) return;
-          setToolCalls((prev) => {
-            const callId =
-              typeof data.payload.callId === "string"
-                ? data.payload.callId
-                : (prev.findLast((tc) => tc.toolName === toolName)?.callId ??
-                  `unknown-${toolName}`);
-            return appendToolOutput(prev, callId, toolName, chunk);
-          });
-        } else if (
-          data.type === "subagent.event" &&
-          typeof data.payload.toolCallId === "string" &&
-          typeof data.payload.slug === "string" &&
-          data.payload.inner !== null &&
-          typeof data.payload.inner === "object"
-        ) {
-          const toolCallId = data.payload.toolCallId;
-          const slug = data.payload.slug;
-          const inner = data.payload.inner as SubagentInner;
-          setToolCalls((prev) => applySubagentEvent(prev, toolCallId, slug, inner));
-        } else if (
-          data.type === "run.succeeded" ||
-          data.type === "run.failed" ||
-          data.type === "run.cancelled"
-        ) {
-          source.close();
-          const finishedRunId = activeRunId;
-          setActiveRunId(null);
-          setStoppingRunId(null);
-          setStreamingText("");
-          setIsReasoning(false);
-          setToolCalls([]);
-          void qc.invalidateQueries({
-            queryKey: ["conversations", conversationId],
-          });
-          if (finishedRunId) {
-            void qc.invalidateQueries({
-              queryKey: ["runs", finishedRunId, "attachments"],
-            });
-          }
-          if (data.type === "run.failed") {
-            const errPayload = data.payload as { error?: string };
-            toast.error("Run failed", {
-              description: errPayload.error ?? "The agent stopped unexpectedly.",
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("SSE parse error", err);
+  const runState = useAgentRunStream({
+    runId: activeRunId,
+    eventUrl: activeRunId ? `/api/runs/${activeRunId}/events` : null,
+    onTerminal: (event, finishedRunId) => {
+      setActiveRunId(null);
+      setStoppingRunId(null);
+      void qc.invalidateQueries({ queryKey: ["conversations", conversationId] });
+      void qc.invalidateQueries({
+        queryKey: ["runs", finishedRunId, "attachments"],
+      });
+      if (event.type === "run.failed") {
+        toast.error("Run failed", {
+          description:
+            typeof event.payload.error === "string"
+              ? event.payload.error
+              : "The agent stopped unexpectedly.",
+        });
       }
-    };
-    source.addEventListener("agent.reasoning", handle as EventListener);
-    source.addEventListener("agent.message", handle as EventListener);
-    source.addEventListener("agent.delta", handle as EventListener);
-    source.addEventListener("tool.use", handle as EventListener);
-    source.addEventListener("tool.output", handle as EventListener);
-    source.addEventListener("tool.result", handle as EventListener);
-    source.addEventListener("subagent.event", handle as EventListener);
-    source.addEventListener("run.started", handle as EventListener);
-    source.addEventListener("run.succeeded", handle as EventListener);
-    source.addEventListener("run.failed", handle as EventListener);
-    source.addEventListener("run.cancelled", handle as EventListener);
-    source.onerror = () => {
-      // EventSource auto-reconnects
-    };
-    return () => source.close();
-  }, [activeRunId, conversationId, qc]);
+    },
+  });
 
   const submit = () => {
     const trimmed = draft.trim();
@@ -538,9 +269,7 @@ export default function AgentChatPage() {
   const sending =
     createConversation.isPending || sendMessage.isPending || Boolean(activeRunId);
   const showOptimistic = optimistic !== null;
-  const empty = messages.length === 0 && !streamingText && !showOptimistic && !sending;
-  const waitingFirstToken =
-    Boolean(activeRunId) && !streamingText && toolCalls.length === 0;
+  const empty = messages.length === 0 && !runState.text && !showOptimistic && !sending;
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col gap-3">
@@ -612,31 +341,7 @@ export default function AgentChatPage() {
                   />
                 ) : null}
 
-                {streamingText || toolCalls.length > 0 || waitingFirstToken ? (
-                  <AiChatPendingMessage
-                    text={streamingText}
-                    reasoning={isReasoning}
-                    waiting={waitingFirstToken}
-                    tools={
-                      toolCalls.length > 0 ? (
-                        <div className="flex flex-col gap-2">
-                          {toolCalls.map((toolCall) => (
-                            <AiToolCall
-                              key={toolCall.callId}
-                              toolName={toolCall.toolName}
-                              output={toolCall.output}
-                              running={!toolCall.done}
-                              args={toolCall.args}
-                              isError={toolCall.isError}
-                              subagentSlug={toolCall.subagentSlug}
-                              subagentItems={toolCall.subagentItems}
-                            />
-                          ))}
-                        </div>
-                      ) : null
-                    }
-                  />
-                ) : null}
+                <AgentRunActivity state={runState} running={Boolean(activeRunId)} />
               </>
             )}
           </ConversationContent>

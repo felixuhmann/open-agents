@@ -94,10 +94,12 @@ function conversationDto(
       sizeBytes: number;
     }>;
   }>,
+  activeRunId: string | null = null,
 ) {
   return {
     id: conversation.id,
     title: conversation.title,
+    activeRunId,
     agent: {
       id: conversation.agent.id,
       slug: conversation.agent.slug,
@@ -163,8 +165,16 @@ publicChatRoutes.get("/conversations/:id", async (c) => {
       },
     },
   });
+  const activeRun = await prisma.agentRun.findFirst({
+    where: {
+      conversationId: conversation.id,
+      status: { in: ["pending", "running", "cancelling"] },
+    },
+    orderBy: { startedAt: "desc" },
+    select: { id: true },
+  });
   c.header("cache-control", "no-store");
-  return c.json(conversationDto(conversation, messages));
+  return c.json(conversationDto(conversation, messages, activeRun?.id ?? null));
 });
 
 publicChatRoutes.post("/conversations/:id/messages", async (c) => {
