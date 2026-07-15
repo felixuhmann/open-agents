@@ -94,7 +94,9 @@ export async function ingestInboundEmail(args: {
     surface: "email",
     emailMessageId: message.id,
   };
-  await boss.send(JOB_RUN_AGENT, jobData);
+  await boss.send(JOB_RUN_AGENT, jobData, {
+    singletonKey: `email:${thread.id}`,
+  });
 
   log.info("inbound: enqueued run-agent", {
     reqId,

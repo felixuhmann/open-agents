@@ -13,7 +13,7 @@
     "start": "node --env-file-if-exists=.env dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "test": "tsx --test src/mcp/**/*.test.ts src/mcp/*.test.ts",
+    "test": "tsx --test src/agent-backend/*.test.ts src/mcp/**/*.test.ts src/mcp/*.test.ts",
     "check": "pnpm typecheck && pnpm lint",
     "email": "email dev --dir src/emails --port 3001"
   },
