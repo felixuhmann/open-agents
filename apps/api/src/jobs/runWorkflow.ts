@@ -6,6 +6,7 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
 import { appendWorkflowEvent } from "../runs/workflowEvents.js";
+import { redactToolArgs } from "../services/runObservability.js";
 import {
   loadWorkflowUserUploadResources,
   uploadPendingWorkflowAttachments,
@@ -281,6 +282,9 @@ async function runPipeline(
                 position: step.position,
                 toolName: event.toolName,
                 status: event.kind === "tool_use" ? "start" : "end",
+                ...(event.kind === "tool_use" && event.args !== undefined
+                  ? { args: redactToolArgs(event.args) }
+                  : {}),
               },
             }).catch(() => undefined);
           }

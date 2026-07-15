@@ -50,7 +50,13 @@ type StreamEvent = {
 
 type StepStatus = "pending" | "running" | "succeeded" | "failed";
 
-type LiveToolCall = { callId: string; toolName: string; output: string; done: boolean };
+type LiveToolCall = {
+  callId: string;
+  toolName: string;
+  output: string;
+  done: boolean;
+  args?: Record<string, unknown>;
+};
 
 type WorkflowActivityEvent = {
   key: string;
@@ -316,6 +322,10 @@ export default function WorkflowChatPage() {
           const pos = p.position as number;
           const toolName = (p.toolName as string) || "tool";
           const status = p.status === "end" ? "end" : "start";
+          const toolArgs =
+            typeof p.args === "object" && p.args !== null
+              ? (p.args as Record<string, unknown>)
+              : undefined;
           const event = toActivityEvent(data);
           setSteps((prev) =>
             prev.map((s) => {
@@ -332,6 +342,7 @@ export default function WorkflowChatPage() {
                           toolName,
                           output: "",
                           done: false,
+                          args: toolArgs,
                         },
                       ]
                     : finishLatestToolCall(s.toolCalls, toolName),
@@ -806,6 +817,7 @@ function StepCard({
                   toolName={tc.toolName}
                   output={tc.output}
                   running={!tc.done}
+                  args={tc.args}
                 />
               ))}
             </div>

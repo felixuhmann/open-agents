@@ -43,6 +43,8 @@ type LiveToolCall = {
   toolName: string;
   output: string;
   done: boolean;
+  /** Redacted tool input from the `tool.use` event, if present. */
+  args?: Record<string, unknown>;
   /** Mirrored child activity, present only for `run_subagent` calls. */
   subagentSlug?: string;
   subagentItems?: SubagentItem[];
@@ -356,6 +358,10 @@ export default function AgentChatPage() {
             typeof data.payload.callId === "string"
               ? data.payload.callId
               : `seq-${data.seq}`;
+          const args =
+            typeof data.payload.args === "object" && data.payload.args !== null
+              ? (data.payload.args as Record<string, unknown>)
+              : undefined;
           setToolCalls((prev) => {
             if (prev.some((tc) => tc.callId === callId)) return prev;
             return [
@@ -368,6 +374,7 @@ export default function AgentChatPage() {
                     : "tool",
                 output: "",
                 done: false,
+                args,
               },
             ];
           });
@@ -611,6 +618,7 @@ export default function AgentChatPage() {
                               toolName={tc.toolName}
                               output={tc.output}
                               running={!tc.done}
+                              args={tc.args}
                               subagentSlug={tc.subagentSlug}
                               subagentItems={tc.subagentItems}
                             />

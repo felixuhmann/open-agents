@@ -55,6 +55,7 @@ export const WorkflowRunEventPayload = z.discriminatedUnion("type", [
     position: z.number().int().nonnegative(),
     toolName: z.string(),
     status: z.enum(["start", "end"]),
+    args: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal("workflow.step.succeeded"),
