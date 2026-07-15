@@ -26,6 +26,7 @@ type EventLogOptions<IdKey extends string, EventType extends string, EventPayloa
   idKey: IdKey;
   emitterPrefix: string;
   terminalTypes: readonly EventType[];
+  readRow: (id: string, seq: number) => Promise<EventRow | null>;
   readRows: (id: string, afterSeq: number) => Promise<EventRow[]>;
   insertRow: (
     tx: Prisma.TransactionClient,
@@ -58,6 +59,7 @@ export function createDurableEventLog<
 
   let listenerClient: Client | null = null;
   let listenerStarting: Promise<void> | null = null;
+  const notificationTails = new Map<string, Promise<void>>();
 
   const toEnvelope = (row: EventRow): EventEnvelope =>
     ({
@@ -68,6 +70,38 @@ export function createDurableEventLog<
     }) as EventEnvelope;
 
   const eventName = (id: string): string => `${options.emitterPrefix}:${id}`;
+
+  function dispatchNotification(id: string, seq: number): void {
+    // Loading durable rows is asynchronous. Chain reads per entity so
+    // subscribers still observe the transaction/NOTIFY order.
+    const previous = notificationTails.get(id) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const row = await options.readRow(id, seq);
+        if (!row) {
+          log.warn(`${options.name}: NOTIFY event row not found`, { id, seq });
+          return;
+        }
+        const liveEvent = {
+          [options.idKey]: id,
+          ...toEnvelope(row),
+        } as LiveEvent;
+        emitter.emit(eventName(id), liveEvent);
+      });
+    notificationTails.set(id, current);
+    void current
+      .catch((err: unknown) =>
+        log.warn(`${options.name}: failed to load NOTIFY event`, {
+          id,
+          seq,
+          err: String(err),
+        }),
+      )
+      .finally(() => {
+        if (notificationTails.get(id) === current) notificationTails.delete(id);
+      });
+  }
 
   async function ensureListener(): Promise<void> {
     if (listenerClient) return;
@@ -82,8 +116,13 @@ export function createDurableEventLog<
       client.on("notification", (msg: Notification) => {
         if (msg.channel !== options.notifyChannel || !msg.payload) return;
         try {
-          const parsed = JSON.parse(msg.payload) as LiveEvent;
-          emitter.emit(eventName(parsed[options.idKey]), parsed);
+          const parsed = JSON.parse(msg.payload) as Record<string, unknown>;
+          const id = parsed[options.idKey];
+          const seq = parsed.seq;
+          if (typeof id !== "string" || typeof seq !== "number") {
+            throw new Error("expected an event id and numeric seq");
+          }
+          dispatchNotification(id, seq);
         } catch (err) {
           log.warn(`${options.name}: bad NOTIFY payload`, {
             err: String(err),
@@ -111,22 +150,27 @@ export function createDurableEventLog<
       listenerClient = null;
     }
     listenerStarting = null;
+    notificationTails.clear();
     emitter.removeAllListeners();
   }
 
   async function append(
     input: AppendInput<IdKey, EventType, EventPayload>,
   ): Promise<EventEnvelope> {
-    const created = await prisma.$transaction((tx: Prisma.TransactionClient) =>
-      options.insertRow(tx, input),
-    );
-    const envelope = toEnvelope(created);
     await ensureListener();
-    await listenerClient!.query(`SELECT pg_notify($1, $2)`, [
-      options.notifyChannel,
-      JSON.stringify({ [options.idKey]: input[options.idKey], ...envelope }),
-    ]);
-    return envelope;
+    const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const row = await options.insertRow(tx, input);
+      // PostgreSQL limits NOTIFY payloads to roughly 8 KiB. Publish only a
+      // compact pointer and let every listener load the canonical event row.
+      // Running both operations in one transaction prevents partial success.
+      const notification = JSON.stringify({
+        [options.idKey]: input[options.idKey],
+        seq: row.seq,
+      });
+      await tx.$executeRaw`SELECT pg_notify(${options.notifyChannel}, ${notification})`;
+      return row;
+    });
+    return toEnvelope(created);
   }
 
   async function readBacklog(id: string, afterSeq: number): Promise<EventEnvelope[]> {

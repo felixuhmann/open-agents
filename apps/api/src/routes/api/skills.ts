@@ -77,7 +77,9 @@ skillsRoutes.post("/", async (c) => {
  */
 skillsRoutes.post("/upload-requests", async (c) => {
   requireAdmin(c);
-  const parsed = CreateSkillUploadRequestInput.safeParse(await c.req.json().catch(() => null));
+  const parsed = CreateSkillUploadRequestInput.safeParse(
+    await c.req.json().catch(() => null),
+  );
   if (!parsed.success) throw new HttpError(400, parsed.error.message);
   const { name, description } = parsed.data;
 
@@ -103,7 +105,9 @@ skillsRoutes.post("/upload-requests", async (c) => {
 skillsRoutes.put("/uploads/:id", async (c) => {
   const id = c.req.param("id");
   const token =
-    c.req.query("token") ?? c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
+    c.req.query("token") ??
+    c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ??
+    null;
   if (!token) throw new HttpError(401, "missing upload token");
 
   const pending = await verifySkillUploadToken(id, token);
@@ -111,7 +115,8 @@ skillsRoutes.put("/uploads/:id", async (c) => {
 
   const bytes = Buffer.from(await c.req.arrayBuffer());
   if (bytes.byteLength === 0) throw new HttpError(400, "empty upload body");
-  if (bytes.byteLength > MAX_SKILL_BUNDLE_BYTES) throw new HttpError(413, "bundle too large");
+  if (bytes.byteLength > MAX_SKILL_BUNDLE_BYTES)
+    throw new HttpError(413, "bundle too large");
 
   // Spend the token now — atomically, so concurrent PUTs can't both land. Bundle
   // validation happens inside createSkill/createSkillVersion below; an invalid

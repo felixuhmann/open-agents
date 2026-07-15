@@ -43,6 +43,35 @@ async function handleRunAgent(job: Job<RunAgentJobData>): Promise<void> {
     throw new Error(`AgentRun not found: ${runId}`);
   }
 
+  // pg-boss provides at-least-once delivery. A duplicate job must not invoke
+  // the model again after all completion state was already persisted. The
+  // event check also repairs runs affected by the old insert-then-NOTIFY race:
+  // their success event exists even though the catch path changed the status.
+  // Email enqueuing happens after that event, so only chat runs can safely use
+  // the persisted event as proof that every required side effect completed.
+  const persistedSuccess =
+    run.status === "succeeded" || surface !== "chat"
+      ? null
+      : await prisma.runEvent.findFirst({
+          where: { runId, type: "run.succeeded" },
+          orderBy: { seq: "desc" },
+          select: { seq: true },
+        });
+  if (run.status === "succeeded" || persistedSuccess) {
+    if (run.status !== "succeeded") {
+      await prisma.agentRun.update({
+        where: { id: runId },
+        data: { status: "succeeded", error: null },
+      });
+    }
+    log.info("run-agent: already succeeded; skipping duplicate job", {
+      jobId: job.id,
+      runId,
+      ...(persistedSuccess ? { successEventSeq: persistedSuccess.seq } : {}),
+    });
+    return;
+  }
+
   await prisma.agentRun.update({
     where: { id: runId },
     data: { status: "running", startedAt: new Date(), completedAt: null, error: null },

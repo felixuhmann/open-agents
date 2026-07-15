@@ -13,8 +13,8 @@ import { createDurableEventLog } from "./eventLog.js";
  * shared LISTEN connection plus replay any backlog from the table.
  *
  * Postgres NOTIFY identifiers can be quoted strings (no length limit), but
- * to keep the channel namespace tidy we use a constant prefix and pass the
- * runId in the payload.
+ * to keep the channel namespace tidy we use a constant channel and pass a
+ * compact runId + event-sequence pointer in the payload.
  */
 export const NOTIFY_CHANNEL = "run_events";
 
@@ -37,6 +37,10 @@ const runEventLog = createDurableEventLog<
   idKey: "runId",
   emitterPrefix: "run",
   terminalTypes: ["run.succeeded", "run.failed"],
+  readRow: (runId, seq) =>
+    prisma.runEvent.findUnique({
+      where: { runId_seq: { runId, seq } },
+    }),
   readRows: (runId, afterSeq) =>
     prisma.runEvent.findMany({
       where: { runId, seq: { gt: afterSeq } },

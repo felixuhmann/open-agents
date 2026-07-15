@@ -32,6 +32,10 @@ const workflowEventLog = createDurableEventLog<
   idKey: "workflowRunId",
   emitterPrefix: "wf",
   terminalTypes: ["workflow.run.succeeded", "workflow.run.failed"],
+  readRow: (workflowRunId, seq) =>
+    prisma.workflowRunEvent.findUnique({
+      where: { workflowRunId_seq: { workflowRunId, seq } },
+    }),
   readRows: (workflowRunId, afterSeq) =>
     prisma.workflowRunEvent.findMany({
       where: { workflowRunId, seq: { gt: afterSeq } },

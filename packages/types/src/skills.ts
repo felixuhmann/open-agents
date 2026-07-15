@@ -58,4 +58,6 @@ export const CreateSkillUploadRequestResult = z.object({
   contentType: z.literal("application/zip"),
   expiresAt: z.string(),
 });
-export type CreateSkillUploadRequestResult = z.infer<typeof CreateSkillUploadRequestResult>;
+export type CreateSkillUploadRequestResult = z.infer<
+  typeof CreateSkillUploadRequestResult
+>;
