@@ -42,24 +42,25 @@ function convertSchema(schema: JsonSchema): TSchema | null {
 
   const type = schema.type;
   if (type === "string") {
-    return Type.String({ description: stringDesc(schema) });
+    return Type.String(options(schema, STRING_KEYWORDS));
   }
-  if (type === "number" || type === "integer") {
-    return Type.Number({ description: stringDesc(schema) });
+  if (type === "integer") {
+    return Type.Integer(options(schema, NUMERIC_KEYWORDS));
+  }
+  if (type === "number") {
+    return Type.Number(options(schema, NUMERIC_KEYWORDS));
   }
   if (type === "boolean") {
-    return Type.Boolean({ description: stringDesc(schema) });
+    return Type.Boolean(options(schema));
   }
   if (type === "array") {
     const items = isSchema(schema.items) ? convertSchema(schema.items) : null;
-    return Type.Array(items ?? Type.Unknown(), { description: stringDesc(schema) });
+    return Type.Array(items ?? Type.Unknown(), options(schema, ARRAY_KEYWORDS));
   }
   if (type === "object" || schema.properties) {
     const properties = schema.properties;
     if (!isSchema(properties)) {
-      return Type.Record(Type.String(), Type.Unknown(), {
-        description: stringDesc(schema),
-      });
+      return Type.Record(Type.String(), Type.Unknown(), options(schema));
     }
     const required = new Set(
       Array.isArray(schema.required)
@@ -74,13 +75,42 @@ function convertSchema(schema: JsonSchema): TSchema | null {
       props[key] = required.has(key) ? field : Type.Optional(field);
     }
     return Type.Object(props, {
+      ...options(schema),
       additionalProperties: schema.additionalProperties === true,
-      description: stringDesc(schema),
     });
   }
   return null;
 }
 
-function stringDesc(schema: JsonSchema): string | undefined {
-  return typeof schema.description === "string" ? schema.description : undefined;
+/** Validation keywords carried through per JSON Schema type. */
+const NUMERIC_KEYWORDS = [
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+] as const;
+const STRING_KEYWORDS = ["minLength", "maxLength", "pattern", "format"] as const;
+const ARRAY_KEYWORDS = ["minItems", "maxItems", "uniqueItems"] as const;
+
+/**
+ * Carry the model-facing annotations and validation constraints from a JSON
+ * Schema node into TypeBox options. Without this the model never sees bounds
+ * like `maximum`, `enum`, or `default` and can loop retrying rejected args.
+ */
+function options(
+  schema: JsonSchema,
+  extraKeys: readonly string[] = [],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (typeof schema.description === "string") out.description = schema.description;
+  if (typeof schema.title === "string") out.title = schema.title;
+  if ("default" in schema) out.default = schema.default;
+  if (Array.isArray(schema.enum)) out.enum = schema.enum;
+  if ("const" in schema) out.const = schema.const;
+  if (Array.isArray(schema.examples)) out.examples = schema.examples;
+  for (const key of extraKeys) {
+    if (schema[key] !== undefined) out[key] = schema[key];
+  }
+  return out;
 }

@@ -2,6 +2,7 @@ import type { Job } from "pg-boss";
 import type { WorkflowConfigSnapshot } from "@open-agents/types";
 import type { SessionResource } from "../agent-backend/types.js";
 import { getAgentById } from "../agents/service.js";
+import { config } from "../config.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
@@ -37,12 +38,19 @@ class WorkflowStepError extends Error {
 
 export async function registerRunWorkflowWorker(): Promise<void> {
   const boss = await getBoss();
-  await boss.work<RunWorkflowJobData>(JOB_RUN_WORKFLOW, async (jobs) => {
-    for (const job of jobs) {
-      await handleRunWorkflow(job);
-    }
+  await boss.work<RunWorkflowJobData>(
+    JOB_RUN_WORKFLOW,
+    { localConcurrency: config.WORKFLOW_RUN_CONCURRENCY },
+    async (jobs) => {
+      for (const job of jobs) {
+        await handleRunWorkflow(job);
+      }
+    },
+  );
+  log.info("worker registered", {
+    queue: JOB_RUN_WORKFLOW,
+    localConcurrency: config.WORKFLOW_RUN_CONCURRENCY,
   });
-  log.info("worker registered", { queue: JOB_RUN_WORKFLOW });
 }
 
 async function handleRunWorkflow(job: Job<RunWorkflowJobData>): Promise<void> {

@@ -1,6 +1,7 @@
 import type { Job } from "pg-boss";
 import type { SessionResource } from "../agent-backend/types.js";
 import { getAgentById } from "../agents/service.js";
+import { config } from "../config.js";
 import { loadAgentForRun } from "../agents/snapshot.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
@@ -24,12 +25,19 @@ import {
 
 export async function registerRunAgentWorker(): Promise<void> {
   const boss = await getBoss();
-  await boss.work<RunAgentJobData>(JOB_RUN_AGENT, async (jobs) => {
-    for (const job of jobs) {
-      await handleRunAgent(job);
-    }
+  await boss.work<RunAgentJobData>(
+    JOB_RUN_AGENT,
+    { localConcurrency: config.AGENT_RUN_CONCURRENCY },
+    async (jobs) => {
+      for (const job of jobs) {
+        await handleRunAgent(job);
+      }
+    },
+  );
+  log.info("worker registered", {
+    queue: JOB_RUN_AGENT,
+    localConcurrency: config.AGENT_RUN_CONCURRENCY,
   });
-  log.info("worker registered", { queue: JOB_RUN_AGENT });
 }
 
 async function handleRunAgent(job: Job<RunAgentJobData>): Promise<void> {

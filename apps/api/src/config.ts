@@ -76,6 +76,16 @@ const schema = z.object({
     .min(60)
     .max(23 * 60 * 60)
     .default(35 * 60),
+
+  /**
+   * Max agent runs executed concurrently per node. Runs are I/O-bound (they
+   * await the remote model + Daytona sandbox), so one slow or looping run must
+   * not starve the others — each worker polls independently.
+   */
+  AGENT_RUN_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(20),
+
+  /** Max workflow runs executed concurrently per node. */
+  WORKFLOW_RUN_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
 });
 
 export type Config = z.infer<typeof schema>;
