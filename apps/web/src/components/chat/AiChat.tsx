@@ -38,7 +38,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Reasoning, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Suggestion } from "@/components/ai-elements/suggestion";
 import {
   Tool,
   ToolContent,
@@ -249,11 +249,16 @@ export function AiChatEmptyState({
           Ask a question, share a file, or start with one of these prompts.
         </p>
       </div>
-      <Suggestions className="max-w-full justify-center py-2">
+      <div className="flex w-full max-w-xl flex-col gap-2 py-2">
         {prompts.map((prompt) => (
-          <Suggestion key={prompt} suggestion={prompt} onClick={onPick} />
+          <Suggestion
+            className="h-auto w-full justify-start whitespace-normal rounded-lg px-4 py-3 text-left leading-snug"
+            key={prompt}
+            suggestion={prompt}
+            onClick={onPick}
+          />
         ))}
-      </Suggestions>
+      </div>
     </ConversationEmptyState>
   );
 }
