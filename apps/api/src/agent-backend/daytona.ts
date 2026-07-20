@@ -321,7 +321,18 @@ export class DaytonaAgentBackend implements AgentBackend {
           const { tools: mcpTools, connections: mcpConnections } = await buildMcpPiTools(
             agent,
             thirdPartyBearer,
-            { sandbox: { fs: sandbox.fs, workspaceDir } },
+            {
+              sandbox: {
+                fs: sandbox.fs,
+                workspaceDir,
+                downloadFile: async (input) =>
+                  Buffer.from(
+                    await sandbox.fs.downloadFile(
+                      resolveSandboxPath(input, workspaceDir),
+                    ),
+                  ),
+              },
+            },
           );
           const subagentTools = buildSubagentPiTools(agent, {
             parentRunId: context?.runId,

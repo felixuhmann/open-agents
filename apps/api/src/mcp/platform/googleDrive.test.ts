@@ -89,6 +89,74 @@ void test("rejects writes outside the configured folder tree", async () => {
   assert.equal(uploaded, false);
 });
 
+void test("uploads sandbox file bytes unchanged with a resumable upload", async () => {
+  const expected = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0xff]);
+  let metadata: Record<string, unknown> | undefined;
+  let uploaded: Buffer | undefined;
+  let uploadedMimeType: string | null = null;
+  const fetchImpl: typeof fetch = (input, init) => {
+    const url = fetchUrl(input);
+    if (url.pathname.endsWith("/files/root")) {
+      return Promise.resolve(json(file("root", "AI", FOLDER)));
+    }
+    if (url.hostname === "www.googleapis.com" && url.pathname.includes("/upload/")) {
+      assert.equal(url.searchParams.get("uploadType"), "resumable");
+      assert.equal(url.searchParams.get("supportsAllDrives"), "true");
+      assert.equal(init?.method, "POST");
+      const body = init?.body;
+      if (typeof body !== "string") throw new Error("Expected JSON request body");
+      metadata = JSON.parse(body) as Record<string, unknown>;
+      return Promise.resolve(
+        new Response(null, {
+          status: 200,
+          headers: { location: "https://uploads.example.test/session-1" },
+        }),
+      );
+    }
+    if (url.hostname === "uploads.example.test") {
+      assert.equal(init?.method, "PUT");
+      assert.ok(Buffer.isBuffer(init?.body));
+      uploaded = Buffer.from(init.body);
+      uploadedMimeType = new Headers(init.headers).get("content-type");
+      return Promise.resolve(
+        json(
+          file(
+            "report",
+            "report.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ["root"],
+          ),
+        ),
+      );
+    }
+    return Promise.resolve(json({ error: { message: "not found" } }, 404));
+  };
+  const client = new ScopedGoogleDriveClient(
+    "token",
+    { sharedDriveId: "drive-1", rootFolderId: "root" },
+    fetchImpl,
+  );
+
+  const result = await client.uploadFile(
+    "root",
+    "report.docx",
+    expected,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  );
+
+  assert.equal(result.id, "report");
+  assert.deepEqual(metadata, {
+    name: "report.docx",
+    parents: ["root"],
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  assert.deepEqual(uploaded, expected);
+  assert.equal(
+    uploadedMimeType,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  );
+});
+
 void test("search hides matching files elsewhere in the Shared Drive", async () => {
   const fetchImpl: typeof fetch = (input) => {
     const url = fetchUrl(input);

@@ -1,4 +1,5 @@
 import { createHash, createSign } from "node:crypto";
+import path from "node:path";
 import { z } from "zod";
 import { defineTool, type PlatformHandler } from "../types.js";
 import { extractOfficeText } from "./officeText.js";
@@ -12,12 +13,26 @@ const SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut";
 const GOOGLE_APPS_PREFIX = "application/vnd.google-apps.";
 const MAX_READ_BYTES = 1_000_000;
 const MAX_OFFICE_FILE_BYTES = 20_000_000;
+const MAX_UPLOAD_BYTES = 100_000_000;
 const OFFICE_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/vnd.ms-excel.sheet.macroEnabled.12",
 ]);
+
+const UPLOAD_MIME_TYPES: Record<string, string> = {
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".pdf": "application/pdf",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+function uploadMimeType(name: string): string {
+  return (
+    UPLOAD_MIME_TYPES[path.extname(name).toLowerCase()] ?? "application/octet-stream"
+  );
+}
 
 function isTextMimeType(mimeType: string): boolean {
   return (
@@ -376,6 +391,50 @@ export class ScopedGoogleDriveClient {
     return DriveFile.parse(await response.json());
   }
 
+  async uploadFile(parentId: string, name: string, content: Buffer, mimeType: string) {
+    const parent = await this.assertWithinRoot(parentId);
+    if (parent.mimeType !== FOLDER_MIME_TYPE) {
+      throw new Error("Google Drive upload parent must be a folder");
+    }
+    if (mimeType.startsWith(GOOGLE_APPS_PREFIX)) {
+      throw new Error("Google-native file conversion is not supported");
+    }
+    if (content.byteLength > MAX_UPLOAD_BYTES) {
+      throw new Error(
+        `File is too large to upload (${content.byteLength} bytes; limit ${MAX_UPLOAD_BYTES})`,
+      );
+    }
+
+    const query = new URLSearchParams({
+      uploadType: "resumable",
+      supportsAllDrives: "true",
+      fields: fileFields(),
+    });
+    const session = await this.request(`${DRIVE_UPLOAD_API}/files?${query.toString()}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=UTF-8",
+        "x-upload-content-length": String(content.byteLength),
+        "x-upload-content-type": mimeType,
+      },
+      body: JSON.stringify({ name, parents: [parentId], mimeType }),
+    });
+    const uploadUrl = session.headers.get("location");
+    if (!uploadUrl) {
+      throw new Error("Google Drive did not return a resumable upload URL");
+    }
+
+    const response = await this.request(uploadUrl, {
+      method: "PUT",
+      headers: {
+        "content-length": String(content.byteLength),
+        "content-type": mimeType,
+      },
+      body: content,
+    });
+    return DriveFile.parse(await response.json());
+  }
+
   async createFolder(parentId: string, name: string) {
     const parent = await this.assertWithinRoot(parentId);
     if (parent.mimeType !== FOLDER_MIME_TYPE) {
@@ -540,6 +599,34 @@ export const googleDriveHandler: PlatformHandler = {
         return (await clientFor(ctx.configJson)).createFolder(
           input.parentId ?? config.rootFolderId,
           input.name,
+        );
+      },
+    }),
+    defineTool({
+      name: "google_drive_upload_file",
+      description:
+        "Upload an existing file from the active Daytona sandbox into the configured AI folder without converting it. Omit name to use the sandbox filename and parentId to write into the configured root. This always creates a new Drive file.",
+      input: z.object({
+        path: z.string().trim().min(1),
+        name: z.string().trim().min(1).max(255).optional(),
+        mimeType: z.string().trim().min(1).optional(),
+        parentId: OptionalParent,
+      }),
+      handler: async (input, ctx) => {
+        if (!ctx.sandbox) {
+          throw new Error("google_drive_upload_file requires an active Daytona sandbox");
+        }
+        const config = DriveConfig.parse(ctx.configJson);
+        const name = input.name ?? path.basename(input.path);
+        if (!name || name === "." || name === "/") {
+          throw new Error("Could not determine a filename from the sandbox path");
+        }
+        const content = await ctx.sandbox.downloadFile(input.path);
+        return (await clientFor(ctx.configJson)).uploadFile(
+          input.parentId ?? config.rootFolderId,
+          name,
+          content,
+          input.mimeType ?? uploadMimeType(name),
         );
       },
     }),

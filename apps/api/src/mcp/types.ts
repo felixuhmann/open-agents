@@ -23,6 +23,8 @@ export type PlatformHandlerCtx = {
 
 export type PlatformSandboxCtx = {
   workspaceDir: string;
+  /** Download a sandbox file using the same path semantics as managed tools. */
+  downloadFile(path: string): Promise<Buffer>;
   fs: {
     createFolder(path: string, mode: string): Promise<unknown>;
     uploadFile(content: Buffer, path: string): Promise<unknown>;
