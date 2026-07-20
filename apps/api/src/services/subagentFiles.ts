@@ -85,7 +85,7 @@ export async function materializeSubagentFiles(input: {
   }));
 
   try {
-    const backend = await getAgentBackend();
+    const backend = getAgentBackend();
     await backend.mountSessionResources(parentSessionId, resources, {
       runId: parentRunId,
     });

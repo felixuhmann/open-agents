@@ -13,12 +13,12 @@
     "start": "node --env-file-if-exists=.env dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "test": "tsx --test src/agent-backend/*.test.ts src/mcp/**/*.test.ts src/mcp/*.test.ts",
+    "test": "tsx --test src/agent-backend/*.test.ts src/agent-backend/**/*.test.ts src/services/*.test.ts src/mcp/**/*.test.ts src/mcp/*.test.ts",
     "check": "pnpm typecheck && pnpm lint",
     "email": "email dev --dir src/emails --port 3001"
   },
   "dependencies": {
-    "@daytona/sdk": "^0.182.0",
+    "@alibaba-group/opensandbox": "0.1.10",
     "@earendil-works/pi-agent-core": "^0.80.7",
     "@earendil-works/pi-ai": "^0.80.7",
     "@hono/node-server": "^2.0.0",

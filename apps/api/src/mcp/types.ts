@@ -16,7 +16,7 @@ export type PlatformHandlerCtx = {
   secrets: Record<string, string>;
   /**
    * Active sandbox for run-scoped platform tools. Undefined for platform
-   * invocations outside a Daytona-backed agent run.
+   * invocations outside a sandbox-backed agent run.
    */
   sandbox?: PlatformSandboxCtx;
 };
@@ -26,8 +26,8 @@ export type PlatformSandboxCtx = {
   /** Download a sandbox file using the same path semantics as managed tools. */
   downloadFile(path: string): Promise<Buffer>;
   fs: {
-    createFolder(path: string, mode: string): Promise<unknown>;
-    uploadFile(content: Buffer, path: string): Promise<unknown>;
+    mkdirp(remoteDir: string): Promise<void>;
+    writeFile(remotePath: string, data: Buffer | Uint8Array | string): Promise<void>;
   };
 };
 

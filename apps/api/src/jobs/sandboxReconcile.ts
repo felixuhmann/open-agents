@@ -7,8 +7,8 @@ import {
 import { getBoss } from "./queue.js";
 import { JOB_SANDBOX_RECONCILE, type SandboxReconcileJobData } from "./types.js";
 
-/** Cron: every 6 hours (UTC). */
-export const SANDBOX_RECONCILE_CRON = "0 */6 * * *";
+/** Run frequently enough to enforce the default 15-minute idle pause policy. */
+export const SANDBOX_RECONCILE_CRON = "*/5 * * * *";
 
 export async function registerSandboxReconcileWorker(): Promise<void> {
   const boss = await getBoss();

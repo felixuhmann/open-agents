@@ -26,7 +26,7 @@ export async function uploadPendingChatAttachments(
   const uploaded: UploadedAttachment[] = [];
   if (pending.length === 0) return uploaded;
 
-  const backend = await getAgentBackend();
+  const backend = getAgentBackend();
   for (const att of pending) {
     const mountPath = `/workspace/inbox/${safeFilename(att.filename)}`;
     const file = await backend.uploadFile({

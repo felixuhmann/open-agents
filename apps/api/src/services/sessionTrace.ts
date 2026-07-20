@@ -1,6 +1,6 @@
 import { AgentConfigSnapshot, type SkillMaterializationEntry } from "@open-agents/types";
 import { prisma } from "../db.js";
-import { parseDaytonaSessionId } from "./daytonaSandbox.js";
+
 import { HttpError } from "../auth/middleware.js";
 
 /**
@@ -276,7 +276,7 @@ export async function loadSandboxes(args: {
 
 /**
  * Full trace for a chat conversation: messages, run events, agent config,
- * sessions, and Daytona sandboxes. Used by the builder debug UI and issues.
+ * sessions, and OpenSandbox sandboxes. Used by the builder debug UI and issues.
  */
 export async function getConversationTrace(
   conversationId: string,
@@ -447,12 +447,9 @@ function extractWorkspaceDirFromRuns(
 }
 
 function providerSandboxIdFromSessionId(sessionId: string | null): string | null {
-  if (!sessionId?.startsWith("daytona:")) return null;
-  try {
-    return parseDaytonaSessionId(sessionId).sandboxId;
-  } catch {
-    return null;
-  }
+  if (!sessionId) return null;
+  const parts = sessionId.split(":");
+  return parts.length >= 3 ? parts.slice(2).join(":") || null : null;
 }
 
 export function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {

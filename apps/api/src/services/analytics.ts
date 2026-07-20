@@ -168,7 +168,7 @@ export async function buildAnalyticsSummary(
       }))
       .sort((a, b) => b.runs - a.runs),
     notes: [
-      "Token usage is aggregated from durable model.request RunEvents emitted by Daytona/Pi.",
+      "Token usage is aggregated from durable model.request RunEvents emitted by OpenSandbox/Pi.",
       "Spend is estimated from pi-ai catalog model ids plus family-level price heuristics; unknown models report spendUsd as 0 while tokens still count.",
       "Provider is taken from the event payload when present, otherwise inferred from the agent configuration.",
       "Workflow activity appears under the workflow surface and as per-agent step runs; pipeline-level WorkflowRun metrics are not included.",

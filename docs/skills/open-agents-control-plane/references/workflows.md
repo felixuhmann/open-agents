@@ -84,7 +84,7 @@ Never stop after `agents_create` or `agents_update` when the user expects a usab
 5. Common checks:
    - Agent or workflow was not published after a draft edit.
    - Model provider secret is missing.
-   - Daytona secret is missing for sandbox tools.
+   - OpenSandbox runtime env (`OPENSANDBOX_BASE_URL`) is unset or unreachable for sandbox tools.
    - Mailgun secrets or inbound local part are missing for email.
    - External MCP server probe fails or auth is missing.
    - A replacement array accidentally dropped a binding.

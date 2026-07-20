@@ -1,25 +1,28 @@
 import type { AgentSandbox, Prisma } from "@open-agents/db";
 import type { SandboxLifecyclePolicy, SandboxSummaryDto } from "@open-agents/types";
 import { SandboxLifecyclePolicySchema } from "@open-agents/types";
-import type { Sandbox } from "@daytona/sdk";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import {
-  DAYTONA_PROVIDER,
-  buildDaytonaSessionId,
-  createDaytonaClient,
-  fetchDaytonaSandbox,
-  getDaytonaApiKey,
-  parseDaytonaSessionId,
-  snapshotFromSandbox,
-} from "./daytonaSandbox.js";
-import { wrapDaytonaError } from "../agent-backend/daytonaErrors.js";
+  OPENSANDBOX_PROVIDER,
+  buildOpenSandboxSessionId,
+  parseOpenSandboxSessionId,
+} from "../agent-backend/opensandbox/session.js";
+import {
+  getOpenSandboxTransport,
+  isOpenSandboxConfigured,
+} from "../agent-backend/opensandbox/runtime.js";
+import type { SandboxInfoSnapshot } from "../agent-backend/opensandbox/transport.js";
+import { planReconcileAction } from "../agent-backend/opensandbox/lifecycle.js";
+import { wrapOpenSandboxError } from "../agent-backend/opensandboxErrors.js";
 import { AgentBackendError } from "../agent-backend/types.js";
 import {
-  DEFAULT_DAYTONA_LIFECYCLE,
+  DEFAULT_SANDBOX_LIFECYCLE,
   ORPHAN_SANDBOX_GRACE_MS,
-  STALE_SANDBOX_INACTIVITY_MS,
+  isPastAutoStopInterval,
 } from "./sandboxLifecyclePolicy.js";
+
+const LABEL_AGENT_ID = "open-agents-agent-id";
 
 const sandboxInclude = {
   agent: { select: { slug: true, displayName: true } },
@@ -76,19 +79,19 @@ export type RegisterSandboxInput = {
 export async function registerAgentSandbox(
   input: RegisterSandboxInput,
 ): Promise<AgentSandbox> {
-  const sessionId = buildDaytonaSessionId(input.agentId, input.providerSandboxId);
-  const lifecyclePolicy = input.lifecyclePolicy ?? DEFAULT_DAYTONA_LIFECYCLE;
+  const sessionId = buildOpenSandboxSessionId(input.agentId, input.providerSandboxId);
+  const lifecyclePolicy = input.lifecyclePolicy ?? DEFAULT_SANDBOX_LIFECYCLE;
   const now = new Date();
 
   const row = await prisma.agentSandbox.upsert({
     where: {
       provider_providerSandboxId: {
-        provider: DAYTONA_PROVIDER,
+        provider: OPENSANDBOX_PROVIDER,
         providerSandboxId: input.providerSandboxId,
       },
     },
     create: {
-      provider: DAYTONA_PROVIDER,
+      provider: OPENSANDBOX_PROVIDER,
       providerSandboxId: input.providerSandboxId,
       sessionId,
       state: input.state ?? "started",
@@ -120,46 +123,14 @@ export async function registerAgentSandbox(
 }
 
 export async function touchSandboxActivity(sessionId: string): Promise<void> {
-  const ref = parseDaytonaSessionId(sessionId);
+  const ref = parseOpenSandboxSessionId(sessionId);
   await prisma.agentSandbox.updateMany({
     where: {
-      provider: DAYTONA_PROVIDER,
+      provider: OPENSANDBOX_PROVIDER,
       providerSandboxId: ref.sandboxId,
     },
     data: { lastActivityAt: new Date() },
   });
-}
-
-export async function syncSandboxFromProvider(
-  sandboxRowId: string,
-): Promise<SandboxSummaryDto> {
-  const row = await prisma.agentSandbox.findUnique({
-    where: { id: sandboxRowId },
-    include: sandboxInclude,
-  });
-  if (!row) throw new AgentBackendError(`Sandbox not found: ${sandboxRowId}`);
-  if (row.provider !== DAYTONA_PROVIDER) {
-    throw new AgentBackendError(`Unsupported sandbox provider: ${row.provider}`);
-  }
-
-  try {
-    const remote = await fetchDaytonaSandbox(row.providerSandboxId);
-    const snapshot = snapshotFromSandbox(remote);
-    const updated = await prisma.agentSandbox.update({
-      where: { id: row.id },
-      data: {
-        state: snapshot.state,
-        lastActivityAt: snapshot.lastActivityAt ?? row.lastActivityAt,
-        lastSyncedAt: new Date(),
-        errorReason: snapshot.errorReason,
-        recoverable: snapshot.recoverable,
-      },
-      include: sandboxInclude,
-    });
-    return toSandboxSummary(updated);
-  } catch (err) {
-    throw wrapDaytonaError(err, "Failed to sync sandbox state from Daytona");
-  }
 }
 
 async function getSandboxRowOrThrow(id: string) {
@@ -171,87 +142,92 @@ async function getSandboxRowOrThrow(id: string) {
   return row;
 }
 
-async function applyRemoteSnapshot(
+function requireOpenSandboxRow(row: Pick<AgentSandbox, "provider">): void {
+  if (row.provider !== OPENSANDBOX_PROVIDER) {
+    throw new AgentBackendError(`Unsupported sandbox provider: ${row.provider}`);
+  }
+}
+
+async function applySnapshot(
   row: Prisma.AgentSandboxGetPayload<{ include: typeof sandboxInclude }>,
-  remote: Sandbox,
+  snapshot: SandboxInfoSnapshot,
 ): Promise<SandboxSummaryDto> {
-  const snapshot = snapshotFromSandbox(remote);
   const updated = await prisma.agentSandbox.update({
     where: { id: row.id },
     data: {
       state: snapshot.state,
-      lastActivityAt: snapshot.lastActivityAt ?? row.lastActivityAt,
       lastSyncedAt: new Date(),
       errorReason: snapshot.errorReason,
-      recoverable: snapshot.recoverable,
+      recoverable: null,
     },
     include: sandboxInclude,
   });
   return toSandboxSummary(updated);
 }
 
-async function runDaytonaLifecycleAction(
-  id: string,
-  action: (remote: Sandbox) => Promise<void>,
+export async function syncSandboxFromProvider(
+  sandboxRowId: string,
 ): Promise<SandboxSummaryDto> {
-  const row = await getSandboxRowOrThrow(id);
-  if (row.provider !== DAYTONA_PROVIDER) {
-    throw new AgentBackendError(`Unsupported sandbox provider: ${row.provider}`);
-  }
+  const row = await prisma.agentSandbox.findUnique({
+    where: { id: sandboxRowId },
+    include: sandboxInclude,
+  });
+  if (!row) throw new AgentBackendError(`Sandbox not found: ${sandboxRowId}`);
+  requireOpenSandboxRow(row);
+
   try {
-    const remote = await fetchDaytonaSandbox(row.providerSandboxId);
-    await action(remote);
-    const refreshed = await fetchDaytonaSandbox(row.providerSandboxId);
-    return applyRemoteSnapshot(row, refreshed);
+    const snapshot = await getOpenSandboxTransport().getInfo(row.providerSandboxId);
+    return await applySnapshot(row, snapshot);
   } catch (err) {
-    throw wrapDaytonaError(err, `Sandbox ${id} lifecycle action failed`);
+    throw wrapOpenSandboxError(err, "Failed to sync sandbox state from OpenSandbox");
   }
 }
 
-export function stopSandbox(id: string): Promise<SandboxSummaryDto> {
-  return runDaytonaLifecycleAction(id, async (remote) => {
-    if (remote.state === "started") {
-      await remote.stop(90);
-    }
-  });
+/** Stop = pause the sandbox (OpenSandbox has no separate stop primitive). */
+export async function stopSandbox(id: string): Promise<SandboxSummaryDto> {
+  const row = await getSandboxRowOrThrow(id);
+  requireOpenSandboxRow(row);
+  try {
+    const transport = getOpenSandboxTransport();
+    const info = await transport.getInfo(row.providerSandboxId);
+    if (info.state === "started") await transport.pause(row.providerSandboxId);
+    return await applySnapshot(row, await transport.getInfo(row.providerSandboxId));
+  } catch (err) {
+    throw wrapOpenSandboxError(err, `Sandbox ${id} stop failed`);
+  }
 }
 
-export function startSandbox(id: string): Promise<SandboxSummaryDto> {
-  return runDaytonaLifecycleAction(id, async (remote) => {
-    if (remote.state !== "started") {
-      await remote.start(90);
-      await remote.refreshActivity();
-    }
-  });
+/** Start = resume a paused sandbox. */
+export async function startSandbox(id: string): Promise<SandboxSummaryDto> {
+  const row = await getSandboxRowOrThrow(id);
+  requireOpenSandboxRow(row);
+  try {
+    const transport = getOpenSandboxTransport();
+    const info = await transport.getInfo(row.providerSandboxId);
+    if (info.state === "stopped") await transport.resume(row.providerSandboxId);
+    return await applySnapshot(row, await transport.getInfo(row.providerSandboxId));
+  } catch (err) {
+    throw wrapOpenSandboxError(err, `Sandbox ${id} start failed`);
+  }
 }
 
+/** Compatibility alias: OpenSandbox archive is represented by a durable pause. */
 export function archiveSandbox(id: string): Promise<SandboxSummaryDto> {
-  return runDaytonaLifecycleAction(id, async (remote) => {
-    if (remote.state === "started") {
-      await remote.stop(90);
-    }
-    await remote.archive();
-  });
+  return stopSandbox(id);
 }
 
+/** Compatibility alias: recovering a paused sandbox resumes it. */
 export function recoverSandbox(id: string): Promise<SandboxSummaryDto> {
-  return runDaytonaLifecycleAction(id, async (remote) => {
-    if (remote.state === "error" && remote.recoverable) {
-      await remote.recover(90);
-    }
-  });
+  return startSandbox(id);
 }
 
 export async function deleteSandbox(id: string): Promise<void> {
   const row = await getSandboxRowOrThrow(id);
-  if (row.provider !== DAYTONA_PROVIDER) {
-    throw new AgentBackendError(`Unsupported sandbox provider: ${row.provider}`);
-  }
+  requireOpenSandboxRow(row);
   try {
-    const remote = await fetchDaytonaSandbox(row.providerSandboxId);
-    await remote.delete(90);
+    await getOpenSandboxTransport().kill(row.providerSandboxId);
   } catch (err) {
-    throw wrapDaytonaError(err, `Failed to delete sandbox ${id}`);
+    throw wrapOpenSandboxError(err, `Failed to delete sandbox ${id}`);
   }
 
   await clearSandboxSessionPointers(row);
@@ -299,6 +275,7 @@ export async function listSandboxes(
   query: ListSandboxesQuery,
 ): Promise<{ sandboxes: SandboxSummaryDto[]; total: number }> {
   const where: Prisma.AgentSandboxWhereInput = {
+    retiredAt: null,
     ...(query.agentId ? { agentId: query.agentId } : {}),
     ...(query.surface ? { surface: query.surface } : {}),
     state: query.state ?? { not: "deleted" },
@@ -347,21 +324,22 @@ export async function getSandboxForThread(
 }
 
 /**
- * Backfill `AgentSandbox` rows for existing Daytona session ids on conversations/threads.
+ * Backfill `AgentSandbox` rows for existing OpenSandbox session ids on
+ * conversations/threads.
  */
 export async function backfillSandboxesFromSessions(): Promise<number> {
   let created = 0;
   const conversations = await prisma.chatConversation.findMany({
-    where: { sessionId: { startsWith: `${DAYTONA_PROVIDER}:` } },
+    where: { sessionId: { startsWith: `${OPENSANDBOX_PROVIDER}:` } },
     select: { id: true, agentId: true, sessionId: true },
   });
   for (const conv of conversations) {
     if (!conv.sessionId) continue;
-    const ref = parseDaytonaSessionId(conv.sessionId);
+    const ref = parseOpenSandboxSessionId(conv.sessionId);
     const existing = await prisma.agentSandbox.findUnique({
       where: {
         provider_providerSandboxId: {
-          provider: DAYTONA_PROVIDER,
+          provider: OPENSANDBOX_PROVIDER,
           providerSandboxId: ref.sandboxId,
         },
       },
@@ -384,16 +362,16 @@ export async function backfillSandboxesFromSessions(): Promise<number> {
   }
 
   const threads = await prisma.emailThread.findMany({
-    where: { sessionId: { startsWith: `${DAYTONA_PROVIDER}:` } },
+    where: { sessionId: { startsWith: `${OPENSANDBOX_PROVIDER}:` } },
     select: { id: true, agentId: true, sessionId: true },
   });
   for (const thread of threads) {
     if (!thread.sessionId) continue;
-    const ref = parseDaytonaSessionId(thread.sessionId);
+    const ref = parseOpenSandboxSessionId(thread.sessionId);
     const existing = await prisma.agentSandbox.findUnique({
       where: {
         provider_providerSandboxId: {
-          provider: DAYTONA_PROVIDER,
+          provider: OPENSANDBOX_PROVIDER,
           providerSandboxId: ref.sandboxId,
         },
       },
@@ -426,21 +404,10 @@ export type ReconcileSandboxesResult = {
 };
 
 /**
- * Sync provider state, stop long-idle sandboxes, and clear dead session pointers.
+ * Sync provider state, pause long-idle sandboxes, and clear dead session
+ * pointers for sandboxes the provider no longer has.
  */
 export async function reconcileSandboxes(): Promise<ReconcileSandboxesResult> {
-  const apiKey = await getDaytonaApiKey();
-  if (!apiKey) {
-    log.debug("sandboxes: reconcile skipped (no Daytona API key)");
-    return {
-      synced: 0,
-      staleStopped: 0,
-      orphansStopped: 0,
-      pointersCleared: 0,
-      errors: 0,
-    };
-  }
-
   const result: ReconcileSandboxesResult = {
     synced: 0,
     staleStopped: 0,
@@ -449,22 +416,28 @@ export async function reconcileSandboxes(): Promise<ReconcileSandboxesResult> {
     errors: 0,
   };
 
-  const staleBefore = new Date(Date.now() - STALE_SANDBOX_INACTIVITY_MS);
-  const orphanBefore = new Date(Date.now() - ORPHAN_SANDBOX_GRACE_MS);
+  if (!isOpenSandboxConfigured()) {
+    log.debug("sandboxes: reconcile skipped (OpenSandbox not configured)");
+    return result;
+  }
+  const transport = getOpenSandboxTransport();
+
+  const now = new Date();
+  const orphanBefore = new Date(now.getTime() - ORPHAN_SANDBOX_GRACE_MS);
 
   const rows = await prisma.agentSandbox.findMany({
-    where: { provider: DAYTONA_PROVIDER, state: { not: "deleted" } },
+    where: { provider: OPENSANDBOX_PROVIDER, state: { not: "deleted" } },
     include: sandboxInclude,
   });
 
   for (const row of rows) {
     try {
-      let remote: Sandbox;
+      let snapshot: SandboxInfoSnapshot;
       try {
-        remote = await fetchDaytonaSandbox(row.providerSandboxId);
+        snapshot = await transport.getInfo(row.providerSandboxId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (/not found|404/i.test(message)) {
+        if (/not found|404|deleted/i.test(message)) {
           await clearSandboxSessionPointers(row);
           await prisma.agentSandbox.update({
             where: { id: row.id },
@@ -476,21 +449,38 @@ export async function reconcileSandboxes(): Promise<ReconcileSandboxesResult> {
         throw err;
       }
 
-      await applyRemoteSnapshot(row, remote);
+      const isOrphan = !row.conversationId && !row.threadId;
+      const isStale = isPastAutoStopInterval(
+        row.lastActivityAt,
+        now,
+        parseLifecyclePolicy(row.lifecyclePolicy),
+      );
+      const action = planReconcileAction({
+        state: snapshot.state,
+        isOrphan,
+        isStale,
+        orphanExpired: row.createdAt < orphanBefore,
+      });
+
+      if (action === "clear") {
+        await clearSandboxSessionPointers(row);
+        await prisma.agentSandbox.update({
+          where: { id: row.id },
+          data: { state: "deleted", lastSyncedAt: new Date() },
+        });
+        result.pointersCleared += 1;
+        continue;
+      }
+
+      await applySnapshot(row, snapshot);
       result.synced += 1;
 
-      const isOrphan = !row.conversationId && !row.threadId;
-      const isStale = row.lastActivityAt < staleBefore;
-      const shouldStop =
-        remote.state === "started" &&
-        (isStale || (isOrphan && row.createdAt < orphanBefore));
-
-      if (shouldStop) {
-        await remote.stop(60);
-        await applyRemoteSnapshot(row, await fetchDaytonaSandbox(row.providerSandboxId));
+      if (action === "pause") {
+        await transport.pause(row.providerSandboxId);
+        await applySnapshot(row, await transport.getInfo(row.providerSandboxId));
         if (isOrphan) result.orphansStopped += 1;
         else result.staleStopped += 1;
-        log.info("sandboxes: reconcile stopped idle sandbox", {
+        log.info("sandboxes: reconcile paused idle sandbox", {
           sandboxId: row.id,
           providerSandboxId: row.providerSandboxId,
           isOrphan,
@@ -511,16 +501,16 @@ export async function reconcileSandboxes(): Promise<ReconcileSandboxesResult> {
 }
 
 /**
- * List sandboxes from Daytona that carry our labels but lack a DB row (orphans).
+ * List sandboxes in OpenSandbox that carry our label but lack a DB row (orphans).
  */
-export async function listUnregisteredDaytonaSandboxes(): Promise<
+export async function listUnregisteredSandboxes(): Promise<
   Array<{ providerSandboxId: string; state: string; agentId?: string }>
 > {
-  const daytona = await createDaytonaClient();
+  if (!isOpenSandboxConfigured()) return [];
   const known = new Set(
     (
       await prisma.agentSandbox.findMany({
-        where: { provider: DAYTONA_PROVIDER },
+        where: { provider: OPENSANDBOX_PROVIDER },
         select: { providerSandboxId: true },
       })
     ).map((r) => r.providerSandboxId),
@@ -528,14 +518,13 @@ export async function listUnregisteredDaytonaSandboxes(): Promise<
 
   const orphans: Array<{ providerSandboxId: string; state: string; agentId?: string }> =
     [];
-  for await (const item of daytona.list()) {
-    const labels = item.labels ?? {};
-    if (!labels["open-agents-agent-id"]) continue;
+  const items = await getOpenSandboxTransport().listWithLabel(LABEL_AGENT_ID);
+  for (const item of items) {
     if (known.has(item.id)) continue;
     orphans.push({
       providerSandboxId: item.id,
-      state: item.state ?? "unknown",
-      agentId: labels["open-agents-agent-id"],
+      state: item.state,
+      agentId: item.metadata[LABEL_AGENT_ID],
     });
   }
   return orphans;

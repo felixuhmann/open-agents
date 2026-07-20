@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Where the code that backs a tool actually executes. `managed` is the
- * Daytona sandbox; `platform` is our backend through host-side Pi bindings.
+ * OpenSandbox sandbox; `platform` is our backend through host-side Pi bindings.
  *
  * External (user-supplied) MCP servers are tracked separately on
  * `McpServer` library entries — attached per agent via `AgentMcpBinding`, not tool catalog rows.

@@ -70,11 +70,11 @@ This catalog summarizes the MCP tools exposed by `apps/api/src/mcp/controlPlane/
 - `secrets_delete`: Delete a service credential.
 - `mcp_connection_info`: Get MCP URL and OAuth metadata for connecting clients.
 - `mcp_connection_tokens_list`, `mcp_connection_tokens_create`, `mcp_connection_tokens_revoke`: Manual bearer token management.
-- `sandboxes_list`: List Daytona sandboxes with filters.
+- `sandboxes_list`: List OpenSandbox sandboxes with filters.
 - `sandboxes_orphans`: List provider sandboxes not registered in the DB.
 - `sandboxes_reconcile`: Run lifecycle reconciliation.
 - `sandboxes_by_conversation`, `sandboxes_by_thread`: Find sandbox metadata for a conversation or email thread.
-- `sandboxes_get`, `sandboxes_sync`, `sandboxes_stop`, `sandboxes_start`, `sandboxes_archive`, `sandboxes_recover`, `sandboxes_delete`: Sandbox lifecycle operations. Treat stop/archive/delete as destructive.
+- `sandboxes_get`, `sandboxes_sync`, `sandboxes_stop`, `sandboxes_start`, `sandboxes_delete`: Sandbox lifecycle operations. OpenSandbox maps stop to pause, start to resume, and delete to kill. Treat stop/delete as destructive.
 
 ## Issues, Analytics, Health
 

@@ -1,8 +1,8 @@
 import type { SkillMaterializationManifest } from "@open-agents/types";
 
-/** Backend interface used by services/jobs to drive Daytona sandboxes. */
+/** Backend interface used by services/jobs to drive OpenSandbox sandboxes. */
 export interface AgentBackend {
-  runtime: "daytona";
+  runtime: "opensandbox";
   createSession(input: CreateSessionInput): Promise<AgentSession>;
   mountSessionResources(
     sessionId: string,
@@ -22,7 +22,7 @@ export type AgentSession = {
   id: string;
   /** Present when the backend unpacked agent skill bundles into the sandbox. */
   skillsManifest?: SkillMaterializationManifest;
-  /** Daytona provider sandbox id (for run/issue observability). */
+  /** OpenSandbox provider sandbox id (for run/issue observability). */
   providerSandboxId?: string;
   workspaceDir?: string;
 };
@@ -40,7 +40,7 @@ export type SessionResource = {
   bytes?: Uint8Array;
 };
 
-/** When set, Daytona lifecycle transitions are appended to this run's event log. */
+/** When set, sandbox lifecycle transitions are appended to this run's event log. */
 export type RunObservabilityContext = {
   runId: string;
 };
@@ -52,9 +52,9 @@ export type CreateSessionInput = {
   resources?: SessionResource[];
   /** Pinned published version whose skill bindings should be materialized. */
   agentVersionId?: string;
-  /** Link sandbox metadata to a chat conversation (Daytona). */
+  /** Link sandbox metadata to a chat conversation. */
   conversationId?: string;
-  /** Link sandbox metadata to an email thread (Daytona). */
+  /** Link sandbox metadata to an email thread. */
   threadId?: string;
   surface?: "chat" | "email";
   observability?: RunObservabilityContext;

@@ -1,37 +1,35 @@
-import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
-import { DaytonaAgentBackend } from "./daytona.js";
+import { OpenSandboxAgentBackend } from "./opensandbox.js";
+import {
+  getOpenSandboxRuntimeConfig,
+  getOpenSandboxTransport,
+} from "./opensandbox/runtime.js";
 import type { AgentBackend } from "./types.js";
 
 /**
- * Lazy AgentBackend factory. The Daytona API key lives in the encrypted
- * Secret store, so the backend can only be constructed after setup has
- * populated it. Callers go through `getAgentBackend()` and get an error if
- * the deployment isn't configured yet.
+ * Lazy AgentBackend factory. The OpenSandbox endpoint is deployment env
+ * configuration (`OPENSANDBOX_BASE_URL` / `OPENSANDBOX_API_KEY`), not a
+ * setup-wizard credential. `getAgentBackend()` throws a clear error when the
+ * runtime is not configured yet.
  *
- * The underlying SDK client is stateless apart from the API key, so a single
- * instance is safe to share. We rebuild it after credential rotation.
+ * The transport is stateless apart from the endpoint config, so a single
+ * backend instance is safe to share; it rebuilds when the endpoint changes.
  */
 
 let cached: AgentBackend | null = null;
-let cachedDaytonaApiKey: string | null = null;
+let cachedBaseUrl: string | null = null;
 
-export async function getAgentBackend(): Promise<AgentBackend> {
-  const daytonaApiKey = await getServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY);
-  if (!daytonaApiKey) {
-    throw new Error("Daytona API key is not configured. Complete setup at /setup.");
-  }
-
-  if (cached && cachedDaytonaApiKey === daytonaApiKey) {
+export function getAgentBackend(): AgentBackend {
+  const runtime = getOpenSandboxRuntimeConfig();
+  if (cached && cachedBaseUrl === runtime.baseUrl) {
     return cached;
   }
-
-  cached = new DaytonaAgentBackend(daytonaApiKey);
-  cachedDaytonaApiKey = daytonaApiKey;
+  cached = new OpenSandboxAgentBackend(getOpenSandboxTransport(), runtime);
+  cachedBaseUrl = runtime.baseUrl;
   return cached;
 }
 
 /** Force the next `getAgentBackend()` call to rebuild the singleton. */
 export function resetAgentBackend(): void {
   cached = null;
-  cachedDaytonaApiKey = null;
+  cachedBaseUrl = null;
 }

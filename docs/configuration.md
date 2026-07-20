@@ -7,7 +7,7 @@ Configuration is split in two:
    by Zod in [`apps/api/src/config.ts`](../apps/api/src/config.ts) at
    process start; missing/malformed values **throw** so a healthy
    `pnpm dev` startup is itself proof your env is sane.
-2. **Service credentials and per-tool secrets** — Daytona API key,
+2. **Service credentials and per-tool secrets** —
    model-provider keys, Mailgun key/domain/signing key, and any per-tool secrets. Stored
    AES-256-GCM encrypted in the `Secret` table; managed entirely through
    the web UI (`/setup` wizard the first time, then `/settings/secrets`).
@@ -42,6 +42,29 @@ template for the bootstrap layer.
 | `BETTER_AUTH_SECRET`    | yes      | 32+ chars. better-auth session-cookie signing secret. `openssl rand -hex 32`.                                                                               |
 | `UPLOAD_SIGNING_SECRET` | yes      | 32+ chars. HMAC secret reserved for signed upload URLs. `openssl rand -hex 32`.                                                                             |
 
+### Sandbox runtime (OpenSandbox)
+
+The sandbox runtime is self-hosted OpenSandbox Server + Kata Containers, run as
+a dedicated `opensandbox` Docker Compose service. Its endpoint and sandbox
+limits are **deployment env configuration**, not service secrets.
+`getAgentBackend()` reads these to construct the `OpenSandboxAgentBackend`.
+
+| Variable               | Required   | Default                               | Notes                                                                                            |
+| ---------------------- | ---------- | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `OPENSANDBOX_BASE_URL` | yes        | —                                     | Base URL of the self-hosted OpenSandbox Server (the `opensandbox` service).                      |
+| `OPENSANDBOX_API_KEY`  | production | —                                     | API key shared with the OpenSandbox Server; required by the Compose bundle.                      |
+| `OPENSANDBOX_IMAGE`    | yes        | `open-agents-opensandbox-guest:1.0.0` | Pinned guest OCI image used for every sandbox, built from `docker/opensandbox-guest.Dockerfile`. |
+
+| `OPENSANDBOX_CPU_LIMIT` | no | — | Per-sandbox CPU limit. |
+| `OPENSANDBOX_MEMORY_LIMIT` | no | — | Per-sandbox memory limit. |
+
+In the Docker Compose stack the OpenSandbox Server image is set with
+`OPENSANDBOX_SERVER_IMAGE`; `docker/opensandbox/config.toml` selects
+`secure_runtime.type = "kata"` and Docker runtime `kata-runtime`. Only the
+`opensandbox` service receives the host Docker socket; the Node `app` never does. See
+[`deployment.md`](deployment.md) for the compose service and Kata host
+prerequisite.
+
 ### Optional overrides
 
 | Variable                              | Default                   | Notes                                                                      |
@@ -58,12 +81,12 @@ Captured by the first-run wizard at `/setup` and rotatable later from
 `/settings/secrets`. They are persisted encrypted in the `Secret` table with
 `scope = "service"`. Service code reads them through
 [`apps/api/src/secrets/service.ts`](../apps/api/src/secrets/service.ts);
-the Daytona backend, model-provider key resolver, and Mailgun client read
-fresh values after rotation.
+the model-provider key resolver and Mailgun client read
+fresh values after rotation. The OpenSandbox backend is configured through env
+(see [Sandbox runtime](#sandbox-runtime-opensandbox) above), not a secret.
 
 | Key in `Secret.key`   | Used by                                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `daytona_api_key`     | [`apps/api/src/agent-backend/instance.ts`](../apps/api/src/agent-backend/instance.ts) (sandbox runtime).    |
 | `anthropic_api_key`   | [`apps/api/src/services/piModel.ts`](../apps/api/src/services/piModel.ts) (Claude model provider).          |
 | `openai_api_key`      | [`apps/api/src/services/piModel.ts`](../apps/api/src/services/piModel.ts) (OpenAI model provider).          |
 | `openrouter_api_key`  | [`apps/api/src/services/piModel.ts`](../apps/api/src/services/piModel.ts) (OpenRouter model provider).      |

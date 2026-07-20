@@ -13,7 +13,7 @@ surface (catch-all Mailgun route → recipient `<localPart>@<MAILGUN_DOMAIN>`).
 The runtime is split across two apps in a Turborepo monorepo:
 
 - [`apps/api`](apps/api/) — Hono backend + better-auth + pg-boss workers +
-  Daytona sandbox orchestration, platform tools, third-party MCP, and Mailgun.
+  OpenSandbox sandbox orchestration, platform tools, third-party MCP, and Mailgun.
 - [`apps/web`](apps/web/) — Vite + React + TanStack Query + better-auth/react
   SPA. The single control-plane UI for the deployment.
 
@@ -29,7 +29,7 @@ Shared code lives in [`packages/`](packages/):
 
 Agent definitions (system prompt, tools, skills, `mcp_servers`) are stored
 in **our** database. Publishing freezes the current draft into an
-`AgentVersion` snapshot; Daytona is the runtime and Postgres is the source
+`AgentVersion` snapshot; OpenSandbox is the runtime and Postgres is the source
 of truth.
 
 ## High-level data flow
@@ -41,7 +41,7 @@ Browser (SPA) ─────────────▶ Hono /api/*  ──▶ 
        │                                  │
        │                                  ▼
        │                          run-agent worker
-       │                          ├─ Daytona sandbox resources
+       │                          ├─ OpenSandbox sandbox resources
        │                          ├─ Pi model/tool loop
        │                          └─ writes RunEvent rows + NOTIFY
        │
@@ -54,7 +54,7 @@ Mailgun ──▶ POST /mailgun/inbound  ──▶ resolve agent by recipient �
 ```
 
 Web chat is durable: the HTTP `POST /api/conversations/:id/messages` only
-enqueues a job; the worker streams Daytona/Pi events into the `RunEvent`
+enqueues a job; the worker streams OpenSandbox/Pi events into the `RunEvent`
 append-only table; the SSE handler replays from `Last-Event-ID` and
 switches to live `LISTEN/NOTIFY`. If the browser drops, the run keeps
 going and the page picks up where it left off on reconnect.
@@ -137,13 +137,13 @@ recipient address against `Agent.inboundLocalPart`.
 Every capability the agent can call is a row in the `Tool` catalog,
 discriminated by `runtime`:
 
-- `managed` — the Daytona sandbox executes the tool (`bash`, `read`, `write`,
+- `managed` — the OpenSandbox sandbox executes the tool (`bash`, `read`, `write`,
   `edit`, `glob`, `grep`, `web_fetch`, `web_search`).
 - `platform` — this backend executes the tool through a `PlatformHandler` registered in
   [`apps/api/src/mcp/platform/index.ts`](apps/api/src/mcp/platform/index.ts).
 
 Both runtimes share one binding table (`AgentToolBinding`) and one UI
-picker. Daytona translates bindings to Pi tools at run time; the rest of
+picker. OpenSandbox translates bindings to Pi tools at run time; the rest of
 the codebase just sees `Tool` + `AgentToolBinding`.
 
 External (user-supplied) MCP servers stay separate as
@@ -177,7 +177,7 @@ export const memoryTools = [
 Append the handler to `PLATFORM_HANDLERS`. A boot-time
 [`seedToolCatalog()`](apps/api/src/services/seedToolCatalog.ts) call
 upserts a `Tool` row (with `runtime = platform`) and also seeds the
-Daytona-managed sandbox tool rows. Don't insert `Tool` rows by hand.
+OpenSandbox-managed sandbox tool rows. Do not insert `Tool` rows by hand.
 
 ### Database (Prisma 7)
 
@@ -253,22 +253,25 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 
 ## Common gotchas
 
-- **New attachments mount into existing Daytona sandboxes** via
+- **New attachments mount into existing OpenSandbox sandboxes** via
   `mountSessionResources`; don't rotate sessions just to add files.
-- **Service credentials are not env vars**: Daytona / model-provider / Mailgun keys live
+- **Service credentials are not env vars**: model-provider / Mailgun keys live
   AES-GCM encrypted in the `Secret` table and are read via
   [`secrets/service.ts`](apps/api/src/secrets/service.ts). The only
   bootstrap envs are `DATABASE_URL`, `SECRET_ENCRYPTION_KEY`,
   `BETTER_AUTH_SECRET`, `UPLOAD_SIGNING_SECRET`,
-  `WEB_BASE_URL`, `PUBLIC_BASE_URL` (see `apps/api/.env.example`).
+  `WEB_BASE_URL`, `PUBLIC_BASE_URL` (see `apps/api/.env.example`). The
+  **OpenSandbox sandbox runtime** is separate: its endpoint is deployment env
+  (`OPENSANDBOX_BASE_URL` / `OPENSANDBOX_API_KEY` / `OPENSANDBOX_IMAGE`), not a
+  setup-wizard secret. Only the `opensandbox` Compose service gets the host
+  Docker socket; the Node app never does.
 - **Email and chat never cross-pollinate**: each surface has its own
   thread/conversation table and creates independent backend sessions.
   Don't try to share state between them.
-- **Daytona skills materialize at sandbox creation**: When
-  `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` resolves the
-  sandbox's actual working directory via `resolveSandboxWorkspaceDir` (some
-  TS sandbox images use `/home/daytona` rather than `/workspace`) and
-  unpacks each pinned `AgentSkillBinding` into `<workspaceDir>/.agents/skills/<slug>/`
+- **Skills materialize at sandbox creation**: When OpenSandbox is configured,
+  `OpenSandboxAgentBackend.createSession` uses the deterministic workspace
+  `/workspace` and unpacks each pinned `AgentSkillBinding` into
+  `<workspaceDir>/.agents/skills/<slug>/`
   via [`materializeSkills.ts`](apps/api/src/services/materializeSkills.ts).
   Bundle bytes live on disk under `apps/api/data/skills/` (see
   `SKILL_BUNDLE_DIR`); mount that directory persistently in production.
@@ -288,14 +291,16 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 - **Run attachments use `attach_run_file`**: The Pi loop exposes
   `attach_run_file`, which pulls
   bytes from the sandbox on the orchestrator and stores `AgentAttachment` rows.
-- **Daytona sandbox lifecycle**: First-class metadata lives in the
+- **OpenSandbox sandbox lifecycle**: First-class metadata lives in the
   `AgentSandbox` table (`provider`, `providerSandboxId`, `state`,
   `lastActivityAt`, lifecycle policy JSON, links to agent + conversation/thread).
-  Session ids on conversations/threads remain `daytona:{agentId}:{sandboxId}`.
-  Admins manage sandboxes at `/settings/sandboxes` (`GET/POST /api/sandboxes/*`).
-  A pg-boss `sandbox-reconcile` job (every 6h) syncs provider state, stops stale
-  VMs, and clears pointers when sandboxes are gone. New chat attachments mount into
-  the existing sandbox via `mountSessionResources` (no forced session rotation).
+  Session ids on conversations/threads are `opensandbox:{agentId}:{sandboxId}`.
+  Admins manage sandboxes at `/settings/sandboxes` (`GET/POST /api/sandboxes/*`);
+  stop = pause, start = resume, delete = kill (no archive/recover — OpenSandbox
+  has none). A pg-boss `sandbox-reconcile` job (every 6h) syncs provider state,
+  pauses stale VMs, and clears pointers when sandboxes are gone. New chat
+  attachments mount into the existing sandbox via `mountSessionResources` (no
+  forced session rotation).
 
 ## Local development
 

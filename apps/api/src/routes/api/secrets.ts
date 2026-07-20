@@ -19,7 +19,6 @@ const ALLOWED: ServiceKey[] = [
   SERVICE_KEYS.ANTHROPIC_API_KEY,
   SERVICE_KEYS.OPENAI_API_KEY,
   SERVICE_KEYS.OPENROUTER_API_KEY,
-  SERVICE_KEYS.DAYTONA_API_KEY,
   SERVICE_KEYS.MAILGUN_API_KEY,
   SERVICE_KEYS.MAILGUN_DOMAIN,
   SERVICE_KEYS.MAILGUN_SIGNING_KEY,
@@ -65,8 +64,7 @@ secretsRoutes.put("/:key", async (c) => {
   if (
     key === SERVICE_KEYS.ANTHROPIC_API_KEY ||
     key === SERVICE_KEYS.OPENAI_API_KEY ||
-    key === SERVICE_KEYS.OPENROUTER_API_KEY ||
-    key === SERVICE_KEYS.DAYTONA_API_KEY
+    key === SERVICE_KEYS.OPENROUTER_API_KEY
   ) {
     resetAgentBackend();
   }
@@ -83,8 +81,7 @@ secretsRoutes.delete("/:key", async (c) => {
   if (
     key === SERVICE_KEYS.ANTHROPIC_API_KEY ||
     key === SERVICE_KEYS.OPENAI_API_KEY ||
-    key === SERVICE_KEYS.OPENROUTER_API_KEY ||
-    key === SERVICE_KEYS.DAYTONA_API_KEY
+    key === SERVICE_KEYS.OPENROUTER_API_KEY
   ) {
     resetAgentBackend();
   }

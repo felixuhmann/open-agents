@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-/** Outbound network defaults for Daytona sandboxes (and draft agent config). */
+/** Outbound network defaults for OpenSandbox sandboxes (and draft agent config). */
 export const SandboxNetworkPolicySchema = z.object({
   /** When false, outbound traffic from the sandbox is blocked (`networkBlockAll`). */
   internetEnabled: z.boolean(),
   /**
-   * Comma-separated IPv4 CIDR entries (`host/prefix`, max 10). Used only when
-   * `internetEnabled` is true. Empty means unrestricted egress (subject to org tier).
+   * Comma-separated FQDN or wildcard-domain entries. Used only when
+   * `internetEnabled` is true. Empty means unrestricted public egress; the
+   * platform-level private/metadata deny overlay still applies.
    */
   allowList: z.string(),
   /**

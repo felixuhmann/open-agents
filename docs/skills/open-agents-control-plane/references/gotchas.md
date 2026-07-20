@@ -40,7 +40,6 @@ Service credentials are stored as encrypted secrets, not normal environment vari
 - `anthropic_api_key`
 - `openai_api_key`
 - `openrouter_api_key`
-- `daytona_api_key`
 - `mailgun_api_key`
 - `mailgun_domain`
 - `mailgun_signing_key`
@@ -51,9 +50,9 @@ Use `secrets_list` to check presence. Use `secrets_upsert` only with a user-prov
 
 `toolBindings[].toolId` must use ids from `tools_list`. Do not pass tool names such as `bash` or `memory` as ids unless the catalog actually returns those ids.
 
-Managed tools run in Daytona. Platform tools run on the API host. Third-party MCP servers are separate library entries attached by `mcpServerIds`.
+Managed tools run in the OpenSandbox sandbox. Platform tools run on the API host. Third-party MCP servers are separate library entries attached by `mcpServerIds`.
 
-Uploaded agent skills materialize into Daytona sandboxes when a sandbox is created. Changing skill bindings mid-conversation does not necessarily re-sync an existing sandbox; start a new session or sandbox if the run must see new skill files.
+Uploaded agent skills materialize into OpenSandbox sandboxes when a sandbox is created. Changing skill bindings mid-conversation does not necessarily re-sync an existing sandbox; start a new session or sandbox if the run must see new skill files.
 
 ## Subagent Delegation
 
@@ -100,6 +99,6 @@ Treat these as destructive and require explicit user intent:
 - `settings_delete`
 - `secrets_delete`
 - `mcp_connection_tokens_revoke`
-- sandbox stop, archive, delete
+- sandbox stop, delete
 
 Prefer listing and confirming identifiers before destructive changes.

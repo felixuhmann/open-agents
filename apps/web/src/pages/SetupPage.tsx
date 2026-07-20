@@ -28,7 +28,6 @@ type Form = {
   adminEmail: string;
   adminName: string;
   adminPassword: string;
-  daytonaApiKey: string;
   anthropicApiKey: string;
   openaiApiKey: string;
   openrouterApiKey: string;
@@ -45,7 +44,6 @@ export default function SetupPage({ productName }: { productName: string }) {
     adminEmail: "",
     adminName: "",
     adminPassword: "",
-    daytonaApiKey: "",
     anthropicApiKey: "",
     openaiApiKey: "",
     openrouterApiKey: "",
@@ -64,7 +62,6 @@ export default function SetupPage({ productName }: { productName: string }) {
     try {
       await api("/api/setup", {
         json: {
-          daytonaApiKey: form.daytonaApiKey,
           anthropicApiKey: form.anthropicApiKey || undefined,
           openaiApiKey: form.openaiApiKey || undefined,
           openrouterApiKey: form.openrouterApiKey || undefined,
@@ -154,30 +151,6 @@ export default function SetupPage({ productName }: { productName: string }) {
                   <FieldDescription>
                     At least 8 characters. You can change it later from your account.
                   </FieldDescription>
-                </Field>
-              </FieldSet>
-
-              <FieldSeparator />
-
-              <FieldSet>
-                <FieldLegend>
-                  <KeyIcon
-                    className="mr-1.5 inline size-4 text-muted-foreground"
-                    weight="duotone"
-                  />
-                  Daytona
-                </FieldLegend>
-                <FieldDescription>
-                  Required. Used to create and resume agent sandboxes.
-                </FieldDescription>
-                <Field>
-                  <FieldLabel htmlFor="daytona-key">API key</FieldLabel>
-                  <Input
-                    id="daytona-key"
-                    required
-                    value={form.daytonaApiKey}
-                    onChange={update("daytonaApiKey")}
-                  />
                 </Field>
               </FieldSet>
 

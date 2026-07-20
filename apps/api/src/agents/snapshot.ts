@@ -52,7 +52,7 @@ export function resolveRuntimeSubagents(
 
 /**
  * Build a provider-neutral config snapshot from the agent's current draft
- * bindings. Daytona is the only runtime backend.
+ * bindings. OpenSandbox is the only runtime backend.
  */
 export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnapshotType {
   const toolBindings = agent.toolBindings.map((b) => ({
@@ -102,7 +102,7 @@ export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnaps
         agentVersionId: b.subagent.currentVersionId,
       };
     }),
-    runtime: { backend: "daytona", sandbox },
+    runtime: { backend: "opensandbox", sandbox },
   });
 }
 

@@ -169,7 +169,7 @@ function AgentContextCard({
           <>
             <Separator />
             <div className="flex flex-col gap-2">
-              <SectionLabel>Daytona sandboxes ({session.sandboxes.length})</SectionLabel>
+              <SectionLabel>Sandboxes ({session.sandboxes.length})</SectionLabel>
               <div className="space-y-2">
                 {session.sandboxes.map((sb) => (
                   <div

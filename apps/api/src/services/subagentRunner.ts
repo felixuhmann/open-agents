@@ -9,7 +9,7 @@ import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
-import { truncateText } from "./daytonaLimits.js";
+import { truncateText } from "./sandboxLimits.js";
 import { summarizeToolResultForRunLog } from "./runObservability.js";
 import {
   finalizeAgentRunCancellation,
@@ -154,7 +154,7 @@ function appendFileSummary(
 }
 
 /**
- * Execute one delegated subagent turn. Creates a fresh, isolated Daytona
+ * Execute one delegated subagent turn. Creates a fresh, isolated OpenSandbox
  * session for the callee (pinned to its frozen version), records a child
  * `AgentRun` (surface = `subagent`, linked to the parent), streams the turn
  * into that run's own event log, and returns the final text to the caller.
@@ -215,7 +215,7 @@ export async function runSubagent(
     return [];
   });
 
-  const backend = await getAgentBackend();
+  const backend = getAgentBackend();
   let session;
   try {
     session = await backend.createSession({
@@ -253,7 +253,7 @@ export async function runSubagent(
       type: "run.started",
       runId: childRun.id,
       sessionId: session.id,
-      backend: "daytona",
+      backend: "opensandbox",
       ...(session.providerSandboxId
         ? { providerSandboxId: session.providerSandboxId }
         : {}),

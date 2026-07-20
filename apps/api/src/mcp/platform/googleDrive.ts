@@ -605,7 +605,7 @@ export const googleDriveHandler: PlatformHandler = {
     defineTool({
       name: "google_drive_upload_file",
       description:
-        "Upload an existing file from the active Daytona sandbox into the configured AI folder without converting it. Omit name to use the sandbox filename and parentId to write into the configured root. This always creates a new Drive file.",
+        "Upload an existing file from the active OpenSandbox sandbox into the configured AI folder without converting it. Omit name to use the sandbox filename and parentId to write into the configured root. This always creates a new Drive file.",
       input: z.object({
         path: z.string().trim().min(1),
         name: z.string().trim().min(1).max(255).optional(),
@@ -614,7 +614,9 @@ export const googleDriveHandler: PlatformHandler = {
       }),
       handler: async (input, ctx) => {
         if (!ctx.sandbox) {
-          throw new Error("google_drive_upload_file requires an active Daytona sandbox");
+          throw new Error(
+            "google_drive_upload_file requires an active OpenSandbox sandbox",
+          );
         }
         const config = DriveConfig.parse(ctx.configJson);
         const name = input.name ?? path.basename(input.path);

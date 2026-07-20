@@ -22,7 +22,7 @@ import { buildAgentConfigSnapshot } from "./snapshot.js";
  * jobs. Includes everything needed to resolve a run end-to-end.
  *
  * `toolBindings` is the only binding table after the unified-catalog
- * change — both managed (Daytona sandbox) and platform bindings live here,
+ * change — both managed (OpenSandbox sandbox) and platform bindings live here,
  * discriminated by `tool.runtime`.
  */
 export type HydratedAgent = Agent & {

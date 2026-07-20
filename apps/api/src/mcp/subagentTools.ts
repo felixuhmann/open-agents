@@ -3,7 +3,7 @@ import { Type, type Static, type TSchema } from "@earendil-works/pi-ai";
 import type { HydratedAgent } from "../agents/service.js";
 import { resolveRuntimeSubagents, type VersionedAgent } from "../agents/snapshot.js";
 import type { AgentRunContext } from "../agent-backend/types.js";
-import { MAX_TOOL_OUTPUT_CHARS, truncateText } from "../services/daytonaLimits.js";
+import { MAX_TOOL_OUTPUT_CHARS, truncateText } from "../services/sandboxLimits.js";
 
 /**
  * Runtime context needed to execute a `run_subagent` call: which run is
@@ -92,7 +92,7 @@ export function buildSubagentPiTools(
         );
       }
 
-      // Deferred import breaks the daytona <-> runStream module cycle.
+      // Deferred import breaks the opensandbox <-> runStream module cycle.
       const { runSubagent } = await import("../services/subagentRunner.js");
       const result = await runSubagent({
         parent: {

@@ -8,7 +8,7 @@ import type { ResolvedSession } from "./sessions.js";
 export type WorkflowSessionScope = { conversationId: string } | { emailThreadId: string };
 
 /**
- * Resolve the Daytona session for one workflow step. Sessions are keyed per
+ * Resolve the OpenSandbox session for one workflow step. Sessions are keyed per
  * (workflow conversation or email thread, agent) so each agent keeps its own
  * sandbox + memory across turns.
  */
@@ -19,7 +19,7 @@ export async function resolveWorkflowStepSession(
   resources: SessionResource[],
   observabilityRunId: string,
 ): Promise<ResolvedSession> {
-  const backend = await getAgentBackend();
+  const backend = getAgentBackend();
 
   const existing =
     "conversationId" in scope

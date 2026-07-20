@@ -51,8 +51,9 @@ export type AgentConfigSubagentBinding = z.infer<typeof AgentConfigSubagentBindi
 export type AgentConfigThirdPartyMcp = AgentConfigMcpServer;
 
 export const AgentConfigRuntime = z.object({
-  backend: z.literal("daytona"),
-  /** Frozen sandbox security policy for Daytona runs. */
+  /** Historical snapshots may name a retired provider; new publishes use OpenSandbox. */
+  backend: z.string().min(1),
+  /** Frozen sandbox security policy for OpenSandbox runs. */
   sandbox: z
     .object({
       network: SandboxNetworkPolicySchema,

@@ -21,7 +21,6 @@ export const SERVICE_KEYS = {
   ANTHROPIC_API_KEY: "anthropic_api_key",
   OPENAI_API_KEY: "openai_api_key",
   OPENROUTER_API_KEY: "openrouter_api_key",
-  DAYTONA_API_KEY: "daytona_api_key",
   MAILGUN_API_KEY: "mailgun_api_key",
   MAILGUN_DOMAIN: "mailgun_domain",
   MAILGUN_SIGNING_KEY: "mailgun_signing_key",
@@ -154,12 +153,7 @@ export async function deleteToolSecrets(bindingId: string): Promise<void> {
   });
 }
 
-/** Whether the deployment has any service-credential rows yet. */
-export async function isServiceSetupComplete(): Promise<boolean> {
-  const required: ServiceKey[] = [SERVICE_KEYS.DAYTONA_API_KEY];
-  for (const k of required) {
-    const v = await getServiceSecret(k);
-    if (!v) return false;
-  }
+/** Setup completion is user-based now that runtime config lives in env. */
+export function isServiceSetupComplete(): boolean {
   return true;
 }

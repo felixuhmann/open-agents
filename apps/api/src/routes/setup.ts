@@ -19,7 +19,6 @@ export const SETUP_PREFIX = "/api/setup";
 export const setupRoutes = new Hono<{ Variables: AppVariables }>();
 
 const SetupBody = z.object({
-  daytonaApiKey: z.string().min(1),
   anthropicApiKey: z.string().optional(),
   openaiApiKey: z.string().optional(),
   openrouterApiKey: z.string().optional(),
@@ -40,15 +39,14 @@ const SetupBody = z.object({
  */
 setupRoutes.get("/status", async (c) => {
   const userCount = await prisma.user.count();
-  const complete = (await isServiceSetupComplete()) && userCount > 0;
+  const complete = isServiceSetupComplete() && userCount > 0;
   return c.json({ complete, userCount });
 });
 
 /**
- * One-shot deployment bootstrap. Creates the first admin user, persists
- * Daytona, model-provider, and Mailgun service credentials encrypted in
- * Postgres, and resets the in-process backend so subsequent calls pick up
- * the new key.
+ * One-shot deployment bootstrap. Creates the first admin user and persists
+ * model-provider and Mailgun service credentials encrypted in Postgres. The
+ * OpenSandbox sandbox runtime is configured via deployment env, not here.
  *
  * Refuses to run a second time once any user exists — rotate values via
  * the admin Settings UI (`/api/secrets`) instead.
@@ -68,7 +66,6 @@ setupRoutes.post("/", async (c) => {
     role: "admin",
   });
 
-  await setServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY, body.daytonaApiKey);
   if (body.anthropicApiKey) {
     await setServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY, body.anthropicApiKey);
   }

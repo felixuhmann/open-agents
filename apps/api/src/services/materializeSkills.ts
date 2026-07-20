@@ -5,7 +5,8 @@ import type {
 } from "@open-agents/types";
 import yauzl from "yauzl";
 import type { HydratedAgent } from "../agents/service.js";
-import { type DaytonaSandboxFs, ensureSandboxDir } from "./daytonaShell.js";
+import { ensureSandboxDir } from "../agent-backend/opensandbox/workspace.js";
+import type { SandboxFsHandle } from "../agent-backend/opensandbox/transport.js";
 import { log } from "../log.js";
 import { readSkillBundle } from "./skills.js";
 
@@ -26,9 +27,7 @@ export function skillSandboxRootFor(workspaceDir: string): string {
 }
 
 export type SkillSandbox = {
-  fs: DaytonaSandboxFs & {
-    uploadFile(content: Buffer, remotePath: string): Promise<unknown>;
-  };
+  fs: Pick<SandboxFsHandle, "mkdirp" | "writeFile">;
 };
 
 export function skillSlugFromName(name: string): string {
@@ -143,18 +142,14 @@ async function uploadSkillFile(
   content: Buffer,
 ): Promise<void> {
   await ensureSandboxDir(sandbox.fs, path.dirname(remotePath));
-  await sandbox.fs.uploadFile(content, remotePath);
+  await sandbox.fs.writeFile(remotePath, content);
 }
 
 /**
- * Copy each pinned skill bundle from local disk into the Daytona sandbox.
- * Skills are unpacked under `<workspaceDir>/.agents/skills/<slug>/` so the
- * Pi agent can read them with the same paths as Cursor-style skill folders.
- *
- * `workspaceDir` MUST be the sandbox's actual working directory (resolved
- * via `resolveSandboxWorkspaceDir`). Passing `/workspace` on an image whose
- * WORKDIR is `/home/daytona` will cause the daemon to fail with
- * `mkdir /workspace: permission denied`.
+ * Copy each pinned skill bundle from local disk into the sandbox. Skills are
+ * unpacked under `<workspaceDir>/.agents/skills/<slug>/` so the Pi agent can
+ * read them with the same paths as Cursor-style skill folders. The workspace
+ * is the deterministic guest WORKDIR (`/workspace`).
  */
 export async function materializeAgentSkills(
   sandbox: SkillSandbox,

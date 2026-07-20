@@ -11,7 +11,7 @@ export type PlatformToolInvokeResult = {
 
 /**
  * Invoke a platform-runtime tool in-process on the orchestrator host.
- * Used by the MCP HTTP server and the Pi/Daytona adapter — secrets never
+ * Used by the MCP HTTP server and the Pi/OpenSandbox adapter — secrets never
  * leave this process.
  */
 export async function invokePlatformTool(

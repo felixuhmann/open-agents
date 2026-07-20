@@ -242,7 +242,7 @@ model Agent {
   /// `apps/api/src/services/renderEmail.ts#resolveAssetUrl` for how the
   /// value is normalised at render time.
   avatar         String?
-  /// Optional agent system prompt used by Daytona runs and mirrored in the editor.
+  /// Optional agent system prompt used by OpenSandbox runs and mirrored in the editor.
   systemPrompt   String  @default("")
   /// Pi-ai provider id (e.g. `anthropic`, `openai`, `openrouter`).
   modelProvider  String  @default("anthropic")
@@ -341,7 +341,7 @@ model AgentAccess {
 /// Unified tool catalog. Every agent capability is a `Tool` row. The
 /// `runtime` discriminates who runs the code:
 ///
-/// - `managed` — runs inside the Daytona sandbox (`bash`, `read`, `write`,
+/// - `managed` — runs inside the OpenSandbox sandbox (`bash`, `read`, `write`,
 ///   `edit`, `glob`, `grep`, `web_fetch`, `web_search`).
 /// - `platform` — runs on our backend through Pi host-side tool bindings.
 ///
@@ -424,7 +424,7 @@ model Skill {
 }
 
 /// Immutable uploaded bundle for a Skill. The local `bundleStorageRef` points
-/// to the on-disk zip materialized into Daytona sandboxes.
+/// to the on-disk zip materialized into OpenSandbox sandboxes.
 model SkillVersion {
   id               String              @id @default(cuid())
   skillId          String
@@ -514,20 +514,20 @@ model MemoryDoc {
 }
 
 // ---------------------------------------------------------------------------
-// Provider sandbox lifecycle (Daytona, etc.). Session ids on conversations
+// Provider sandbox lifecycle (OpenSandbox). Session ids on conversations
 // and threads still point at `sessionId`; this table is the source of truth
 // for sandbox metadata, state, and operator controls.
 // ---------------------------------------------------------------------------
 
 model AgentSandbox {
   id                String    @id @default(cuid())
-  /// Provider identifier, e.g. `daytona`.
+  /// Provider identifier, e.g. `opensandbox`.
   provider          String
   /// Sandbox id in the provider control plane.
   providerSandboxId String
-  /// Backend session id (`daytona:{agentId}:{providerSandboxId}`).
+  /// Backend session id (`opensandbox:{agentId}:{providerSandboxId}`).
   sessionId         String    @unique
-  /// Mirror of provider state (`started`, `stopped`, `archived`, `error`, …).
+  /// Mirror of provider state (`started`, `stopped`, `error`, `deleted`, …).
   state             String    @default("unknown")
   agentId           String
   /// `chat` | `email` when bound to a surface.
@@ -540,6 +540,9 @@ model AgentSandbox {
   lastSyncedAt      DateTime?
   errorReason       String?
   recoverable       Boolean?
+  /// Set when a provider cutover retires this row without destroying audit metadata.
+  retiredAt         DateTime?
+  retiredReason     String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -550,6 +553,7 @@ model AgentSandbox {
   @@unique([provider, providerSandboxId])
   @@index([agentId])
   @@index([state, lastActivityAt])
+  @@index([provider, retiredAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -599,7 +603,7 @@ model ChatMessage {
 }
 
 /// Files uploaded by the user inside a chat conversation. Persisted as bytes
-/// and mounted into the Daytona sandbox on the next run.
+/// and mounted into the OpenSandbox sandbox on the next run.
 model ChatAttachment {
   id            String      @id @default(cuid())
   chatMessageId String
@@ -1021,7 +1025,7 @@ model WorkflowAttachment {
   @@index([workflowMessageId])
 }
 
-/// One Daytona session per (workflow conversation or email thread, agent) so
+/// One OpenSandbox session per (workflow conversation or email thread, agent) so
 /// each agent keeps its own memory + sandbox across turns.
 model WorkflowAgentSession {
   id             String                @id @default(cuid())

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # open-agents project conventions
 
-This is a Hono + Prisma + pg-boss orchestrator for Daytona-backed agents.
+This is a Hono + Prisma + pg-boss orchestrator for OpenSandbox-backed agents.
 See [AGENTS.md](mdc:AGENTS.md) for the full project guide; this rule
 captures the rules every change must follow.
 
@@ -32,10 +32,10 @@ deployment; the webhook resolves the agent by parsing the recipient.
 
 ## Tools (unified catalog)
 
-Every agent capability — Daytona sandbox tools (`bash`, `read`,
+Every agent capability — OpenSandbox sandbox tools (`bash`, `read`,
 `web_search`, …) and our own platform handlers — is a row in the `Tool`
 table, discriminated by `runtime` (`managed` | `platform`). One binding
-table (`AgentToolBinding`) references both. Daytona translates these rows
+table (`AgentToolBinding`) references both. OpenSandbox translates these rows
 to Pi tools at run time; the `runtime` discriminator is the only thing
 application code should care about.
 
@@ -131,9 +131,9 @@ the documentation is not allowed to drift. Touch every relevant doc:
 
 ## Common gotchas
 
-- New attachments mount into existing Daytona sandboxes via
+- New attachments mount into existing OpenSandbox sandboxes via
   `mountSessionResources`; don't rotate sessions just to add files.
-- Service credentials (Daytona, model providers, Mailgun) live AES-GCM encrypted in
+- Service credentials (model providers, Mailgun) live AES-GCM encrypted in
   the `Secret` table and are read via
   [`apps/api/src/secrets/service.ts`](mdc:apps/api/src/secrets/service.ts).
   Don't add new env vars for service credentials — they belong in the

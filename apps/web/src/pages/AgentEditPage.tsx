@@ -930,7 +930,7 @@ export default function AgentEditPage() {
             Sandbox security
           </CardTitle>
           <CardDescription>
-            Default network and command policy for Daytona sandboxes. Publish a new
+            Default network and command policy for OpenSandbox sandboxes. Publish a new
             version so runs pick up changes.
           </CardDescription>
         </CardHeader>
@@ -957,14 +957,15 @@ export default function AgentEditPage() {
                   id="sandbox-allowlist"
                   className="font-mono text-sm"
                   rows={3}
-                  placeholder="208.80.154.232/32, 10.0.0.0/8"
+                  placeholder="api.example.com, *.githubusercontent.com"
                   disabled={!state.sandboxInternetEnabled}
                   value={state.sandboxAllowList}
                   onChange={(e) => setS({ sandboxAllowList: e.target.value })}
                 />
                 <FieldDescription>
-                  Comma-separated IPv4 CIDR blocks (max 10). Leave empty for unrestricted
-                  egress when the internet is on (subject to your Daytona org tier).
+                  Comma-separated FQDN or wildcard-domain entries. Leave empty for public
+                  internet access. IP/CIDR entries are not supported; private and metadata
+                  ranges remain blocked by the deployment egress policy.
                 </FieldDescription>
               </Field>
               <Field orientation="horizontal">

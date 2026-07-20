@@ -9,7 +9,7 @@ import { touchSandboxActivity } from "./sandboxes.js";
 export type ResolvedSession = {
   sessionId: string;
   skillsManifest?: SkillMaterializationManifest;
-  /** Set when a new Daytona sandbox was created for this run. */
+  /** Set when a new OpenSandbox sandbox was created for this run. */
   sandboxCreated?: boolean;
   providerSandboxId?: string;
   workspaceDir?: string;
@@ -24,7 +24,7 @@ export type EmailThreadSessionInput = {
 /**
  * Resume the email thread's existing session, or create a new one when there's
  * no prior session. New sessions get the supplied `resources` mounted; resumed
- * Daytona sessions receive new resources via `mountSessionResources`.
+ * OpenSandbox sessions receive new resources via `mountSessionResources`.
  */
 export async function resolveEmailSessionId(
   agent: Pick<Agent, "id" | "slug" | "currentVersionId">,
@@ -34,7 +34,7 @@ export async function resolveEmailSessionId(
   agentVersionId?: string,
   observabilityRunId?: string,
 ): Promise<ResolvedSession> {
-  const backend = await getAgentBackend();
+  const backend = getAgentBackend();
 
   if (thread.sessionId) {
     log.info("sessions: resuming email thread", {
@@ -106,7 +106,7 @@ export async function resolveChatSessionId(
   agentVersionId?: string,
   observabilityRunId?: string,
 ): Promise<ResolvedSession> {
-  const backend = await getAgentBackend();
+  const backend = getAgentBackend();
 
   if (conversation.sessionId) {
     log.info("sessions: resuming chat conversation", {

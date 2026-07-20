@@ -2,7 +2,10 @@ import { posix as path } from "node:path";
 import type { Prisma } from "@open-agents/db";
 import { z } from "zod";
 import { prisma } from "../../db.js";
-import { ensureSandboxDir, remapWorkspacePath } from "../../services/daytonaShell.js";
+import {
+  ensureSandboxDir,
+  resolveSandboxPath,
+} from "../../agent-backend/opensandbox/workspace.js";
 import { defineTool, type PlatformHandler } from "../types.js";
 
 /**
@@ -64,11 +67,6 @@ function filterClauses(
   return Object.entries(filter).map(([key, value]) => ({
     doc: { path: [key], equals: value },
   }));
-}
-
-function resolveSandboxPath(input: string, workspaceDir: string): string {
-  const absolutePath = input.startsWith("/") ? input : path.join(workspaceDir, input);
-  return remapWorkspacePath(absolutePath, workspaceDir);
 }
 
 export const memoryHandler: PlatformHandler = {
@@ -173,7 +171,7 @@ export const memoryHandler: PlatformHandler = {
       input: ExportInput,
       handler: async (input, ctx) => {
         if (!ctx.sandbox) {
-          throw new Error("memory_export requires an active Daytona sandbox");
+          throw new Error("memory_export requires an active sandbox");
         }
 
         const rows = await prisma.memoryDoc.findMany({
@@ -193,7 +191,7 @@ export const memoryHandler: PlatformHandler = {
         );
         const remotePath = resolveSandboxPath(input.path, ctx.sandbox.workspaceDir);
         await ensureSandboxDir(ctx.sandbox.fs, path.dirname(remotePath));
-        await ctx.sandbox.fs.uploadFile(Buffer.from(content, "utf8"), remotePath);
+        await ctx.sandbox.fs.writeFile(remotePath, Buffer.from(content, "utf8"));
 
         return {
           path: remotePath,

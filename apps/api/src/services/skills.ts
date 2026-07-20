@@ -12,7 +12,7 @@ import {
 
 /**
  * Quick-and-dirty zip validation: open the bundle in-memory, scan for a
- * top-level `SKILL.md`. Daytona materializes the bundle directly into the
+ * top-level `SKILL.md`. The backend materializes the bundle directly into the
  * sandbox, so this catches the minimum shape needed for an agent skill.
  */
 async function validateSkillBundle(

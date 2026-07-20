@@ -51,23 +51,6 @@ export function resolvePublishedSandboxPolicy(
   };
 }
 
-export type DaytonaNetworkCreateOptions = {
-  networkBlockAll?: boolean;
-  networkAllowList?: string;
-};
-
-/**
- * Map agent network policy to Daytona sandbox create/update parameters.
- */
-export function toDaytonaNetworkOptions(
-  network: SandboxPolicyBundle["network"],
-): DaytonaNetworkCreateOptions {
-  if (!network.internetEnabled) {
-    return { networkBlockAll: true };
-  }
-  const allowList = network.allowList.trim();
-  if (allowList) {
-    return { networkAllowList: allowList };
-  }
-  return {};
-}
+// Network policy translation now lives in the OpenSandbox module
+// (`agent-backend/opensandbox/networkPolicy.ts`, `buildNetworkPolicy`), which
+// maps this bundle to an OpenSandbox `NetworkPolicy` (default-deny + allow rules).

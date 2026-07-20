@@ -369,7 +369,7 @@ async function appendRunStarted(runId: string, resolved: ResolvedSession): Promi
       type: "run.started",
       runId,
       sessionId: resolved.sessionId,
-      backend: "daytona",
+      backend: "opensandbox",
       ...(resolved.providerSandboxId
         ? { providerSandboxId: resolved.providerSandboxId }
         : {}),

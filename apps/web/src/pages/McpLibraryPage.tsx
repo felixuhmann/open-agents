@@ -670,7 +670,7 @@ export default function McpLibraryPage() {
         <Link to="/agents" className="text-primary underline-offset-4 hover:underline">
           edit page
         </Link>
-        . With Daytona, the orchestrator connects to external MCP servers on each run.
+        . The orchestrator connects to external MCP servers on each run.
         {isAdmin
           ? " Use Test connection to verify URL and bearer credentials, preview discovered tools, and surface auth failures before attaching a server to agents."
           : null}

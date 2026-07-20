@@ -11,16 +11,16 @@ Publishing does not call an external agent API. The local `AgentVersion.payload`
 
 ## Tools
 
-- `managed` tools run in the Daytona sandbox.
+- `managed` tools run in the OpenSandbox sandbox.
 - `platform` tools run on the orchestrator through handlers under `apps/api/src/mcp/platform/`.
 - External MCP servers are configured in the MCP library and attached per agent.
 
 ## Skills
 
-Skill bundles are uploaded as zip files with a `SKILL.md`. The API stores the bundle under `apps/api/data/skills/` and records a `SkillVersion`. Daytona materializes pinned bundles into the sandbox at creation time.
+Skill bundles are uploaded as zip files with a `SKILL.md`. The API stores the bundle under `apps/api/data/skills/` and records a `SkillVersion`. OpenSandbox materializes pinned bundles into the sandbox at creation time.
 
 ## Attachments
 
-User uploads are stored on chat/email attachment rows and mounted into the sandbox for the next run. Existing Daytona sandboxes can receive new files through `mountSessionResources`, so attachments do not force session rotation.
+User uploads are stored on chat/email attachment rows and mounted into the sandbox for the next run. Existing OpenSandbox sandboxes can receive new files through `mountSessionResources`, so attachments do not force session rotation.
 
 Agent-created downloadable files should be returned with the `attach_run_file` tool. The orchestrator pulls the file bytes from the sandbox and stores `AgentAttachment` rows for chat links and outbound email attachments.

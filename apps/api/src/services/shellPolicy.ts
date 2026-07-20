@@ -3,7 +3,7 @@ import { parseRegexPatterns } from "@open-agents/types";
 
 /**
  * Lightweight guardrails for sandbox shell commands. This is not a full
- * sandbox escape hatch — Daytona still owns network and process isolation.
+ * sandbox escape hatch — OpenSandbox + Kata still own network and process isolation.
  * We block destructive patterns and admin-configured rules before execution.
  */
 

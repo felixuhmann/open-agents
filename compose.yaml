@@ -1,9 +1,16 @@
-# Local or single-host production stack: Postgres + open-agents app.
+# Single-host stack: Postgres + Open Agents + self-hosted OpenSandbox/Kata.
 #
-#   cp docker/.env.example docker/.env   # edit secrets
-#   docker compose up --build
+# Host prerequisites:
+# - KVM-capable host with /dev/kvm
+# - Kata Containers registered with Docker as runtime `kata-runtime`
+# - Docker configured to start containers with that runtime
 #
-# Visit http://localhost:3000 and complete the setup wizard.
+# Setup:
+#   cp docker/.env.example docker/.env
+#   # generate every placeholder secret, including OPENSANDBOX_API_KEY
+#   docker compose --env-file docker/.env -p open-agents up --build -d
+#
+# Only `opensandbox` receives the Docker socket. The application never does.
 
 services:
   db:
@@ -21,6 +28,56 @@ services:
       timeout: 5s
       retries: 10
 
+  # Build the exact images that the host-side OpenSandbox daemon will launch.
+  # These one-shot services ensure `docker compose up --build` loads them into
+  # the same Docker daemon exposed to the control plane.
+  opensandbox-guest-image:
+    build:
+      context: docker
+      dockerfile: opensandbox-guest.Dockerfile
+    image: ${OPENSANDBOX_IMAGE:-open-agents-opensandbox-guest:1.0.0}
+    entrypoint: ["/bin/true"]
+    restart: "no"
+
+  opensandbox-egress-image:
+    build:
+      context: docker
+      dockerfile: opensandbox-egress.Dockerfile
+    image: open-agents-opensandbox-egress:1.1.4-hardened
+    entrypoint: ["/bin/true"]
+    restart: "no"
+
+  opensandbox:
+    image: ${OPENSANDBOX_SERVER_IMAGE:-docker.io/opensandbox/server:v0.2.2@sha256:8f8762af7565ed9c6f9dbcf009dd56727aa1fef8ce58a17f2b007b88cfe542bb}
+    restart: unless-stopped
+    depends_on:
+      opensandbox-guest-image:
+        condition: service_completed_successfully
+      opensandbox-egress-image:
+        condition: service_completed_successfully
+    environment:
+      SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
+      OPENSANDBOX_SERVER_API_KEY: ${OPENSANDBOX_API_KEY:?set OPENSANDBOX_API_KEY in docker/.env}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker/opensandbox/config.toml:/etc/opensandbox/config.toml:ro
+      - opensandbox_data:/var/lib/opensandbox
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   app:
     build:
       context: .
@@ -29,6 +86,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      opensandbox:
+        condition: service_healthy
     ports:
       - "${APP_PORT:-3000}:3000"
     env_file:
@@ -36,11 +95,19 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/open_agents?schema=public
       PORT: "3000"
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?set SECRET_ENCRYPTION_KEY in docker/.env}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in docker/.env}
+      UPLOAD_SIGNING_SECRET: ${UPLOAD_SIGNING_SECRET:?set UPLOAD_SIGNING_SECRET in docker/.env}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      OPENSANDBOX_BASE_URL: http://opensandbox:8080
+      OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:?set OPENSANDBOX_API_KEY in docker/.env}
+      OPENSANDBOX_IMAGE: ${OPENSANDBOX_IMAGE:-open-agents-opensandbox-guest:1.0.0}
+    # Deliberately no Docker/containerd socket or runtime credentials.
     volumes:
       - skill_bundles:/app/apps/api/data/skills
 
 volumes:
   postgres_data:
+  opensandbox_data:
   skill_bundles:

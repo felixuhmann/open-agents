@@ -2,12 +2,12 @@
 
 Every capability an agent can call is a row in the unified `Tool` catalog, regardless of who runs the code. The discriminator is `Tool.runtime`:
 
-| Runtime    | Where the code lives                                    | Stored as                                                                                         | Examples                                                                    |
-| ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `managed`  | Daytona sandbox tools exposed by `DaytonaAgentBackend`. | `AgentToolBinding` -> `Tool` row with `runtime = "managed"`.                                      | `bash`, `read`, `write`, `edit`, `glob`, `grep`, `web_fetch`, `web_search`. |
-| `platform` | This backend, invoked host-side by the Pi loop.         | `AgentToolBinding` -> `Tool` row with `runtime = "platform"`. `Tool.key` = `PlatformHandler.key`. | The shipped `memory` and scoped `google_drive` handlers.                    |
+| Runtime    | Where the code lives                                            | Stored as                                                                                         | Examples                                                                    |
+| ---------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `managed`  | OpenSandbox sandbox tools exposed by `OpenSandboxAgentBackend`. | `AgentToolBinding` -> `Tool` row with `runtime = "managed"`.                                      | `bash`, `read`, `write`, `edit`, `glob`, `grep`, `web_fetch`, `web_search`. |
+| `platform` | This backend, invoked host-side by the Pi loop.                 | `AgentToolBinding` -> `Tool` row with `runtime = "platform"`. `Tool.key` = `PlatformHandler.key`. | The shipped `memory` and scoped `google_drive` handlers.                    |
 
-External MCP servers live in the `McpServer` library and attach to agents through `AgentMcpBinding`. They are per-agent endpoints, not catalog rows. Daytona runs connect to them from the orchestrator, discover tools with the MCP SDK client, and expose those tools to Pi as native `AgentTool`s.
+External MCP servers live in the `McpServer` library and attach to agents through `AgentMcpBinding`. They are per-agent endpoints, not catalog rows. The orchestrator connects to them, discovers tools with the MCP SDK client, and exposes those tools to Pi as native `AgentTool`s.
 
 ## Authoring a platform tool
 
@@ -49,7 +49,7 @@ Append the handler to `PLATFORM_HANDLERS` in `apps/api/src/mcp/platform/index.ts
 
 ### 3. The catalog row appears automatically
 
-`services/seedToolCatalog.ts` runs at boot and upserts a `Tool` row for every entry in `PLATFORM_HANDLERS`, alongside the Daytona-managed sandbox tool rows. The next time the SPA queries `/api/tools`, the new tool shows up; admins tick it on the edit page to bind it.
+`services/seedToolCatalog.ts` runs at boot and upserts a `Tool` row for every entry in `PLATFORM_HANDLERS`, alongside the OpenSandbox-managed sandbox tool rows. The next time the SPA queries `/api/tools`, the new tool shows up; admins tick it on the edit page to bind it.
 
 There is no manual SQL or seed step. Just register the handler and restart.
 
@@ -59,7 +59,7 @@ The platform also **hosts** an MCP server at `/mcp` for external clients (Claude
 
 Unlike platform tools and third-party MCP servers (used during agent runs), the control-plane server exposes one typed MCP tool per REST operation (for example `agents_create`) and proxies into the same Hono REST handlers, so there is no duplicate business logic.
 
-## Pi / Daytona execution
+## Pi / OpenSandbox execution
 
 Implementation lives under `apps/api/src/mcp/`:
 
@@ -69,7 +69,7 @@ Implementation lives under `apps/api/src/mcp/`:
 
 Third-party MCP tools are exposed to the model as `<server-slug>_<tool-name>` (for example `firecrawl_firecrawl_scrape`). Names must match OpenAI’s `^[a-zA-Z0-9_-]+$` pattern, so the orchestrator slugifies the server label and sanitizes the MCP tool name before registering them with Pi.
 
-Platform tool secrets never enter the Daytona sandbox. External MCP bearer tokens are decrypted on the API host and used only by the orchestrator-side MCP client.
+Platform tool secrets never enter the OpenSandbox sandbox. External MCP bearer tokens are decrypted on the API host and used only by the orchestrator-side MCP client.
 
 ## MCP library operator UX
 
@@ -107,7 +107,7 @@ Deployment-specific MCP connector repos can export a small JSON manifest for fas
 
 | Runtime    | `key`          | Tools                                                                                                                                                                             | Notes                                                                                                            |
 | ---------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `managed`  | `bash`         | `bash`                                                                                                                                                                            | Runs inside the Daytona sandbox.                                                                                 |
+| `managed`  | `bash`         | `bash`                                                                                                                                                                            | Runs inside the OpenSandbox sandbox.                                                                             |
 | `managed`  | `read`         | `read`                                                                                                                                                                            | Reads files from the sandbox workspace.                                                                          |
 | `managed`  | `write`        | `write`                                                                                                                                                                           | Writes files in the sandbox workspace.                                                                           |
 | `managed`  | `edit`         | `edit`                                                                                                                                                                            | Edits files in the sandbox workspace.                                                                            |
@@ -130,9 +130,9 @@ The shipped Google Drive integration calls the regular Drive API from the API ho
    - **AI-accessible root folder ID**: the folder identifier at the boundary of the agent's access.
 5. Save and publish a new agent version.
 
-Every list, search, read, and write validates the target item's ancestry before proceeding. Searches are first scoped to the Shared Drive and then filtered to descendants of the configured root. Shortcuts are not followed, and the handler exposes no delete, move, permission, or sharing operation. The service-account credential is encrypted in the deployment database and never enters Daytona.
+Every list, search, read, and write validates the target item's ancestry before proceeding. Searches are first scoped to the Shared Drive and then filtered to descendants of the configured root. Shortcuts are not followed, and the handler exposes no delete, move, permission, or sharing operation. The service-account credential is encrypted in the deployment database and never enters the OpenSandbox sandbox.
 
-The write tools create folders and regular UTF-8 files, replace the contents of existing regular files, and upload binary files from the active Daytona sandbox. Binary uploads preserve the original bytes and file type; they do not convert Office documents into Google Docs, Sheets, or Slides. Google-native files can be read through export, but modifying their content is intentionally outside this implementation.
+The write tools create folders and regular UTF-8 files, replace the contents of existing regular files, and upload binary files from the active OpenSandbox sandbox. Binary uploads preserve the original bytes and file type; they do not convert Office documents into Google Docs, Sheets, or Slides. Google-native files can be read through export, but modifying their content is intentionally outside this implementation.
 
 ## Common patterns
 

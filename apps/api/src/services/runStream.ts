@@ -4,7 +4,7 @@ import { appendEvent } from "../runs/events.js";
 import { redactToolArgs, summarizeToolResultForRunLog } from "./runObservability.js";
 
 /**
- * Stream one Daytona agent turn into the run's RunEvent log + NOTIFY. Shared
+ * Stream one OpenSandbox agent turn into the run's RunEvent log + NOTIFY. Shared
  * by the chat/email worker (`runAgent`) and the workflow pipeline runner
  * (`runWorkflow`). The optional `extraHandler` receives the same normalized
  * backend events so callers can forward them onto another surface (the
@@ -19,7 +19,7 @@ export async function streamRunWithEvents(
   context: AgentRunContext,
   extraHandler?: AgentEventHandler,
 ): Promise<string> {
-  const backend = await getAgentBackend();
+  const backend = getAgentBackend();
   return backend.streamUntilIdle(
     sessionId,
     userMessage,

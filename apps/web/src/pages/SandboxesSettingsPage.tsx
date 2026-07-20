@@ -3,13 +3,11 @@ import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArchiveIcon,
   ArrowsClockwiseIcon,
   CloudIcon,
   PlayIcon,
   StopIcon,
   TrashIcon,
-  WrenchIcon,
 } from "@phosphor-icons/react";
 import { ApiError, api } from "@/lib/api";
 import { useSandboxOrphans, useSandboxes, type SandboxSummary } from "@/lib/queries";
@@ -76,22 +74,6 @@ function SandboxActions({ sandbox }: { sandbox: SandboxSummary }) {
     },
     onError: onActionError,
   });
-  const archive = useMutation({
-    mutationFn: () => api(`/api/sandboxes/${sandbox.id}/archive`, { method: "POST" }),
-    onSuccess: async () => {
-      await invalidate();
-      toast.success("Sandbox updated");
-    },
-    onError: onActionError,
-  });
-  const recover = useMutation({
-    mutationFn: () => api(`/api/sandboxes/${sandbox.id}/recover`, { method: "POST" }),
-    onSuccess: async () => {
-      await invalidate();
-      toast.success("Sandbox updated");
-    },
-    onError: onActionError,
-  });
   const del = useMutation({
     mutationFn: () => api(`/api/sandboxes/${sandbox.id}`, { method: "DELETE" }),
     onSuccess: async () => {
@@ -101,13 +83,7 @@ function SandboxActions({ sandbox }: { sandbox: SandboxSummary }) {
     onError: onActionError,
   });
 
-  const busy =
-    sync.isPending ||
-    stop.isPending ||
-    start.isPending ||
-    archive.isPending ||
-    recover.isPending ||
-    del.isPending;
+  const busy = sync.isPending || stop.isPending || start.isPending || del.isPending;
 
   return (
     <div className="flex flex-wrap gap-1">
@@ -131,26 +107,6 @@ function SandboxActions({ sandbox }: { sandbox: SandboxSummary }) {
           Start
         </Button>
       )}
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={busy}
-        onClick={() => archive.mutate()}
-      >
-        <ArchiveIcon data-icon="inline-start" />
-        Archive
-      </Button>
-      {sandbox.state === "error" && sandbox.recoverable ? (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy}
-          onClick={() => recover.mutate()}
-        >
-          <WrenchIcon data-icon="inline-start" />
-          Recover
-        </Button>
-      ) : null}
       <Button
         size="sm"
         variant="destructive"
@@ -188,7 +144,7 @@ export default function SandboxesSettingsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Sandboxes"
-        description="Daytona workspace VMs backing chat and email sessions. Stale sandboxes are stopped automatically; use reconcile to sync provider state."
+        description="Self-hosted OpenSandbox + Kata VMs backing chat and email sessions. Stale sandboxes are paused automatically; use reconcile to sync provider state."
         actions={
           <Button
             variant="outline"
@@ -208,9 +164,11 @@ export default function SandboxesSettingsPage() {
       {orphans.data?.orphans && orphans.data.orphans.length > 0 ? (
         <Card className="border-amber-500/40">
           <CardHeader>
-            <CardTitle className="text-base">Unregistered Daytona sandboxes</CardTitle>
+            <CardTitle className="text-base">
+              Unregistered OpenSandbox sandboxes
+            </CardTitle>
             <CardDescription>
-              These sandboxes exist in Daytona with open-agents labels but no database
+              These sandboxes exist in OpenSandbox with open-agents labels but no database
               row.
             </CardDescription>
           </CardHeader>
@@ -240,7 +198,7 @@ export default function SandboxesSettingsPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-2">
-            {["", "started", "stopped", "archived", "error"].map((s) => (
+            {["", "started", "stopped", "error"].map((s) => (
               <Button
                 key={s || "all"}
                 size="sm"

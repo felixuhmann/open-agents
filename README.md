@@ -4,12 +4,12 @@
 
 Deploy custom ai agents that bring real value to your org in minutes. No coding required. Upload your skill bundles. Select tools for the agent. Sandboxed in the cloud. Observable by default.
 
-Single-tenant agent platform powered by Daytona sandboxes and Pi.
+Single-tenant agent platform powered by self-hosted OpenSandbox + Kata sandboxes and Pi.
 One deployment per customer; admins create, configure, and share agents
 through a web UI without writing any code.
 
 ```
-Browser SPA ──▶ Hono API ──▶ Postgres + pg-boss ──▶ Daytona sandbox + Pi loop
+Browser SPA ──▶ Hono API ──▶ Postgres + pg-boss ──▶ OpenSandbox sandbox + Pi loop
                   │
                   └──▶ Mailgun (catch-all webhook)
 ```
@@ -24,7 +24,7 @@ Each agent has up to two surfaces:
 
 The agent definition (system prompt, tools, skills, third-party MCP servers,
 ACL, surface toggles) is owned by **our** Postgres. Publishing freezes a local
-`AgentVersion` snapshot; Daytona is the runtime and Postgres is the source of
+`AgentVersion` snapshot; OpenSandbox is the runtime and Postgres is the source of
 truth.
 
 ## Repo layout
@@ -32,7 +32,7 @@ truth.
 ```
 .
 ├── apps/
-│   ├── api/        Hono backend + pg-boss workers + Daytona orchestration
+│   ├── api/        Hono backend + pg-boss workers + OpenSandbox orchestration
 │   └── web/        Vite + React + TanStack Query + better-auth/react SPA
 ├── packages/
 │   ├── db/         Prisma 7 schema + generated client (@open-agents/db)
@@ -64,7 +64,7 @@ Open `http://localhost:3000` and complete the setup wizard. See
 
 Open `http://localhost:5173`. The first request will redirect you to the
 **Setup wizard**, where you create the first admin user and paste your
-Daytona, model-provider, and Mailgun credentials. Everything else (creating agents,
+model-provider and Mailgun credentials. Everything else (creating agents,
 uploading skills, rotating secrets) happens in the SPA from there.
 
 Required bootstrap environment (see `[apps/api/.env.example](apps/api/.env.example)`):
@@ -78,9 +78,15 @@ Required bootstrap environment (see `[apps/api/.env.example](apps/api/.env.examp
 | `PUBLIC_BASE_URL`       | Public origin of the API                              |
 | `UPLOAD_SIGNING_SECRET` | 32+ char HMAC secret reserved for signed upload URLs  |
 
-Daytona, model-provider, and Mailgun key/domain/signing key are **not**
+Model-provider and Mailgun key/domain/signing key are **not**
 environment variables. They live AES-GCM encrypted in the `Secret` table
 and are managed from **Settings → Secrets** in the UI.
+
+The **sandbox runtime** is a self-hosted OpenSandbox Server + Kata (no
+external SaaS). Its endpoint is deployment env, not a setup-wizard secret:
+`OPENSANDBOX_BASE_URL` (and optional `OPENSANDBOX_API_KEY`, `OPENSANDBOX_IMAGE`).
+The Docker Compose stack runs a dedicated `opensandbox` service — the only
+service given the host Docker socket — see [`docs/deployment.md`](docs/deployment.md).
 
 Branding values, email footer copy, and the default outbound `From:`
 header live in the plaintext `AppSetting` table and are edited from
@@ -99,7 +105,7 @@ header live in the plaintext `AppSetting` table and are edited from
 - `[docs/operations.md](docs/operations.md)` — logging, retries, and how
   to debug a sideways run.
 - `[docs/mcp-tools.md](docs/mcp-tools.md)` — registering platform tools
-  and external MCP servers for Daytona runs.
+  and external MCP servers for OpenSandbox runs.
 
 ## Key technologies
 

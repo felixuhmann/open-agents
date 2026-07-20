@@ -9,9 +9,9 @@ import {
   getSandboxForConversation,
   getSandboxForThread,
   listSandboxes,
-  listUnregisteredDaytonaSandboxes,
-  recoverSandbox,
+  listUnregisteredSandboxes,
   reconcileSandboxes,
+  recoverSandbox,
   startSandbox,
   stopSandbox,
   syncSandboxFromProvider,
@@ -34,7 +34,7 @@ sandboxesRoutes.get("/", async (c) => {
 
 sandboxesRoutes.get("/orphans", async (c) => {
   requireAdmin(c);
-  const orphans = await listUnregisteredDaytonaSandboxes();
+  const orphans = await listUnregisteredSandboxes();
   return c.json({ orphans });
 });
 

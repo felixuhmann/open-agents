@@ -4,7 +4,6 @@ export const ServiceSecretKey = z.enum([
   "anthropic_api_key",
   "openai_api_key",
   "openrouter_api_key",
-  "daytona_api_key",
   "mailgun_api_key",
   "mailgun_domain",
   "mailgun_signing_key",

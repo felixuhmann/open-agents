@@ -4,8 +4,8 @@ import { log } from "../log.js";
 import { PLATFORM_HANDLERS } from "../mcp/platform/index.js";
 
 /**
- * Daytona sandbox capabilities exposed as first-class tool toggles. The
- * runtime implements these inside `DaytonaAgentBackend`; the catalog row lets
+ * OpenSandbox sandbox capabilities exposed as first-class tool toggles. The
+ * runtime implements these inside `OpenSandboxAgentBackend`; the catalog row lets
  * admins choose which capabilities each agent receives.
  *
  * To add a sandbox capability, extend this list and the seeder upserts the
@@ -39,7 +39,7 @@ const MANAGED_TOOLS: ReadonlyArray<{
     key: "web_search",
     name: "Web search",
     description:
-      "Search the web (not implemented on Daytona — use curl or a third-party MCP search server).",
+      "Search the web (not implemented in-sandbox — use curl or a third-party MCP search server).",
   },
 ];
 
@@ -48,7 +48,7 @@ const MANAGED_TOOLS: ReadonlyArray<{
  *
  * - Upserts every code-shipped platform handler into `Tool` so the UI
  *   catalog matches `PLATFORM_HANDLERS`.
- * - Upserts the Daytona-managed sandbox tools so the same UI catalog also
+ * - Upserts the sandbox-managed tools so the same UI catalog also
  *   covers backend-executed tools.
  *
  * Keys are unique across runtimes (managed `bash` and a hypothetical

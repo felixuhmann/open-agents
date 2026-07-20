@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Outcome of unpacking one pinned skill version into a Daytona sandbox. */
+/** Outcome of unpacking one pinned skill version into a sandbox. */
 export const SkillMaterializationStatus = z.enum([
   "materialized",
   "skipped",

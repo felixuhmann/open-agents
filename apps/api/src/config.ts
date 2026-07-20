@@ -79,13 +79,40 @@ const schema = z.object({
 
   /**
    * Max agent runs executed concurrently per node. Runs are I/O-bound (they
-   * await the remote model + Daytona sandbox), so one slow or looping run must
+   * await the remote model + OpenSandbox sandbox), so one slow or looping run must
    * not starve the others — each worker polls independently.
    */
   AGENT_RUN_CONCURRENCY: z.coerce.number().int().min(1).max(256).default(20),
 
   /** Max workflow runs executed concurrently per node. */
   WORKFLOW_RUN_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
+
+  /**
+   * OpenSandbox Lifecycle API endpoint (host[:port] or full URL) of the
+   * self-hosted OpenSandbox Server. This is deployment environment
+   * configuration, not a setup-wizard credential. Empty until the sandbox
+   * runtime is wired up; `getAgentBackend()` errors clearly when unset.
+   */
+  OPENSANDBOX_BASE_URL: z.string().min(1).optional(),
+
+  /**
+   * Optional API key for the OpenSandbox Server. Self-hosted single-tenant
+   * deployments on a private network may run without one.
+   */
+  OPENSANDBOX_API_KEY: z.string().min(1).optional(),
+
+  /**
+   * Pinned guest OCI image used for every sandbox. Avoid `latest`; pin a
+   * name:version (and digest where practical). Built by the compose
+   * `opensandbox-guest` image and loaded into the OpenSandbox Server runtime.
+   */
+  OPENSANDBOX_IMAGE: z.string().min(1).default("open-agents-opensandbox-guest:1.0.0"),
+
+  /** Optional guest CPU limit (e.g. "2"). Omitted → OpenSandbox Server default. */
+  OPENSANDBOX_CPU_LIMIT: z.string().min(1).optional(),
+
+  /** Optional guest memory limit (e.g. "2Gi"). Omitted → server default. */
+  OPENSANDBOX_MEMORY_LIMIT: z.string().min(1).optional(),
 });
 
 export type Config = z.infer<typeof schema>;

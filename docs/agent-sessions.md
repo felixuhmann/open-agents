@@ -12,7 +12,7 @@ This is intentional. Keeping a live `Agent` object in API memory would bind a co
 
 1. The API stores the user-facing message and creates an `AgentRun` pinned to an immutable `AgentVersion`.
 2. pg-boss serializes chat/email jobs with a queue key scoped to the conversation or thread, allowing at most one active turn for that key.
-3. The worker resumes or creates the conversation's Daytona sandbox.
+3. The worker resumes or creates the conversation's OpenSandbox sandbox.
 4. The worker loads the latest successful `AgentRun.piContext`. For conversations created before this facility, it reconstructs one turn from the legacy text transcript and writes the first native checkpoint after completion.
 5. A new Pi `Agent` receives:
    - the run's reconstructed system prompt and published model/tool configuration;
@@ -31,7 +31,7 @@ This is intentional. Keeping a live `Agent` object in API memory would bind a co
 | Full replay context: user, assistant, tool-call, and tool-result messages  | Conversation/thread   | Latest successful `AgentRun.piContext` |
 | Provider metadata and reasoning signatures required for valid continuation | Conversation/thread   | Inside `piContext`                     |
 | Run trace, usage, tool observability, and streamed events                  | Run                   | `RunEvent`                             |
-| Filesystem, mounted resources, and persistent shell workspace              | Conversation/thread   | Daytona sandbox                        |
+| Filesystem, mounted resources, and persistent shell workspace              | Conversation/thread   | OpenSandbox sandbox                    |
 | Agent instructions, model, tools, skills, and policy used by one run       | Run                   | Pinned `AgentVersion`                  |
 | Explicit long-term/user memory                                             | User or agent binding | Platform memory tools/storage          |
 
@@ -44,7 +44,7 @@ This is intentional. Keeping a live `Agent` object in API memory would bind a co
 - The system prompt, tools, skills, model, and sandbox policy are rebuilt from the run's pinned published version.
 - Delegated subagents receive a fresh per-invocation thread; they do not silently inherit another subagent's transcript.
 
-The Daytona sandbox is **not** reset between turns unless its lifecycle requires replacement. Conversation state does not depend on the sandbox surviving: the provider cache id and Pi checkpoint are conversation-scoped.
+The OpenSandbox sandbox is **not** reset between turns unless its lifecycle requires replacement. OpenSandbox pauses idle sandboxes and reaps them on a server-side TTL; a paused sandbox is resumed on the next turn. Conversation state does not depend on the sandbox surviving: the provider cache id and Pi checkpoint are conversation-scoped.
 
 ## Context-window policy
 
