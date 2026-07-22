@@ -115,32 +115,38 @@ async function claimWorkflowSlot(
       ? { conversationId: owner.scope.conversationId }
       : { emailThreadId: owner.scope.emailThreadId };
 
-  if (expectedSessionId === null) {
-    try {
-      await prisma.workflowAgentSession.create({
-        data: { ...scope, agentId: owner.agentId, sessionId },
-      });
-      return { claimed: true };
-    } catch (err) {
-      // Another step created the mapping first; adopt its sandbox.
-      if (!isUniqueViolation(err)) throw err;
-      return readWorkflowSlot(owner, scope);
-    }
+  if (expectedSessionId !== null) {
+    const swapped = await prisma.workflowAgentSession.updateMany({
+      where: { ...scope, agentId: owner.agentId, sessionId: expectedSessionId },
+      data: { sessionId },
+    });
+    if (swapped.count > 0) return { claimed: true };
+
+    const current = await readWorkflowSlot(owner, scope);
+    // A mapping that is merely *different* belongs to whoever set it. One
+    // that is gone (reconciliation cleared a dead sandbox mid-run) leaves the
+    // slot free, so fall through and create it rather than retrying a swap
+    // that can never match again.
+    if (current) return current;
   }
 
-  const swapped = await prisma.workflowAgentSession.updateMany({
-    where: { ...scope, agentId: owner.agentId, sessionId: expectedSessionId },
-    data: { sessionId },
-  });
-  if (swapped.count > 0) return { claimed: true };
-
-  return readWorkflowSlot(owner, scope);
+  try {
+    await prisma.workflowAgentSession.create({
+      data: { ...scope, agentId: owner.agentId, sessionId },
+    });
+    return { claimed: true };
+  } catch (err) {
+    // Another step created the mapping first; adopt its sandbox.
+    if (!isUniqueViolation(err)) throw err;
+    return readWorkflowSlot(owner, scope);
+  }
 }
 
+/** `null` means the slot is currently unclaimed. */
 async function readWorkflowSlot(
   owner: Extract<SandboxOwnerRef, { surface: "workflow" }>,
   scope: { conversationId: string } | { emailThreadId: string },
-): Promise<SandboxClaimOutcome | null> {
+): Promise<Extract<SandboxClaimOutcome, { claimed: false }> | null> {
   const current = await prisma.workflowAgentSession.findFirst({
     where: { ...scope, agentId: owner.agentId },
     select: { sessionId: true },
