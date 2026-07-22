@@ -58,7 +58,7 @@ services:
       # Same path in both containers so one default serves both. Read only
       # when SANDBOX_BROKER_URL is set, so it is inert on a Daytona install.
       SANDBOX_BROKER_TOKEN_FILE: ${SANDBOX_BROKER_TOKEN_FILE:-/home/broker/token}
-      SANDBOX_BROKER_EXPECTED_VERSION: ${SANDBOX_BROKER_EXPECTED_VERSION:-}
+      SANDBOX_BROKER_EXPECTED_VERSION: ${SANDBOX_BROKER_EXPECTED_VERSION:-0.1.0-rc.2}
     volumes:
       - skill_bundles:/app/apps/api/data/skills
       # Read-only view of the token the broker generates. Empty and harmless
@@ -74,7 +74,7 @@ services:
   sandbox-broker:
     profiles: ["broker"]
     # Pin by digest in production; each release publishes its digests.
-    image: ${SANDBOX_BROKER_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-server:v0.1.0-rc.1}
+    image: ${SANDBOX_BROKER_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-server@sha256:a4244ec661c2456a0d304d5b86ba127a740cfcb78495938a79a87c2d43e8a3df}
     restart: unless-stopped
     environment:
       # First start writes 32 random bytes to the shared volume with mode
@@ -85,8 +85,8 @@ services:
       SANDBOX_BROKER_GENERATE_TOKEN: ${SANDBOX_BROKER_GENERATE_TOKEN:-true}
       SANDBOX_BROKER_NAMESPACE: ${SANDBOX_BROKER_NAMESPACE:-open-agents}
       # Pin these by digest too, so a moved tag cannot change what runs.
-      SANDBOX_BROKER_SANDBOX_IMAGE: ${SANDBOX_BROKER_SANDBOX_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-sandbox:v0.1.0-rc.1}
-      SANDBOX_BROKER_FIREWALL_IMAGE: ${SANDBOX_BROKER_FIREWALL_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-firewall:v0.1.0-rc.1}
+      SANDBOX_BROKER_SANDBOX_IMAGE: ${SANDBOX_BROKER_SANDBOX_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-sandbox@sha256:94fc56cd92646e4d0fa17aeca2c4cf4da8c655f6c8d4e77dd44f1fc96b493005}
+      SANDBOX_BROKER_FIREWALL_IMAGE: ${SANDBOX_BROKER_FIREWALL_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-firewall@sha256:ebfdaf29049b3724d1e6ed410acd7e8b063ce397e2a89dd9dd811d7f866d1854}
       # Broker-owned bridge for sandbox egress, created by the broker on
       # start. Never the app or database network.
       SANDBOX_BROKER_EGRESS_NETWORK: ${SANDBOX_BROKER_EGRESS_NETWORK:-open-agents-sandbox-egress}

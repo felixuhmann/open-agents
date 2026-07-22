@@ -175,6 +175,21 @@ void test("status warns when the active provider is unusable", async () => {
   );
 });
 
+void test("the unavailable warning reads as sentences whether or not the detail ends in a period", async () => {
+  for (const detail of ["Invalid credentials", "Invalid credentials."]) {
+    const { settings } = fixture({
+      stored: "daytona",
+      providers: { daytona: fakeProvider("daytona", { available: false, detail }) },
+    });
+
+    const [warning] = (await settings.describe()).warnings;
+
+    assert.ok(warning);
+    assert.match(warning, /unavailable: Invalid credentials\. New sandboxes/);
+    assert.ok(!warning.includes(".."), warning);
+  }
+});
+
 // ---------------------------------------------------------------- select
 
 void test("preflight verifies availability without mutating deployment state", async () => {

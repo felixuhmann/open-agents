@@ -28,7 +28,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.7",
-    "@sandbox-broker/client": "file:../../vendor/sandbox-broker/sandbox-broker-client-0.1.0-rc.1.tgz",
+    "@sandbox-broker/client": "https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-client-0.1.0-rc.2.tgz",
     "better-auth": "^1.4.6",
     "form-data": "^4.0.5",
     "hono": "^4.12.15",

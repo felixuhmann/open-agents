@@ -85,8 +85,8 @@ Verified against a running stack, not just asserted:
 
 ## Pinning images
 
-The defaults reference `v0.1.0-rc.1` tags. **In production, pin by digest** so a
-moved tag cannot change what runs:
+The defaults pin the `v0.1.0-rc.2` images by digest, so a moved tag cannot
+change what runs. Override them only with another immutable digest:
 
 ```bash
 SANDBOX_BROKER_IMAGE=ghcr.io/felixuhmann/sandbox-broker-server@sha256:...

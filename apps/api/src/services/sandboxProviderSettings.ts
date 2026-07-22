@@ -130,10 +130,12 @@ export function createSandboxProviderSettings(
     const warnings: string[] = [];
     const activeInfo = providers.find((p) => p.id === active);
     if (!activeInfo?.available) {
+      // The detail comes from a provider and may or may not end in a period;
+      // normalize so the sentence that follows does not run into it.
+      const detail = activeInfo?.detail?.trim();
+      const reason = detail ? `: ${detail.replace(/[.\s]+$/, "")}.` : ".";
       warnings.push(
-        `The active sandbox provider "${active}" is unavailable${
-          activeInfo?.detail ? `: ${activeInfo.detail}` : "."
-        } New sandboxes cannot be created until it is configured and reachable.`,
+        `The active sandbox provider "${active}" is unavailable${reason} New sandboxes cannot be created until it is configured and reachable.`,
       );
     }
     return { active, providers, warnings } satisfies SandboxProviderStatusDto;
