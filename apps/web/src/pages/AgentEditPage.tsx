@@ -29,11 +29,13 @@ import {
   useAgentAccess,
   useAgents,
   useMcpServers,
+  useSandboxProviderStatus,
   useSkills,
   useTools,
 } from "@/lib/queries";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { PageHeader } from "@/components/PageHeader";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -187,6 +189,7 @@ export default function AgentEditPage() {
   const tools = useTools();
   const skills = useSkills();
   const mcpServers = useMcpServers();
+  const providerStatus = useSandboxProviderStatus();
   const allAgents = useAgents();
   const access = useAgentAccess(slug);
   const qc = useQueryClient();
@@ -340,6 +343,12 @@ export default function AgentEditPage() {
   const unpublishedSubagents = (agent.data.subagents ?? []).filter(
     (s) => state.subagentIds.includes(s.id) && !s.hasPublishedVersion,
   );
+
+  // Network policy means different things per provider, so the guidance below
+  // follows the *active* one rather than describing Daytona unconditionally.
+  const brokerActive = providerStatus.data?.active === "broker";
+  const allowListBlocksBroker =
+    brokerActive && state.sandboxInternetEnabled && state.sandboxAllowList.trim() !== "";
 
   return (
     <div className="flex flex-col gap-6">
@@ -930,14 +939,47 @@ export default function AgentEditPage() {
             Sandbox security
           </CardTitle>
           <CardDescription>
-            Default network and command policy for Daytona sandboxes. Publish a new
-            version so runs pick up changes.
+            Default network and command policy for this agent&apos;s sandboxes. Publish a
+            new version so runs pick up changes.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <FieldSet>
               <FieldLegend>Network</FieldLegend>
+
+              {brokerActive ? (
+                <Alert variant={allowListBlocksBroker ? "destructive" : "default"}>
+                  <WarningIcon />
+                  <AlertTitle>
+                    {allowListBlocksBroker
+                      ? "This allow list is incompatible with the active provider"
+                      : "Egress is all-or-nothing on the self-hosted broker"}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {allowListBlocksBroker ? (
+                      <>
+                        The self-hosted broker is the active provider and does not support
+                        CIDR allow lists. Runs on it will fail until you clear the list
+                        below, or switch this deployment back to Daytona in{" "}
+                        <Link to="/settings/sandboxes" className="underline">
+                          Settings → Sandboxes
+                        </Link>
+                        . Nothing is widened silently.
+                      </>
+                    ) : (
+                      <>
+                        Internet <strong>on</strong> means the public IPv4 internet, with
+                        private, loopback, link-local, cloud-metadata, Docker gateway, and
+                        host addresses blocked in the sandbox&apos;s own firewall — and
+                        IPv6 disabled. Internet <strong>off</strong> means no network at
+                        all.
+                      </>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               <Field orientation="horizontal">
                 <FieldContent>
                   <FieldLabel htmlFor="sandbox-internet">Internet access</FieldLabel>
@@ -958,13 +1000,29 @@ export default function AgentEditPage() {
                   className="font-mono text-sm"
                   rows={3}
                   placeholder="208.80.154.232/32, 10.0.0.0/8"
-                  disabled={!state.sandboxInternetEnabled}
+                  // Kept editable under the broker even though it is
+                  // unsupported: an existing value must stay visible and
+                  // clearable rather than being silently hidden.
+                  disabled={
+                    !state.sandboxInternetEnabled ||
+                    (brokerActive && !state.sandboxAllowList.trim())
+                  }
                   value={state.sandboxAllowList}
                   onChange={(e) => setS({ sandboxAllowList: e.target.value })}
                 />
                 <FieldDescription>
-                  Comma-separated IPv4 CIDR blocks (max 10). Leave empty for unrestricted
-                  egress when the internet is on (subject to your Daytona org tier).
+                  {brokerActive ? (
+                    <>
+                      Not supported by the active self-hosted broker. Leave empty; it
+                      applies only to Daytona.
+                    </>
+                  ) : (
+                    <>
+                      Comma-separated IPv4 CIDR blocks (max 10). Leave empty for
+                      unrestricted egress when the internet is on (subject to your Daytona
+                      org tier).
+                    </>
+                  )}
                 </FieldDescription>
               </Field>
               <Field orientation="horizontal">
@@ -973,14 +1031,15 @@ export default function AgentEditPage() {
                     Protect internal networks
                   </FieldLabel>
                   <FieldDescription>
-                    Block shell commands that target private, loopback, or link-local
-                    addresses when the internet is enabled.
+                    {brokerActive
+                      ? "Always enforced on the self-hosted broker: its firewall blocks private, host, and metadata addresses regardless of this switch."
+                      : "Block shell commands that target private, loopback, or link-local addresses when the internet is enabled."}
                   </FieldDescription>
                 </FieldContent>
                 <Switch
                   id="sandbox-internal"
-                  checked={state.sandboxProtectInternalNetwork}
-                  disabled={!state.sandboxInternetEnabled}
+                  checked={brokerActive || state.sandboxProtectInternalNetwork}
+                  disabled={!state.sandboxInternetEnabled || brokerActive}
                   onCheckedChange={(checked) =>
                     setS({ sandboxProtectInternalNetwork: checked })
                   }

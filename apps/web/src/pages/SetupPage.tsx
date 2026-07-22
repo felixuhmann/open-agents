@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircleIcon, EnvelopeIcon, KeyIcon, UserIcon } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon,
+  CircleIcon,
+  CubeIcon,
+  EnvelopeIcon,
+  KeyIcon,
+  PlugsIcon,
+  UserIcon,
+} from "@phosphor-icons/react";
 import { FallbackLogo } from "@/components/FallbackLogo";
 import { ApiError, api } from "@/lib/api";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,7 +33,42 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
+type SandboxProviderId = "daytona" | "broker";
+
+/**
+ * The two runtimes an agent sandbox can run on. The tradeoff is the point of
+ * this step, so both are stated plainly rather than hidden behind a dropdown.
+ */
+const PROVIDERS: ReadonlyArray<{
+  id: SandboxProviderId;
+  title: string;
+  summary: string;
+  points: string[];
+}> = [
+  {
+    id: "daytona",
+    title: "Daytona",
+    summary: "Managed sandbox VMs. Needs a Daytona API key.",
+    points: [
+      "Nothing to host — Daytona runs the workspaces",
+      "Supports CIDR egress allow lists per agent",
+      "Supports archiving idle sandboxes to cold storage",
+    ],
+  },
+  {
+    id: "broker",
+    title: "Self-hosted broker",
+    summary: "Docker containers on your own host, via the private sandbox broker.",
+    points: [
+      "No third-party account, no per-sandbox ports",
+      "Egress is all-or-nothing: blocked, or public internet with private, host, and metadata addresses denied",
+      "Shared-kernel Docker/runc isolation — single-tenant use only",
+    ],
+  },
+];
+
 type Form = {
+  sandboxProvider: SandboxProviderId;
   adminEmail: string;
   adminName: string;
   adminPassword: string;
@@ -42,6 +86,7 @@ export default function SetupPage({ productName }: { productName: string }) {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<Form>({
+    sandboxProvider: "daytona",
     adminEmail: "",
     adminName: "",
     adminPassword: "",
@@ -64,7 +109,10 @@ export default function SetupPage({ productName }: { productName: string }) {
     try {
       await api("/api/setup", {
         json: {
-          daytonaApiKey: form.daytonaApiKey,
+          sandboxProvider: form.sandboxProvider,
+          // Only meaningful for Daytona; the backend rejects an empty key
+          // when Daytona is selected and preflights the broker otherwise.
+          daytonaApiKey: form.daytonaApiKey || undefined,
           anthropicApiKey: form.anthropicApiKey || undefined,
           openaiApiKey: form.openaiApiKey || undefined,
           openrouterApiKey: form.openrouterApiKey || undefined,
@@ -161,24 +209,82 @@ export default function SetupPage({ productName }: { productName: string }) {
 
               <FieldSet>
                 <FieldLegend>
-                  <KeyIcon
+                  <CubeIcon
                     className="mr-1.5 inline size-4 text-muted-foreground"
                     weight="duotone"
                   />
-                  Daytona
+                  Sandbox provider
                 </FieldLegend>
                 <FieldDescription>
-                  Required. Used to create and resume agent sandboxes.
+                  Where agent sandboxes run. One provider is active for the whole
+                  deployment; you can change it later in Settings.
                 </FieldDescription>
-                <Field>
-                  <FieldLabel htmlFor="daytona-key">API key</FieldLabel>
-                  <Input
-                    id="daytona-key"
-                    required
-                    value={form.daytonaApiKey}
-                    onChange={update("daytonaApiKey")}
-                  />
-                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {PROVIDERS.map((provider) => {
+                    const selected = form.sandboxProvider === provider.id;
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setForm({ ...form, sandboxProvider: provider.id })}
+                        className={`rounded-md border p-3 text-left transition-colors ${
+                          selected
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-muted/50"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 font-medium">
+                          {selected ? (
+                            <CheckCircleIcon
+                              className="size-4 text-primary"
+                              weight="fill"
+                            />
+                          ) : (
+                            <CircleIcon className="size-4 text-muted-foreground" />
+                          )}
+                          {provider.title}
+                        </span>
+                        <span className="mt-1 block text-sm text-muted-foreground">
+                          {provider.summary}
+                        </span>
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                          {provider.points.map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ul>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {form.sandboxProvider === "daytona" ? (
+                  <Field>
+                    <FieldLabel htmlFor="daytona-key">Daytona API key</FieldLabel>
+                    <Input
+                      id="daytona-key"
+                      required
+                      value={form.daytonaApiKey}
+                      onChange={update("daytonaApiKey")}
+                    />
+                    <FieldDescription>
+                      Stored encrypted. Used to create and resume agent sandboxes.
+                    </FieldDescription>
+                  </Field>
+                ) : (
+                  <Alert>
+                    <PlugsIcon />
+                    <AlertTitle>The broker is configured on the server</AlertTitle>
+                    <AlertDescription>
+                      Set <code>SANDBOX_BROKER_URL</code> plus{" "}
+                      <code>SANDBOX_BROKER_TOKEN</code> (or{" "}
+                      <code>SANDBOX_BROKER_TOKEN_FILE</code>) in the deployment
+                      environment. Its token never passes through this browser. Setup
+                      checks that the broker is reachable and ready before completing — if
+                      it is not, nothing is saved and you can pick Daytona instead.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </FieldSet>
 
               <FieldSeparator />
