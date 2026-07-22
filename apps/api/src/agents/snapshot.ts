@@ -1,5 +1,6 @@
 import type { Prisma } from "@open-agents/db";
 import {
+  AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION,
   AgentConfigSnapshot,
   type AgentConfigSnapshot as AgentConfigSnapshotType,
 } from "@open-agents/types";
@@ -52,7 +53,8 @@ export function resolveRuntimeSubagents(
 
 /**
  * Build a provider-neutral config snapshot from the agent's current draft
- * bindings. Daytona is the only runtime backend.
+ * bindings. New publishes write schema v2, which no longer freezes a sandbox
+ * provider — the provider a run uses is recorded on its `AgentSandbox` row.
  */
 export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnapshotType {
   const toolBindings = agent.toolBindings.map((b) => ({
@@ -68,7 +70,7 @@ export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnaps
   const sandbox = resolveDraftSandboxPolicy(agent);
 
   return AgentConfigSnapshot.parse({
-    schemaVersion: 1,
+    schemaVersion: AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION,
     systemPrompt: agent.systemPrompt,
     modelProvider: agent.modelProvider,
     modelId: agent.modelId,
@@ -102,10 +104,14 @@ export function buildAgentConfigSnapshot(agent: HydratedAgent): AgentConfigSnaps
         agentVersionId: b.subagent.currentVersionId,
       };
     }),
-    runtime: { backend: "daytona", sandbox },
+    runtime: { sandbox },
   });
 }
 
+/**
+ * Parse a stored `AgentVersion.payload` of any supported schema version into
+ * one normalized shape. Historical rows are never rewritten.
+ */
 export function parseAgentConfigSnapshot(payload: unknown): AgentConfigSnapshotType {
   return AgentConfigSnapshot.parse(payload);
 }

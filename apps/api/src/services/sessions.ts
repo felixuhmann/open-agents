@@ -2,6 +2,7 @@ import type { Agent } from "@open-agents/db";
 import type { SkillMaterializationManifest } from "@open-agents/types";
 import { getAgentBackend } from "../agent-backend/instance.js";
 import type { SessionResource } from "../agent-backend/types.js";
+import type { SandboxProviderId } from "../sandbox-provider/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { touchSandboxActivity } from "./sandboxes.js";
@@ -9,8 +10,10 @@ import { touchSandboxActivity } from "./sandboxes.js";
 export type ResolvedSession = {
   sessionId: string;
   skillsManifest?: SkillMaterializationManifest;
-  /** Set when a new Daytona sandbox was created for this run. */
+  /** Set when a new sandbox was created for this run. */
   sandboxCreated?: boolean;
+  /** Provider that owns this session's sandbox. */
+  provider?: SandboxProviderId;
   providerSandboxId?: string;
   workspaceDir?: string;
 };
@@ -83,6 +86,7 @@ export async function resolveEmailSessionId(
     sessionId: session.id,
     skillsManifest: session.skillsManifest,
     sandboxCreated: true,
+    provider: session.provider,
     providerSandboxId: session.providerSandboxId,
     workspaceDir: session.workspaceDir,
   };
@@ -155,6 +159,7 @@ export async function resolveChatSessionId(
     sessionId: session.id,
     skillsManifest: session.skillsManifest,
     sandboxCreated: true,
+    provider: session.provider,
     providerSandboxId: session.providerSandboxId,
     workspaceDir: session.workspaceDir,
   };

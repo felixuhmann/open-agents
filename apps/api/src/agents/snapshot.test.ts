@@ -150,3 +150,66 @@ void test("snapshots missing required identity fields are rejected", () => {
     AgentConfigSnapshot.parse({ ...LEGACY_V1_PAYLOAD, managedTools: undefined }),
   );
 });
+
+// ------------------------------------------------------------- schema v2
+
+/**
+ * v2 drops the publish-time backend pin: which provider a run used is a
+ * property of the actual sandbox, not of the frozen agent config.
+ */
+const V2_PAYLOAD = {
+  ...LEGACY_V1_PAYLOAD,
+  schemaVersion: 2,
+  runtime: { sandbox: LEGACY_V1_PAYLOAD.runtime.sandbox },
+} as const;
+
+void test("schema v2 parses without a runtime backend", () => {
+  const parsed = AgentConfigSnapshot.parse(V2_PAYLOAD);
+
+  assert.equal(parsed.schemaVersion, 2);
+  assert.equal(parsed.runtime.backend, undefined);
+  assert.equal(parsed.runtime.sandbox?.network.allowList, "10.0.0.0/8");
+  assert.equal(parsed.systemPrompt, LEGACY_V1_PAYLOAD.systemPrompt);
+  assert.deepEqual(parsed.managedTools, LEGACY_V1_PAYLOAD.managedTools);
+});
+
+void test("v2 without a frozen sandbox policy is valid", () => {
+  const parsed = AgentConfigSnapshot.parse({ ...V2_PAYLOAD, runtime: {} });
+  assert.equal(parsed.schemaVersion, 2);
+  assert.equal(parsed.runtime.sandbox, undefined);
+});
+
+void test("v1 requires the Daytona backend pin, v2 refuses to honor one", () => {
+  // v1 rows were only ever written with backend: "daytona".
+  assert.throws(() =>
+    AgentConfigSnapshot.parse({
+      ...LEGACY_V1_PAYLOAD,
+      runtime: { backend: "broker" },
+    }),
+  );
+  // A v2 row carrying a stray backend must not resurrect it as routing.
+  const parsed = AgentConfigSnapshot.parse({
+    ...V2_PAYLOAD,
+    runtime: { ...V2_PAYLOAD.runtime, backend: "daytona" },
+  });
+  assert.equal(parsed.runtime.backend, undefined);
+});
+
+void test("the source schema version is retained for audit display", () => {
+  assert.equal(AgentConfigSnapshot.parse(LEGACY_V1_PAYLOAD).schemaVersion, 1);
+  assert.equal(AgentConfigSnapshot.parse(V2_PAYLOAD).schemaVersion, 2);
+});
+
+void test("unsupported schema versions are still rejected", () => {
+  assert.throws(() => AgentConfigSnapshot.parse({ ...V2_PAYLOAD, schemaVersion: 3 }));
+  assert.throws(() => AgentConfigSnapshot.parse({ ...V2_PAYLOAD, schemaVersion: "2" }));
+});
+
+void test("parsing never rewrites the historical payload it was given", () => {
+  const original = structuredClone(LEGACY_V1_PAYLOAD) as Record<string, unknown>;
+  const before = JSON.stringify(original);
+
+  AgentConfigSnapshot.parse(original);
+
+  assert.equal(JSON.stringify(original), before);
+});

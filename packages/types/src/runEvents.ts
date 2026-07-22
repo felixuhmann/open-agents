@@ -92,7 +92,10 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     type: z.literal("run.started"),
     runId: z.string(),
     sessionId: z.string(),
+    /** Legacy field on runs recorded before providers were selectable. */
     backend: z.literal("daytona").optional(),
+    /** Sandbox provider this run actually used. */
+    provider: SandboxProviderIdSchema.optional(),
     providerSandboxId: z.string().optional(),
     workspaceDir: z.string().optional(),
   }),

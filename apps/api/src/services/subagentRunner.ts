@@ -253,7 +253,7 @@ export async function runSubagent(
       type: "run.started",
       runId: childRun.id,
       sessionId: session.id,
-      backend: "daytona",
+      ...(session.provider ? { provider: session.provider } : {}),
       ...(session.providerSandboxId
         ? { providerSandboxId: session.providerSandboxId }
         : {}),

@@ -76,6 +76,7 @@ export async function resolveWorkflowStepSession(
     sessionId: session.id,
     skillsManifest: session.skillsManifest,
     sandboxCreated: true,
+    provider: session.provider,
     providerSandboxId: session.providerSandboxId,
     workspaceDir: session.workspaceDir,
   };

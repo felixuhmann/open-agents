@@ -309,7 +309,7 @@ async function runPipeline(
           type: "run.started",
           runId: agentRun.id,
           sessionId: resolved.sessionId,
-          backend: "daytona",
+          ...(resolved.provider ? { provider: resolved.provider } : {}),
           ...(resolved.providerSandboxId
             ? { providerSandboxId: resolved.providerSandboxId }
             : {}),
