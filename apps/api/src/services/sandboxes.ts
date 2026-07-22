@@ -1,6 +1,5 @@
 import type { AgentSandbox, Prisma } from "@open-agents/db";
 import type { SandboxLifecyclePolicy, SandboxSummaryDto } from "@open-agents/types";
-import { SandboxLifecyclePolicySchema } from "@open-agents/types";
 import type { Sandbox } from "@daytona/sdk";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
@@ -20,45 +19,13 @@ import {
   ORPHAN_SANDBOX_GRACE_MS,
   STALE_SANDBOX_INACTIVITY_MS,
 } from "./sandboxLifecyclePolicy.js";
+import {
+  sandboxInclude,
+  toSandboxSummary,
+  type SandboxRowWithRelations,
+} from "./sandboxSummary.js";
 
-const sandboxInclude = {
-  agent: { select: { slug: true, displayName: true } },
-  conversation: { select: { title: true } },
-  thread: { select: { subject: true } },
-} satisfies Prisma.AgentSandboxInclude;
-
-function parseLifecyclePolicy(raw: unknown): SandboxLifecyclePolicy {
-  return SandboxLifecyclePolicySchema.parse(raw);
-}
-
-export function toSandboxSummary(
-  row: Prisma.AgentSandboxGetPayload<{
-    include: typeof sandboxInclude;
-  }>,
-): SandboxSummaryDto {
-  return {
-    id: row.id,
-    provider: row.provider,
-    providerSandboxId: row.providerSandboxId,
-    sessionId: row.sessionId,
-    state: row.state,
-    agentId: row.agentId,
-    agentSlug: row.agent?.slug,
-    agentDisplayName: row.agent?.displayName,
-    surface: row.surface === "chat" || row.surface === "email" ? row.surface : null,
-    conversationId: row.conversationId,
-    conversationTitle: row.conversation?.title ?? null,
-    threadId: row.threadId,
-    threadSubject: row.thread?.subject ?? null,
-    lifecyclePolicy: parseLifecyclePolicy(row.lifecyclePolicy),
-    lastActivityAt: row.lastActivityAt.toISOString(),
-    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
-    errorReason: row.errorReason,
-    recoverable: row.recoverable,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
+export { toSandboxSummary };
 
 export type RegisterSandboxInput = {
   agentId: string;
@@ -172,7 +139,7 @@ async function getSandboxRowOrThrow(id: string) {
 }
 
 async function applyRemoteSnapshot(
-  row: Prisma.AgentSandboxGetPayload<{ include: typeof sandboxInclude }>,
+  row: SandboxRowWithRelations,
   remote: Sandbox,
 ): Promise<SandboxSummaryDto> {
   const snapshot = snapshotFromSandbox(remote);

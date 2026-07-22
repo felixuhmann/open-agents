@@ -1,4 +1,5 @@
 import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
+import { createAgentBackendResolver } from "./backendResolver.js";
 import { DaytonaAgentBackend } from "./daytona.js";
 import type { AgentBackend } from "./types.js";
 
@@ -12,26 +13,17 @@ import type { AgentBackend } from "./types.js";
  * instance is safe to share. We rebuild it after credential rotation.
  */
 
-let cached: AgentBackend | null = null;
-let cachedDaytonaApiKey: string | null = null;
+const resolver = createAgentBackendResolver<AgentBackend>({
+  loadCredentialKey: () => getServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY),
+  build: (daytonaApiKey) => new DaytonaAgentBackend(daytonaApiKey),
+  missingCredentialMessage: "Daytona API key is not configured. Complete setup at /setup.",
+});
 
-export async function getAgentBackend(): Promise<AgentBackend> {
-  const daytonaApiKey = await getServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY);
-  if (!daytonaApiKey) {
-    throw new Error("Daytona API key is not configured. Complete setup at /setup.");
-  }
-
-  if (cached && cachedDaytonaApiKey === daytonaApiKey) {
-    return cached;
-  }
-
-  cached = new DaytonaAgentBackend(daytonaApiKey);
-  cachedDaytonaApiKey = daytonaApiKey;
-  return cached;
+export function getAgentBackend(): Promise<AgentBackend> {
+  return resolver.get();
 }
 
 /** Force the next `getAgentBackend()` call to rebuild the singleton. */
 export function resetAgentBackend(): void {
-  cached = null;
-  cachedDaytonaApiKey = null;
+  resolver.reset();
 }
