@@ -1,14 +1,14 @@
-import type { Sandbox } from "@daytona/sdk";
 import type { SandboxCommandPolicy, SandboxNetworkPolicy } from "@open-agents/types";
-import { log } from "../log.js";
-import { shellQuote } from "./daytonaShell.js";
+import { log } from "../../log.js";
+import { shellQuote } from "../../services/sandboxShell.js";
 import {
   DEFAULT_BASH_TIMEOUT_SECONDS,
   TOOL_OUTPUT_EMIT_INTERVAL_MS,
   TOOL_OUTPUT_EMIT_MIN_CHARS,
   truncateText,
-} from "./daytonaLimits.js";
-import { checkShellCommand, type ShellPolicyContext } from "./shellPolicy.js";
+} from "../../services/sandboxLimits.js";
+import { checkShellCommand, type ShellPolicyContext } from "../../services/shellPolicy.js";
+import type { DaytonaSandboxLike } from "./client.js";
 
 const SHELL_SESSION_ID = "open-agents-shell";
 
@@ -27,7 +27,7 @@ export type CommandOutputChunk = {
 };
 
 export type RunSandboxCommandInput = {
-  sandbox: Sandbox;
+  sandbox: DaytonaSandboxLike;
   command: string;
   cwd: string;
   workspaceDir: string;
@@ -124,7 +124,7 @@ function createOutputBatcher(onOutput?: (chunk: CommandOutputChunk) => void) {
 }
 
 async function ensureShellSession(
-  sandbox: Sandbox,
+  sandbox: DaytonaSandboxLike,
   workspaceDir: string,
 ): Promise<ShellSessionState> {
   const key = sandbox.id;
@@ -168,7 +168,7 @@ async function ensureShellSession(
 }
 
 async function maybeChangeDirectory(
-  sandbox: Sandbox,
+  sandbox: DaytonaSandboxLike,
   state: ShellSessionState,
   cwd: string,
 ): Promise<void> {
@@ -231,11 +231,12 @@ export async function runSandboxCommand(
   );
 
   let exitCode: number;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       logsPromise,
       new Promise<never>((_, reject) => {
-        setTimeout(
+        timeoutHandle = setTimeout(
           () =>
             reject(new Error(`command timed out after ${Math.round(timeoutMs / 1000)}s`)),
           timeoutMs,
@@ -261,6 +262,10 @@ export async function runSandboxCommand(
       combined: message,
       truncated: false,
     };
+  } finally {
+    // Without this the pending timer keeps the event loop alive for the full
+    // command budget after a fast command already returned.
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 
   const { stdout, stderr } = batcher.finish();

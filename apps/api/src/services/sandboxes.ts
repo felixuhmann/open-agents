@@ -12,7 +12,7 @@ import {
   parseDaytonaSessionId,
   snapshotFromSandbox,
 } from "./daytonaSandbox.js";
-import { wrapDaytonaError } from "../agent-backend/daytonaErrors.js";
+import { wrapDaytonaError } from "../sandbox-provider/daytona/errors.js";
 import { AgentBackendError } from "../agent-backend/types.js";
 import {
   DEFAULT_DAYTONA_LIFECYCLE,

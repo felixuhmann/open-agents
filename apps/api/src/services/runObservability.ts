@@ -4,7 +4,7 @@ import type {
   SandboxRunEventContext,
 } from "@open-agents/types";
 import { appendEvent } from "../runs/events.js";
-import { MAX_TOOL_OUTPUT_CHARS, truncateText } from "./daytonaLimits.js";
+import { MAX_TOOL_OUTPUT_CHARS, truncateText } from "./sandboxLimits.js";
 import { buildDaytonaSessionId, parseDaytonaSessionId } from "./daytonaSandbox.js";
 
 const SENSITIVE_KEY =

@@ -2,7 +2,8 @@ import { posix as path } from "node:path";
 import type { Prisma } from "@open-agents/db";
 import { z } from "zod";
 import { prisma } from "../../db.js";
-import { ensureSandboxDir, remapWorkspacePath } from "../../services/daytonaShell.js";
+import { ensureSandboxDir } from "../../sandbox-provider/daytona/files.js";
+import { remapWorkspacePath } from "../../services/sandboxShell.js";
 import { defineTool, type PlatformHandler } from "../types.js";
 
 /**

@@ -1,5 +1,5 @@
 import { DaytonaError } from "@daytona/sdk";
-import { AgentBackendError } from "./types.js";
+import { AgentBackendError } from "../../agent-backend/types.js";
 
 /**
  * Map Daytona SDK failures to `AgentBackendError` so jobs and routes see a

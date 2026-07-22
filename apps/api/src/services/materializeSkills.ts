@@ -5,7 +5,8 @@ import type {
 } from "@open-agents/types";
 import yauzl from "yauzl";
 import type { HydratedAgent } from "../agents/service.js";
-import { type DaytonaSandboxFs, ensureSandboxDir } from "./daytonaShell.js";
+import { ensureSandboxDir } from "../sandbox-provider/daytona/files.js";
+import type { DaytonaFsLike } from "../sandbox-provider/daytona/client.js";
 import { log } from "../log.js";
 import { readSkillBundle } from "./skills.js";
 
@@ -26,9 +27,7 @@ export function skillSandboxRootFor(workspaceDir: string): string {
 }
 
 export type SkillSandbox = {
-  fs: DaytonaSandboxFs & {
-    uploadFile(content: Buffer, remotePath: string): Promise<unknown>;
-  };
+  fs: Pick<DaytonaFsLike, "createFolder" | "uploadFile">;
 };
 
 export function skillSlugFromName(name: string): string {

@@ -43,7 +43,7 @@ import {
   RunCancelledError,
   throwIfRunCancelled,
 } from "../services/runCancellation.js";
-import { wrapDaytonaError } from "./daytonaErrors.js";
+import { wrapDaytonaError } from "../sandbox-provider/daytona/errors.js";
 import { piHistoryTokenBudget, trimPiContext } from "./piSessionContext.js";
 import {
   loadPiSessionCheckpoint,
@@ -64,21 +64,26 @@ import {
   skillSandboxRootFor,
   skillSlugFromName,
 } from "../services/materializeSkills.js";
-import { formatCommandResult, runSandboxCommand } from "../services/daytonaExec.js";
+import {
+  formatCommandResult,
+  runSandboxCommand,
+} from "../sandbox-provider/daytona/exec.js";
 import { storeRunAttachment } from "../services/runAttachments.js";
 import {
   DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
   MAX_READ_FILE_CHARS,
   MAX_TOOL_OUTPUT_CHARS,
   truncateText,
-} from "../services/daytonaLimits.js";
+} from "../services/sandboxLimits.js";
 import {
   bashCommand,
-  ensureSandboxDir,
   remapWorkspacePath,
-  resolveSandboxWorkspaceDir,
   shellQuote,
-} from "../services/daytonaShell.js";
+} from "../services/sandboxShell.js";
+import {
+  ensureSandboxDir,
+  resolveSandboxWorkspaceDir,
+} from "../sandbox-provider/daytona/files.js";
 import { resolvePiModel, resolvePiProviderApiKey } from "../services/piModel.js";
 import {
   AgentBackendError,
@@ -518,11 +523,8 @@ export class DaytonaAgentBackend implements AgentBackend {
     const session = parseDaytonaSessionId(sessionId);
     const daytona = new Daytona({ apiKey: this.apiKey });
     const sandbox = await daytona.get(session.sandboxId);
-    const {
-      sandbox: ready,
-      previousState,
-      transitions,
-    } = await ensureDaytonaSandboxReady(sandbox);
+    const { previousState, transitions } = await ensureDaytonaSandboxReady(sandbox);
+    const ready = sandbox;
     const workspaceDir = await resolveSandboxWorkspaceDir(ready);
     if (observabilityRunId) {
       const ctx = sandboxContextFromSession(
