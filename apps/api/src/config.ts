@@ -6,6 +6,20 @@ import { z } from "zod";
  * through the web UI and persisted encrypted in Postgres. The values here
  * are the minimum the process needs to come up and decrypt the rest.
  */
+/**
+ * Treat an empty value as absent.
+ *
+ * Compose expands an unset `${FOO:-}` to an empty string rather than omitting
+ * the variable, so without this an optional setting a deployment never opted
+ * into would fail validation and stop the process from booting.
+ */
+function optional<T extends z.ZodTypeAny>(inner: T) {
+  return z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    inner,
+  );
+}
+
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -97,23 +111,22 @@ const schema = z.object({
    * authenticates one private container to another over a network the browser
    * cannot reach, so it stays in the environment and out of the database.
    */
-  SANDBOX_BROKER_URL: z.string().url().optional(),
-  SANDBOX_BROKER_TOKEN: z.string().min(1).optional(),
+  SANDBOX_BROKER_URL: optional(z.string().url().optional()),
+  SANDBOX_BROKER_TOKEN: optional(z.string().min(1).optional()),
   /** Path to a token file, typically a volume the broker generated. */
-  SANDBOX_BROKER_TOKEN_FILE: z.string().min(1).optional(),
+  SANDBOX_BROKER_TOKEN_FILE: optional(z.string().min(1).optional()),
   /** Exact broker build to accept. Mismatch fails readiness rather than guessing. */
-  SANDBOX_BROKER_EXPECTED_VERSION: z.string().min(1).optional(),
+  SANDBOX_BROKER_EXPECTED_VERSION: optional(z.string().min(1).optional()),
 
   /** Fixed resource shape of every broker sandbox this deployment creates. */
-  SANDBOX_BROKER_CPU_CORES: z.coerce.number().positive().max(8).default(2),
-  SANDBOX_BROKER_MEMORY_MIB: z.coerce.number().int().min(128).max(32_768).default(2_048),
-  SANDBOX_BROKER_PIDS: z.coerce.number().int().min(16).max(4_096).default(512),
-  SANDBOX_BROKER_WORKSPACE_MIB: z.coerce
-    .number()
-    .int()
-    .min(64)
-    .max(32_768)
-    .default(4_096),
+  SANDBOX_BROKER_CPU_CORES: optional(z.coerce.number().positive().max(8).default(2)),
+  SANDBOX_BROKER_MEMORY_MIB: optional(
+    z.coerce.number().int().min(128).max(32_768).default(2_048),
+  ),
+  SANDBOX_BROKER_PIDS: optional(z.coerce.number().int().min(16).max(4_096).default(512)),
+  SANDBOX_BROKER_WORKSPACE_MIB: optional(
+    z.coerce.number().int().min(64).max(32_768).default(4_096),
+  ),
 });
 
 export type Config = z.infer<typeof schema>;

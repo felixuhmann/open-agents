@@ -86,7 +86,7 @@ and `AGENT_STALE_RUN_SECONDS`.
 Service credentials are stored in the encrypted `Secret` table, not env.
 Configure them through the setup wizard and **Settings → Secrets**:
 
-- `daytona_api_key` for the runtime backend
+- `daytona_api_key` for the Daytona sandbox provider (not needed if you run the self-hosted broker instead)
 - `anthropic_api_key`, `openai_api_key`, or `openrouter_api_key` for models
 - `mailgun_api_key`, `mailgun_domain`, and `mailgun_signing_key` for email
 
@@ -106,11 +106,47 @@ Configure a single catch-all inbound route to `POST /mailgun/inbound` on your
 public `PUBLIC_BASE_URL`. The webhook resolves the target agent from the
 recipient local part.
 
-## Daytona
+## Sandbox providers
 
-Set `daytona_api_key` before running agents. Sandboxes are tracked in
-`AgentSandbox`; the reconcile worker syncs provider state, stops stale
-sandboxes, and clears pointers for missing sandboxes.
+Agent sandboxes run on one of two providers, chosen deployment-wide in Setup
+and changeable in **Settings → Sandboxes**. **A deployment that has never made
+a choice runs on Daytona**, so nothing here is required to keep an existing
+install working.
+
+### Daytona (default)
+
+Set `daytona_api_key` before running agents. Nothing else to host.
+
+### Self-hosted broker
+
+Hardened Docker containers on your own host, with no third-party account and no
+per-sandbox ports. It ships as a Compose profile that is off by default:
+
+```bash
+COMPOSE_PROFILES=broker DOCKER_GID=$(getent group docker | cut -d: -f3) \
+  docker compose up -d --build
+```
+
+Then set `SANDBOX_BROKER_URL=http://sandbox-broker:8080` in `docker/.env`.
+
+The broker publishes **no host port** and gets **no public route**; it is
+reached by service name on an `internal` Compose network shared only with the
+app. It is the **only** container that receives `/var/run/docker.sock` — the
+app, PostgreSQL, and the sandboxes never do. PostgreSQL stays off that network
+entirely. Isolation is standard Docker/runc on a shared kernel, which is a
+single-tenant design and not a boundary against a kernel escape.
+
+By default the broker generates its own bearer token onto a shared volume that
+the app mounts read-only, so no new secret has to be supplied by hand. Full
+setup, image pinning, network-policy semantics, and the threat model are in
+[`docker/sandbox-broker/README.md`](../docker/sandbox-broker/README.md).
+
+### Either way
+
+Sandboxes are tracked in `AgentSandbox` with the provider that created them;
+the reconcile worker syncs provider state, stops stale sandboxes, and clears
+pointers for missing sandboxes. A provider that is unavailable does not block
+reconciliation of the other.
 
 ## Persistent data
 
@@ -120,7 +156,11 @@ Persist in production:
 2. **`apps/api/data/skills/`** — skill bundle zips (mount a volume at this path)
 
 Without the skills volume, uploaded bundles are lost on container recreate and
-Daytona sandboxes cannot rematerialize pinned skill versions.
+sandboxes cannot rematerialize pinned skill versions.
+
+If you run the broker, its `broker_auth` volume holds the generated token and
+sandbox workspaces live in broker-owned volumes; both are recreated as needed,
+but deleting `broker_auth` rotates the credential and requires an app restart.
 
 ## Kubernetes / PaaS notes
 

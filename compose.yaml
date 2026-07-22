@@ -4,6 +4,15 @@
 #   docker compose up --build
 #
 # Visit http://localhost:3000 and complete the setup wizard.
+#
+# To run the self-hosted sandbox broker instead of Daytona, enable its profile
+# (see docker/sandbox-broker/README.md):
+#
+#   COMPOSE_PROFILES=broker DOCKER_GID=$(getent group docker | cut -d: -f3) \
+#     docker compose up --build
+#
+# Without that profile nothing here changes for a Daytona deployment: no
+# broker container, no Docker socket, and no new secret to supply.
 
 services:
   db:
@@ -15,6 +24,10 @@ services:
       POSTGRES_DB: open_agents
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Deliberately only on the default app network: neither the broker control
+    # network nor the sandbox egress network can reach the database.
+    networks:
+      - default
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d open_agents"]
       interval: 5s
@@ -38,9 +51,94 @@ services:
       PORT: "3000"
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      # Empty unless the broker profile is in use. The app reads an empty
+      # value as "no broker configured" and stays on Daytona.
+      SANDBOX_BROKER_URL: ${SANDBOX_BROKER_URL:-}
+      SANDBOX_BROKER_TOKEN: ${SANDBOX_BROKER_TOKEN:-}
+      # Same path in both containers so one default serves both. Read only
+      # when SANDBOX_BROKER_URL is set, so it is inert on a Daytona install.
+      SANDBOX_BROKER_TOKEN_FILE: ${SANDBOX_BROKER_TOKEN_FILE:-/home/broker/token}
+      SANDBOX_BROKER_EXPECTED_VERSION: ${SANDBOX_BROKER_EXPECTED_VERSION:-}
     volumes:
       - skill_bundles:/app/apps/api/data/skills
+      # Read-only view of the token the broker generates. Empty and harmless
+      # when the broker profile is off; the app never writes to it.
+      - broker_auth:/home/broker:ro
+    # The app sits on the broker control network but never receives the Docker
+    # socket, and its image contains no Docker CLI.
+    networks:
+      - default
+      - sandbox_control
+
+  # Private sandbox broker. Only started with `COMPOSE_PROFILES=broker`.
+  sandbox-broker:
+    profiles: ["broker"]
+    # Pin by digest in production; each release publishes its digests.
+    image: ${SANDBOX_BROKER_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-server:v0.1.0-rc.1}
+    restart: unless-stopped
+    environment:
+      # First start writes 32 random bytes to the shared volume with mode
+      # 0600 and reuses the file afterwards. Set SANDBOX_BROKER_TOKEN in
+      # docker/.env instead if you would rather supply the secret yourself.
+      SANDBOX_BROKER_TOKEN: ${SANDBOX_BROKER_TOKEN:-}
+      SANDBOX_BROKER_TOKEN_FILE: ${SANDBOX_BROKER_TOKEN_FILE:-/home/broker/token}
+      SANDBOX_BROKER_GENERATE_TOKEN: ${SANDBOX_BROKER_GENERATE_TOKEN:-true}
+      SANDBOX_BROKER_NAMESPACE: ${SANDBOX_BROKER_NAMESPACE:-open-agents}
+      # Pin these by digest too, so a moved tag cannot change what runs.
+      SANDBOX_BROKER_SANDBOX_IMAGE: ${SANDBOX_BROKER_SANDBOX_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-sandbox:v0.1.0-rc.1}
+      SANDBOX_BROKER_FIREWALL_IMAGE: ${SANDBOX_BROKER_FIREWALL_IMAGE:-ghcr.io/felixuhmann/sandbox-broker-firewall:v0.1.0-rc.1}
+      # Broker-owned bridge for sandbox egress, created by the broker on
+      # start. Never the app or database network.
+      SANDBOX_BROKER_EGRESS_NETWORK: ${SANDBOX_BROKER_EGRESS_NETWORK:-open-agents-sandbox-egress}
+      SANDBOX_BROKER_QUOTA_MODE: ${SANDBOX_BROKER_QUOTA_MODE:-watchdog}
+      SANDBOX_BROKER_LOG_LEVEL: ${SANDBOX_BROKER_LOG_LEVEL:-info}
+    volumes:
+      # The one and only place the Docker socket appears in this stack.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mounted on the broker user's home directory on purpose: Docker seeds a
+      # new named volume from the image path, so the volume inherits that
+      # directory's 10101:10101 ownership. A path the image does not contain
+      # (/run/sandbox-broker) would be created root-owned and the unprivileged
+      # broker could not write its token there.
+      - broker_auth:/home/broker
+    group_add:
+      # The broker runs as UID 10101; this grants socket access without root.
+      #
+      # Not `${DOCKER_GID:?...}`: `docker compose config` interpolates every
+      # service, including ones behind an inactive profile, so a required
+      # variable here would break plain `docker compose config` for existing
+      # Daytona deployments. The fallback is deliberately an invalid group
+      # name, so starting the broker without DOCKER_GID fails immediately with
+      # a message naming the variable to set, instead of starting a broker that
+      # cannot reach the socket.
+      - "${DOCKER_GID:-set-DOCKER_GID-to-your-docker-group-id}"
+    # No `ports:` and no Traefik/Dokploy labels: the broker has no host port
+    # and no public route. It is reachable only as http://sandbox-broker:8080
+    # on the internal control network.
+    networks:
+      - sandbox_control
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  # app <-> db
+  default:
+  # app <-> broker only. `internal` means no route to or from the outside.
+  sandbox_control:
+    internal: true
 
 volumes:
   postgres_data:
   skill_bundles:
+  # Holds only the broker's generated token file.
+  broker_auth:
