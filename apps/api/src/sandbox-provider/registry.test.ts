@@ -128,6 +128,42 @@ void test("registered ids are reported regardless of configuration state", () =>
   assert.deepEqual(registry.registeredIds(), ["daytona", "broker"]);
 });
 
+void test("a factory failure is remembered so Settings can explain the misconfiguration", async () => {
+  const registry = createSandboxProviderRegistry({
+    broker: () =>
+      Promise.reject(
+        new AgentBackendError("SANDBOX_BROKER_URL is set but no broker credential is."),
+      ),
+  });
+
+  assert.equal(registry.lastFailure("broker"), null);
+  assert.equal(await registry.tryGet("broker"), null);
+  assert.match(registry.lastFailure("broker") ?? "", /no broker credential/);
+});
+
+void test("a provider that is merely unconfigured records no failure", async () => {
+  const registry = createSandboxProviderRegistry({ broker: () => Promise.resolve(null) });
+
+  assert.equal(await registry.tryGet("broker"), null);
+  assert.equal(registry.lastFailure("broker"), null);
+});
+
+void test("a remembered failure is cleared once the provider builds", async () => {
+  let broken = true;
+  const registry = createSandboxProviderRegistry({
+    broker: () =>
+      broken
+        ? Promise.reject(new Error("broker unreachable"))
+        : Promise.resolve(fakeProvider("broker")),
+  });
+
+  await registry.tryGet("broker");
+  assert.ok(registry.lastFailure("broker"));
+  broken = false;
+  assert.equal((await registry.tryGet("broker"))?.id, "broker");
+  assert.equal(registry.lastFailure("broker"), null);
+});
+
 void test("a factory failure surfaces to callers that asked for that provider explicitly", async () => {
   const registry = createSandboxProviderRegistry({
     daytona: () => Promise.reject(new Error("Daytona API key is not configured")),

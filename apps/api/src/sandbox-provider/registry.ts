@@ -23,6 +23,12 @@ export type SandboxProviderRegistry = {
   tryGet(id: SandboxProviderId): Promise<SandboxProvider | null>;
   /** Every provider that currently resolves, skipping the rest. */
   listConfigured(): Promise<SandboxProvider[]>;
+  /**
+   * Why the last `tryGet` for this provider failed, or `null` when it
+   * succeeded or the provider is simply unconfigured. Lets Settings say
+   * "token file is empty" instead of "not configured".
+   */
+  lastFailure(id: SandboxProviderId): string | null;
   registeredIds(): SandboxProviderId[];
   /** Drop cached instances after a credential or selection change. */
   reset(id?: SandboxProviderId): void;
@@ -32,7 +38,11 @@ export function createSandboxProviderRegistry(
   factories: SandboxProviderFactories,
 ): SandboxProviderRegistry {
   const cache = new Map<SandboxProviderId, SandboxProvider>();
+  const failures = new Map<SandboxProviderId, string>();
   const ids = Object.keys(factories) as SandboxProviderId[];
+
+  /** Distinguishes "no such option here" from "configured, but broken". */
+  const UNCONFIGURED = Symbol("unconfigured");
 
   async function build(id: SandboxProviderId): Promise<SandboxProvider> {
     const cached = cache.get(id);
@@ -45,11 +55,14 @@ export function createSandboxProviderRegistry(
     const provider = await factory();
     if (!provider) {
       // Not cached: configuring it later must take effect without a reset.
-      throw new AgentBackendError(
+      const unconfigured = new AgentBackendError(
         `Sandbox provider "${id}" is not configured for this deployment.`,
       );
+      Object.defineProperty(unconfigured, UNCONFIGURED, { value: true });
+      throw unconfigured;
     }
     cache.set(id, provider);
+    failures.delete(id);
     return provider;
   }
 
@@ -60,8 +73,16 @@ export function createSandboxProviderRegistry(
         return await build(id);
       } catch (err) {
         log.debug("sandbox-provider: unavailable", { provider: id, err: String(err) });
+        if (err && typeof err === "object" && UNCONFIGURED in err) {
+          failures.delete(id);
+        } else {
+          failures.set(id, err instanceof Error ? err.message : String(err));
+        }
         return null;
       }
+    },
+    lastFailure(id: SandboxProviderId): string | null {
+      return failures.get(id) ?? null;
     },
     async listConfigured(): Promise<SandboxProvider[]> {
       const out: SandboxProvider[] = [];

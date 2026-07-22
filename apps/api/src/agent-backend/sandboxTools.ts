@@ -63,6 +63,8 @@ export type BuildSandboxToolsInput = {
   policy: SandboxPolicyBundle;
   onEvent?: AgentEventHandler;
   runId?: string;
+  /** Cancels in-flight sandbox commands when the run is aborted. */
+  signal?: AbortSignal;
   deps: SandboxToolDeps;
 };
 
@@ -75,20 +77,20 @@ function boundManagedTools(agent: Pick<HydratedAgent, "toolBindings">): Set<stri
 }
 
 export function buildSandboxTools(input: BuildSandboxToolsInput): AgentTool[] {
-  const { agent, handle, policy, onEvent, runId, deps } = input;
+  const { agent, handle, policy, onEvent, runId, signal, deps } = input;
   const bound = boundManagedTools(agent);
   const tools: AgentTool[] = [];
   const maxOutput = policy.command.maxOutputChars;
 
   if (runId) tools.push(attachRunFileTool(handle, runId, deps));
 
-  if (bound.has("bash")) tools.push(bashTool(handle, policy, maxOutput, onEvent));
+  if (bound.has("bash")) tools.push(bashTool(handle, policy, maxOutput, onEvent, signal));
   if (bound.has("read")) tools.push(readTool(handle));
   if (bound.has("write")) tools.push(writeTool(handle));
   if (bound.has("edit")) tools.push(editTool(handle));
   if (bound.has("glob")) tools.push(globTool(handle, maxOutput));
-  if (bound.has("grep")) tools.push(grepTool(handle, policy, maxOutput, onEvent));
-  if (bound.has("web_fetch")) tools.push(webFetchTool(handle, policy, maxOutput));
+  if (bound.has("grep")) tools.push(grepTool(handle, policy, maxOutput, onEvent, signal));
+  if (bound.has("web_fetch")) tools.push(webFetchTool(handle, policy, maxOutput, signal));
 
   return tools;
 }
@@ -175,6 +177,7 @@ function bashTool(
   policy: SandboxPolicyBundle,
   maxOutput: number,
   onEvent?: AgentEventHandler,
+  signal?: AbortSignal,
 ): AgentTool {
   return makeTool({
     name: "bash",
@@ -200,6 +203,7 @@ function bashTool(
         cwd: p.cwd ? resolveSandboxPath(p.cwd, handle.workspaceDir) : handle.workspaceDir,
         timeoutSeconds: p.timeoutSeconds,
         policy,
+        signal,
         onOutput: (chunk) =>
           emitToolOutput(handle, onEvent, "bash", toolCallId, chunk.stream, chunk.text),
       });
@@ -338,6 +342,7 @@ function grepTool(
   policy: SandboxPolicyBundle,
   maxOutput: number,
   onEvent?: AgentEventHandler,
+  signal?: AbortSignal,
 ): AgentTool {
   return makeTool({
     name: "grep",
@@ -362,6 +367,7 @@ function grepTool(
         cwd: handle.workspaceDir,
         timeoutSeconds: DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
         policy,
+        signal,
         onOutput: (chunk) =>
           emitToolOutput(handle, onEvent, "grep", toolCallId, chunk.stream, chunk.text),
       });
@@ -379,6 +385,7 @@ function webFetchTool(
   handle: SandboxHandle,
   policy: SandboxPolicyBundle,
   maxOutput: number,
+  signal?: AbortSignal,
 ): AgentTool {
   return makeTool({
     name: "web_fetch",
@@ -397,6 +404,7 @@ function webFetchTool(
         cwd: handle.workspaceDir,
         timeoutSeconds: DEFAULT_SHORT_COMMAND_TIMEOUT_SECONDS,
         policy,
+        signal,
       });
       return {
         content: [

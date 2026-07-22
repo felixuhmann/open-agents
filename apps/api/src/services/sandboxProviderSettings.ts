@@ -86,10 +86,15 @@ export function createSandboxProviderSettings(
   async function inspect(id: SandboxProviderId): Promise<SandboxProviderInfoDto> {
     const provider = await deps.registry.tryGet(id);
     if (!provider) {
+      // A provider that is present but broken (empty token file, unreadable
+      // mount) must say so — "not configured" would send an admin looking in
+      // the wrong place.
+      const failure = deps.registry.lastFailure(id);
       return {
         id,
         available: false,
-        detail: `Sandbox provider "${id}" is not configured for this deployment.`,
+        detail:
+          failure ?? `Sandbox provider "${id}" is not configured for this deployment.`,
         capabilities: null,
       };
     }

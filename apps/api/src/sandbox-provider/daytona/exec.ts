@@ -2,11 +2,12 @@ import type { SandboxCommandPolicy, SandboxNetworkPolicy } from "@open-agents/ty
 import { log } from "../../log.js";
 import { shellQuote } from "../../services/sandboxShell.js";
 import {
-  DEFAULT_BASH_TIMEOUT_SECONDS,
-  TOOL_OUTPUT_EMIT_INTERVAL_MS,
-  TOOL_OUTPUT_EMIT_MIN_CHARS,
-  truncateText,
-} from "../../services/sandboxLimits.js";
+  blockedCommandResult,
+  clampTimeout,
+  createOutputBatcher,
+  finalizeCommandResult,
+  resolveCommandPolicy,
+} from "../../services/sandboxExecOutput.js";
 import {
   checkShellCommand,
   type ShellPolicyContext,
@@ -50,81 +51,6 @@ export type RunSandboxCommandResult = {
   truncated: boolean;
   policyBlocked?: string;
 };
-
-function resolveCommandPolicy(
-  policy?: SandboxCommandPolicy,
-): Required<
-  Pick<
-    SandboxCommandPolicy,
-    "maxRuntimeSeconds" | "maxOutputChars" | "maxBackgroundProcessLifetimeSeconds"
-  >
-> {
-  return {
-    maxRuntimeSeconds: policy?.maxRuntimeSeconds ?? DEFAULT_BASH_TIMEOUT_SECONDS,
-    maxOutputChars: policy?.maxOutputChars ?? 20_000,
-    maxBackgroundProcessLifetimeSeconds:
-      policy?.maxBackgroundProcessLifetimeSeconds ?? 600,
-  };
-}
-
-function clampTimeout(
-  seconds: number | undefined,
-  policy?: SandboxCommandPolicy,
-): number {
-  const limits = resolveCommandPolicy(policy);
-  const ceiling = Math.min(
-    limits.maxRuntimeSeconds,
-    limits.maxBackgroundProcessLifetimeSeconds,
-  );
-  const value = seconds ?? limits.maxRuntimeSeconds;
-  return Math.max(1, Math.min(value, ceiling));
-}
-
-function createOutputBatcher(onOutput?: (chunk: CommandOutputChunk) => void) {
-  let stdoutBuf = "";
-  let stderrBuf = "";
-  let lastEmitAt = 0;
-  let stdoutPending = "";
-  let stderrPending = "";
-
-  const flush = (stream: CommandStream, pending: string): string => {
-    if (!pending || !onOutput) return "";
-    onOutput({ stream, text: pending });
-    return "";
-  };
-
-  const maybeFlush = (force: boolean) => {
-    const now = Date.now();
-    const due =
-      force ||
-      now - lastEmitAt >= TOOL_OUTPUT_EMIT_INTERVAL_MS ||
-      stdoutPending.length >= TOOL_OUTPUT_EMIT_MIN_CHARS ||
-      stderrPending.length >= TOOL_OUTPUT_EMIT_MIN_CHARS;
-    if (!due) return;
-    stdoutPending = flush("stdout", stdoutPending);
-    stderrPending = flush("stderr", stderrPending);
-    lastEmitAt = now;
-  };
-
-  return {
-    onChunk(stream: CommandStream, chunk: string) {
-      if (stream === "stdout") {
-        stdoutBuf += chunk;
-        stdoutPending += chunk;
-      } else {
-        stderrBuf += chunk;
-        stderrPending += chunk;
-      }
-      maybeFlush(false);
-    },
-    finish() {
-      maybeFlush(true);
-      stdoutPending = flush("stdout", stdoutPending);
-      stderrPending = flush("stderr", stderrPending);
-      return { stdout: stdoutBuf, stderr: stderrBuf };
-    },
-  };
-}
 
 async function ensureShellSession(
   sandbox: DaytonaSandboxLike,
@@ -196,14 +122,7 @@ export async function runSandboxCommand(
   };
   const policyVerdict = checkShellCommand(input.command, shellCtx);
   if (!policyVerdict.allowed) {
-    return {
-      exitCode: 1,
-      stdout: "",
-      stderr: `policy blocked: ${policyVerdict.reason}`,
-      combined: `policy blocked: ${policyVerdict.reason}`,
-      truncated: false,
-      policyBlocked: policyVerdict.reason,
-    };
+    return blockedCommandResult(policyVerdict.reason);
   }
 
   const commandLimits = resolveCommandPolicy(input.policy?.command);
@@ -272,26 +191,12 @@ export async function runSandboxCommand(
   }
 
   const { stdout, stderr } = batcher.finish();
-  const combined = [stdout, stderr].filter(Boolean).join(stderr && stdout ? "\n" : "");
-  const maxOut = commandLimits.maxOutputChars;
-  const truncatedStdout = truncateText(stdout, maxOut, "stdout");
-  const truncatedStderr = truncateText(stderr, maxOut, "stderr");
-  const truncatedCombined = truncateText(
-    combined || `(exit ${exitCode})`,
-    maxOut,
-    "output",
-  );
-
-  return {
+  return finalizeCommandResult({
     exitCode,
-    stdout: truncatedStdout.text,
-    stderr: truncatedStderr.text,
-    combined: truncatedCombined.text,
-    truncated:
-      truncatedStdout.truncated ||
-      truncatedStderr.truncated ||
-      truncatedCombined.truncated,
-  };
+    stdout,
+    stderr,
+    maxOutputChars: commandLimits.maxOutputChars,
+  });
 }
 
 export function formatCommandResult(result: RunSandboxCommandResult): string {

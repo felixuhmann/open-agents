@@ -86,6 +86,34 @@ const schema = z.object({
 
   /** Max workflow runs executed concurrently per node. */
   WORKFLOW_RUN_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
+
+  /**
+   * Self-hosted sandbox broker (optional).
+   *
+   * Absent `SANDBOX_BROKER_URL` means this deployment has no broker, which is
+   * the normal state for a Daytona install — the provider simply does not
+   * register. Unlike model/Daytona credentials, the broker token is
+   * infrastructure rather than an admin-rotatable service secret: it
+   * authenticates one private container to another over a network the browser
+   * cannot reach, so it stays in the environment and out of the database.
+   */
+  SANDBOX_BROKER_URL: z.string().url().optional(),
+  SANDBOX_BROKER_TOKEN: z.string().min(1).optional(),
+  /** Path to a token file, typically a volume the broker generated. */
+  SANDBOX_BROKER_TOKEN_FILE: z.string().min(1).optional(),
+  /** Exact broker build to accept. Mismatch fails readiness rather than guessing. */
+  SANDBOX_BROKER_EXPECTED_VERSION: z.string().min(1).optional(),
+
+  /** Fixed resource shape of every broker sandbox this deployment creates. */
+  SANDBOX_BROKER_CPU_CORES: z.coerce.number().positive().max(8).default(2),
+  SANDBOX_BROKER_MEMORY_MIB: z.coerce.number().int().min(128).max(32_768).default(2_048),
+  SANDBOX_BROKER_PIDS: z.coerce.number().int().min(16).max(4_096).default(512),
+  SANDBOX_BROKER_WORKSPACE_MIB: z.coerce
+    .number()
+    .int()
+    .min(64)
+    .max(32_768)
+    .default(4_096),
 });
 
 export type Config = z.infer<typeof schema>;

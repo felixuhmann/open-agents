@@ -28,6 +28,9 @@
     "typescript": "^6.0.3"
   },
   "pnpm": {
+    "overrides": {
+      "@sandbox-broker/contracts": "file:vendor/sandbox-broker/sandbox-broker-contracts-0.1.0-rc.1.tgz"
+    },
     "onlyBuiltDependencies": [
       "@prisma/engines",
       "esbuild",

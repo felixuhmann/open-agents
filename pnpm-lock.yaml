@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@sandbox-broker/contracts': file:vendor/sandbox-broker/sandbox-broker-contracts-0.1.0-rc.1.tgz
+
 importers:
 
   .:
@@ -50,6 +53,9 @@ importers:
       '@react-email/render':
         specifier: ^2.0.7
         version: 2.0.8(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@sandbox-broker/client':
+        specifier: file:../../vendor/sandbox-broker/sandbox-broker-client-0.1.0-rc.1.tgz
+        version: file:vendor/sandbox-broker/sandbox-broker-client-0.1.0-rc.1.tgz
       better-auth:
         specifier: ^1.4.6
         version: 1.6.9(@opentelemetry/api@1.9.0)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@6.0.3))(typescript@6.0.3))(mysql2@3.15.3)(next@16.2.3(@opentelemetry/api@1.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(pg@8.20.0)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@6.0.3))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -2914,6 +2920,14 @@ packages:
     resolution: {integrity: sha512-hPt/bgL5cE+Qp+/TPHBqptcAgPzgj46mPcg/16zNUmbQk0j+mOEQV/+Lqu8QRtDV3Ek95Q6FeFITpuhl6OTsAA==}
     cpu: [x64]
     os: [win32]
+
+  '@sandbox-broker/client@file:vendor/sandbox-broker/sandbox-broker-client-0.1.0-rc.1.tgz':
+    resolution: {integrity: sha512-KgyDvApkUxtZ2rf545xDVYJFKnHnQgl5SjiHHMfzfjGW43IUEOVOSm9rcr5nro8apn4Nh87oT33ZkXJ45T9UuA==, tarball: file:vendor/sandbox-broker/sandbox-broker-client-0.1.0-rc.1.tgz}
+    version: 0.1.0-rc.1
+
+  '@sandbox-broker/contracts@file:vendor/sandbox-broker/sandbox-broker-contracts-0.1.0-rc.1.tgz':
+    resolution: {integrity: sha512-E9hBE2mipPUXVGoP/95QNbZ60IT2iUAk9mFf8512NIil8DhzwDl/GHL+Rz0XVstRi7TjeUIVizMStrmrBPX4Kw==, tarball: file:vendor/sandbox-broker/sandbox-broker-contracts-0.1.0-rc.1.tgz}
+    version: 0.1.0-rc.1
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -9452,6 +9466,16 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.60.3':
     optional: true
+
+  '@sandbox-broker/client@file:vendor/sandbox-broker/sandbox-broker-client-0.1.0-rc.1.tgz':
+    dependencies:
+      '@sandbox-broker/contracts': file:vendor/sandbox-broker/sandbox-broker-contracts-0.1.0-rc.1.tgz
+      zod: 3.25.76
+
+  '@sandbox-broker/contracts@file:vendor/sandbox-broker/sandbox-broker-contracts-0.1.0-rc.1.tgz':
+    dependencies:
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
 
   '@sec-ant/readable-stream@0.4.1': {}
 

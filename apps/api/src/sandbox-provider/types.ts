@@ -63,6 +63,11 @@ export type SandboxExecInput = {
   /** Command/network policy enforced before and while running. */
   policy?: SandboxPolicyBundle;
   onOutput?: (chunk: SandboxCommandOutputChunk) => void;
+  /**
+   * Cancels the command provider-side when the run is aborted. Providers that
+   * cannot cancel remotely simply ignore it.
+   */
+  signal?: AbortSignal;
 };
 
 export type SandboxExecResult = {

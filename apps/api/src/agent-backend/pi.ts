@@ -281,6 +281,7 @@ export class PiAgentBackend implements AgentBackend {
               policy: sandboxPolicy,
               onEvent,
               runId: context?.runId,
+              signal: context?.signal,
               deps: { storeRunAttachment },
             }),
             ...mcpTools,

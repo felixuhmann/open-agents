@@ -46,7 +46,11 @@ function fakeProvider(
 
 function fixture(options: {
   stored?: string | null;
-  providers: Partial<Record<SandboxProviderId, SandboxProvider | null>>;
+  /**
+   * `null` means registered-but-unconfigured; an `Error` means registered and
+   * misconfigured, which admins must be able to tell apart.
+   */
+  providers: Partial<Record<SandboxProviderId, SandboxProvider | Error | null>>;
 }) {
   let stored = options.stored ?? null;
   const writes: string[] = [];
@@ -56,7 +60,10 @@ function fixture(options: {
     Object.fromEntries(
       Object.entries(options.providers).map(([id, provider]) => [
         id,
-        () => Promise.resolve(provider ?? null),
+        () =>
+          provider instanceof Error
+            ? Promise.reject(provider)
+            : Promise.resolve(provider ?? null),
       ]),
     ),
   );
@@ -254,6 +261,39 @@ void test("re-selecting the current provider is a no-op that still succeeds", as
   const status = await f.settings.select("daytona");
 
   assert.equal(status.active, "daytona");
+});
+
+void test("a misconfigured provider explains itself instead of reporting 'not configured'", async () => {
+  const f = fixture({
+    stored: "daytona",
+    providers: {
+      daytona: fakeProvider("daytona"),
+      broker: new Error("SANDBOX_BROKER_TOKEN_FILE at /run/broker/token is empty."),
+    },
+  });
+
+  const status = await f.settings.describe();
+  const broker = status.providers.find((p) => p.id === "broker");
+
+  assert.equal(broker?.available, false);
+  assert.match(broker?.detail ?? "", /token is empty/);
+});
+
+void test("selecting a misconfigured provider fails with its actual reason", async () => {
+  const f = fixture({
+    stored: "daytona",
+    providers: {
+      daytona: fakeProvider("daytona"),
+      broker: new Error("SANDBOX_BROKER_URL is set but no broker credential is."),
+    },
+  });
+
+  await assert.rejects(
+    () => f.settings.select("broker"),
+    (err: unknown) =>
+      err instanceof Error && err.message.includes("no broker credential"),
+  );
+  assert.deepEqual(f.writes, []);
 });
 
 // ------------------------------------------------------- session mismatch
