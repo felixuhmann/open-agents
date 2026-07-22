@@ -1,6 +1,11 @@
 import type { SkillMaterializationManifest } from "@open-agents/types";
+import type { SandboxProviderId } from "../sandbox-provider/types.js";
 
-/** Backend interface used by services/jobs to drive Daytona sandboxes. */
+/**
+ * Backend interface used by services/jobs to drive agent sandboxes. The
+ * sandbox mechanics themselves live behind `sandbox-provider/`; this is the
+ * shared Pi model/tool loop on top of them.
+ */
 export interface AgentBackend {
   runtime: "daytona";
   createSession(input: CreateSessionInput): Promise<AgentSession>;
@@ -22,7 +27,9 @@ export type AgentSession = {
   id: string;
   /** Present when the backend unpacked agent skill bundles into the sandbox. */
   skillsManifest?: SkillMaterializationManifest;
-  /** Daytona provider sandbox id (for run/issue observability). */
+  /** Sandbox provider that actually owns this session's sandbox. */
+  provider?: SandboxProviderId;
+  /** Provider-side sandbox id (for run/issue observability). */
   providerSandboxId?: string;
   workspaceDir?: string;
 };
@@ -40,7 +47,7 @@ export type SessionResource = {
   bytes?: Uint8Array;
 };
 
-/** When set, Daytona lifecycle transitions are appended to this run's event log. */
+/** When set, sandbox lifecycle transitions are appended to this run's event log. */
 export type RunObservabilityContext = {
   runId: string;
 };
@@ -52,9 +59,9 @@ export type CreateSessionInput = {
   resources?: SessionResource[];
   /** Pinned published version whose skill bindings should be materialized. */
   agentVersionId?: string;
-  /** Link sandbox metadata to a chat conversation (Daytona). */
+  /** Link sandbox metadata to a chat conversation. */
   conversationId?: string;
-  /** Link sandbox metadata to an email thread (Daytona). */
+  /** Link sandbox metadata to an email thread. */
   threadId?: string;
   surface?: "chat" | "email";
   observability?: RunObservabilityContext;

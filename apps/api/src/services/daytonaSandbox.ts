@@ -1,6 +1,10 @@
 import { Daytona, type Sandbox } from "@daytona/sdk";
 import { wrapDaytonaError } from "../agent-backend/daytonaErrors.js";
 import { AgentBackendError } from "../agent-backend/types.js";
+import {
+  buildSandboxSessionId,
+  parseSandboxSessionId,
+} from "../sandbox-provider/sessionId.js";
 import { SERVICE_KEYS, getServiceSecret } from "../secrets/service.js";
 
 export const DAYTONA_PROVIDER = "daytona";
@@ -12,15 +16,15 @@ export type DaytonaSessionRef = {
 };
 
 export function buildDaytonaSessionId(agentId: string, sandboxId: string): string {
-  return `${DAYTONA_SESSION_PREFIX}:${agentId}:${sandboxId}`;
+  return buildSandboxSessionId(DAYTONA_PROVIDER, agentId, sandboxId);
 }
 
 export function parseDaytonaSessionId(sessionId: string): DaytonaSessionRef {
-  const [prefix, agentId, sandboxId] = sessionId.split(":");
-  if (prefix !== DAYTONA_SESSION_PREFIX || !agentId || !sandboxId) {
+  const ref = parseSandboxSessionId(sessionId);
+  if (ref.provider !== DAYTONA_PROVIDER) {
     throw new AgentBackendError(`Invalid Daytona session id: ${sessionId}`);
   }
-  return { agentId, sandboxId };
+  return { agentId: ref.agentId, sandboxId: ref.providerSandboxId };
 }
 
 export async function getDaytonaApiKey(): Promise<string | null> {

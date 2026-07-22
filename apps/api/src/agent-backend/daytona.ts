@@ -248,6 +248,7 @@ export class DaytonaAgentBackend implements AgentBackend {
       return {
         id: sessionId,
         skillsManifest,
+        provider: "daytona",
         providerSandboxId: sandbox.id,
         workspaceDir,
       };
