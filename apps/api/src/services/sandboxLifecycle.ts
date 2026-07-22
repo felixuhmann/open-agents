@@ -41,6 +41,15 @@ export type SandboxLifecycleRepository = {
   getRow(rowId: string): Promise<SandboxLifecycleRow | null>;
   /** Every non-deleted sandbox row, across providers. */
   listActive(): Promise<SandboxLifecycleRow[]>;
+  /**
+   * Session ids a `WorkflowAgentSession` mapping still points at.
+   *
+   * Workflow sandboxes have no conversation/thread link on `AgentSandbox`,
+   * so without this they look like unowned leftovers and get stopped once
+   * they pass the creation grace period — no matter how recently the
+   * workflow ran.
+   */
+  listWorkflowOwnedSessionIds(): Promise<Set<string>>;
   listKnownProviderSandboxIds(provider: SandboxProviderId): Promise<Set<string>>;
   applySnapshot(rowId: string, snapshot: SandboxSnapshot): Promise<SandboxSummaryDto>;
   markDeleted(rowId: string): Promise<void>;
@@ -84,14 +93,26 @@ export function createSandboxLifecycle(deps: SandboxLifecycleDeps): SandboxLifec
     if (!isSandboxProviderId(row.provider)) {
       throw new AgentBackendError(
         `Unsupported sandbox provider "${row.provider}" on sandbox ${row.id}`,
+        { status: 409 },
       );
     }
-    return deps.registry.get(row.provider);
+    const provider = await deps.registry.tryGet(row.provider);
+    if (!provider) {
+      throw new AgentBackendError(
+        `Sandbox provider "${row.provider}" is unavailable, so sandbox ${row.id} cannot be managed right now.${
+          deps.registry.lastFailure(row.provider)
+            ? ` ${deps.registry.lastFailure(row.provider)}`
+            : ""
+        }`,
+        { status: 503 },
+      );
+    }
+    return provider;
   }
 
   async function requireRow(rowId: string): Promise<SandboxLifecycleRow> {
     const row = await deps.repository.getRow(rowId);
-    if (!row) throw new AgentBackendError(`Sandbox not found: ${rowId}`);
+    if (!row) throw new AgentBackendError(`Sandbox not found: ${rowId}`, { status: 404 });
     return row;
   }
 
@@ -120,6 +141,9 @@ export function createSandboxLifecycle(deps: SandboxLifecycleDeps): SandboxLifec
     if (!provider.capabilities[capability] || !method) {
       throw new AgentBackendError(
         `Sandbox provider "${provider.id}" does not support ${capability}.`,
+        // The request conflicts with what this sandbox's provider can do;
+        // no retry or credential change will make it work.
+        { status: 409 },
       );
     }
     return method.bind(provider);
@@ -169,6 +193,7 @@ export function createSandboxLifecycle(deps: SandboxLifecycleDeps): SandboxLifec
       const orphanBefore = new Date(now().getTime() - ORPHAN_SANDBOX_GRACE_MS);
 
       const rows = await deps.repository.listActive();
+      const workflowOwned = await deps.repository.listWorkflowOwnedSessionIds();
       // Resolve each provider once so an unavailable one costs a single
       // failed lookup rather than one per row.
       const providers = new Map<string, SandboxProvider | null>();
@@ -209,7 +234,10 @@ export function createSandboxLifecycle(deps: SandboxLifecycleDeps): SandboxLifec
           await deps.repository.applySnapshot(row.id, snapshot);
           result.synced += 1;
 
-          const isOrphan = !row.conversationId && !row.threadId;
+          // A workflow step's sandbox is owned by its `WorkflowAgentSession`
+          // mapping even though nothing links it to a conversation or thread.
+          const isOrphan =
+            !row.conversationId && !row.threadId && !workflowOwned.has(row.sessionId);
           const isStale = row.lastActivityAt < staleBefore;
           const shouldStop =
             snapshot.state === "started" &&

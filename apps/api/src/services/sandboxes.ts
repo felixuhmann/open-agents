@@ -19,7 +19,7 @@ import {
   type ReconcileSandboxesResult,
   type SandboxLifecycleRepository,
 } from "./sandboxLifecycle.js";
-import { sandboxInclude, toSandboxSummary } from "./sandboxSummary.js";
+import { pickCurrentSandbox, sandboxInclude, toSandboxSummary } from "./sandboxSummary.js";
 
 export { toSandboxSummary };
 
@@ -90,6 +90,24 @@ export async function registerAgentSandbox(
   return row;
 }
 
+/**
+ * Retire the row for a sandbox that has already been destroyed provider-side,
+ * so reconciliation stops trying to inspect it.
+ */
+export async function markSandboxDeletedBySessionId(sessionId: string): Promise<void> {
+  await prisma.agentSandbox.updateMany({
+    where: { sessionId },
+    data: {
+      state: "deleted",
+      conversationId: null,
+      threadId: null,
+      lastSyncedAt: new Date(),
+      errorReason: null,
+      recoverable: null,
+    },
+  });
+}
+
 export async function touchSandboxActivity(sessionId: string): Promise<void> {
   const ref = tryParseSandboxSessionId(sessionId);
   if (!ref) return;
@@ -135,6 +153,12 @@ const lifecycleRepository: SandboxLifecycleRepository = {
         lastActivityAt: true,
       },
     });
+  },
+  async listWorkflowOwnedSessionIds() {
+    const rows = await prisma.workflowAgentSession.findMany({
+      select: { sessionId: true },
+    });
+    return new Set(rows.map((r) => r.sessionId));
   },
   async listKnownProviderSandboxIds(provider) {
     const rows = await prisma.agentSandbox.findMany({
@@ -200,6 +224,16 @@ export function deleteSandbox(id: string): Promise<void> {
   return lifecycle.remove(id);
 }
 
+/**
+ * Drop every pointer at a sandbox that is gone (deleted by an operator, or
+ * missing from its provider). Each surface is cleared only while it still
+ * names *this* session, so a pointer that already rotated onto a replacement
+ * sandbox is left alone.
+ *
+ * Workflow mappings are deleted rather than nulled: `WorkflowAgentSession`
+ * requires a session id, and the next step run recreates the mapping against
+ * a fresh sandbox. Without this, workflows keep resuming a dead sandbox.
+ */
 async function clearSandboxSessionPointers(
   row: Pick<AgentSandbox, "sessionId" | "conversationId" | "threadId">,
 ): Promise<void> {
@@ -215,6 +249,7 @@ async function clearSandboxSessionPointers(
       data: { sessionId: null },
     });
   }
+  await prisma.workflowAgentSession.deleteMany({ where: { sessionId: row.sessionId } });
 }
 
 export type ListSandboxesQuery = {
@@ -256,12 +291,28 @@ export async function getSandboxById(id: string): Promise<SandboxSummaryDto | nu
   return row ? toSandboxSummary(row) : null;
 }
 
+function bySessionId(sessionId: string) {
+  return prisma.agentSandbox.findUnique({ where: { sessionId }, include: sandboxInclude });
+}
+
 export async function getSandboxForConversation(
   conversationId: string,
 ): Promise<SandboxSummaryDto | null> {
-  const row = await prisma.agentSandbox.findFirst({
-    where: { conversationId },
-    include: sandboxInclude,
+  const row = await pickCurrentSandbox({
+    ownerSessionId: async () =>
+      (
+        await prisma.chatConversation.findUnique({
+          where: { id: conversationId },
+          select: { sessionId: true },
+        })
+      )?.sessionId ?? null,
+    bySessionId,
+    byOwnerLink: () =>
+      prisma.agentSandbox.findFirst({
+        where: { conversationId, state: { not: "deleted" } },
+        orderBy: { lastActivityAt: "desc" },
+        include: sandboxInclude,
+      }),
   });
   return row ? toSandboxSummary(row) : null;
 }
@@ -269,9 +320,21 @@ export async function getSandboxForConversation(
 export async function getSandboxForThread(
   threadId: string,
 ): Promise<SandboxSummaryDto | null> {
-  const row = await prisma.agentSandbox.findFirst({
-    where: { threadId },
-    include: sandboxInclude,
+  const row = await pickCurrentSandbox({
+    ownerSessionId: async () =>
+      (
+        await prisma.emailThread.findUnique({
+          where: { id: threadId },
+          select: { sessionId: true },
+        })
+      )?.sessionId ?? null,
+    bySessionId,
+    byOwnerLink: () =>
+      prisma.agentSandbox.findFirst({
+        where: { threadId, state: { not: "deleted" } },
+        orderBy: { lastActivityAt: "desc" },
+        include: sandboxInclude,
+      }),
   });
   return row ? toSandboxSummary(row) : null;
 }

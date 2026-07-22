@@ -47,16 +47,28 @@ export function parseActiveSandboxProviderId(
 }
 
 /**
- * Whether a stored session belongs to a different provider than the active
- * one, in which case it must not be resumed. An absent or unparseable
- * session id is not a mismatch — those paths already create a new session.
+ * Whether a stored session pointer must be replaced rather than resumed.
+ *
+ * An absent pointer is not a mismatch — that path creates a session anyway.
+ * A *present* pointer that cannot be parsed, or that names a provider this
+ * build does not know, is: resuming it would hand the same string to
+ * `parseSandboxSessionId` and throw, leaving the conversation, thread, or
+ * workflow mapping stuck on a value nothing can ever connect to. Rotating
+ * instead gives it a working sandbox on the active provider.
  */
 export function isSessionProviderMismatch(
   sessionId: string | null | undefined,
   activeProviderId: SandboxProviderId,
 ): boolean {
+  if (typeof sessionId !== "string" || sessionId.length === 0) return false;
   const provider = sandboxProviderFromSessionId(sessionId);
-  if (!provider) return false;
+  if (!provider) {
+    log.warn("sandbox-provider: unusable session id, rotating to the active provider", {
+      sessionId,
+      activeProvider: activeProviderId,
+    });
+    return true;
+  }
   return provider !== activeProviderId;
 }
 
@@ -118,6 +130,8 @@ export function createSandboxProviderSettings(
         `Cannot select sandbox provider "${id}"${
           info.detail ? `: ${info.detail}` : "."
         } The current selection is unchanged.`,
+        // A rejected switch is a normal answer to the request, not a fault.
+        { status: 400 },
       );
     }
   }

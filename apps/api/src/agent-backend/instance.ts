@@ -1,52 +1,37 @@
 import { sandboxProviderRegistry } from "../sandbox-provider/instance.js";
 import { getActiveSandboxProviderId } from "../services/sandboxProviderSettingsInstance.js";
-import type { SandboxProviderId } from "../sandbox-provider/types.js";
-import { createAgentBackendResolver } from "./backendResolver.js";
 import { PiAgentBackend } from "./pi.js";
 import type { AgentBackend } from "./types.js";
 
 /**
- * Lazy AgentBackend factory. The runtime itself is provider-neutral, but it
- * can only run once the deployment's active sandbox provider is configured
- * (Daytona's API key lives in the encrypted Secret store). Callers go through
- * `getAgentBackend()` and get an actionable error if setup hasn't run.
+ * Lazy AgentBackend singleton.
  *
- * The instance is cached per active provider and rebuilt after a selection or
- * credential change (`resetAgentBackend()`).
+ * The runtime is provider-neutral and stateless with respect to the
+ * deployment's provider selection: every operation on an *existing* session
+ * dispatches through the provider recorded in that session's id, and only
+ * `createSession()` consults the active provider. Getting the backend
+ * therefore must not require the active provider to resolve — otherwise a
+ * broker outage would stop in-flight and historical Daytona sessions from
+ * streaming, mounting, or being managed, even though Daytona is still
+ * configured and healthy.
+ *
+ * Provider instances and their credentials are cached in the registry, which
+ * `resetAgentBackend()` clears after setup or a selection change.
  */
 
-function missingProviderMessage(id: SandboxProviderId): string {
-  if (id === "daytona") {
-    return "Daytona API key is not configured. Complete setup at /setup.";
-  }
-  return `Sandbox provider "${id}" is not configured. Complete setup at /setup.`;
-}
+let cached: AgentBackend | null = null;
 
-const resolver = createAgentBackendResolver<AgentBackend>({
-  loadCredentialKey: async () => {
-    const providerId = await getActiveSandboxProviderId();
-    const provider = await sandboxProviderRegistry.tryGet(providerId);
-    return provider ? providerId : null;
-  },
-  build: () =>
-    new PiAgentBackend({
-      registry: sandboxProviderRegistry,
-      activeProviderId: getActiveSandboxProviderId,
-    }),
-  missingCredentialMessage: "",
-});
-
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function getAgentBackend(): Promise<AgentBackend> {
-  const providerId = await getActiveSandboxProviderId();
-  const provider = await sandboxProviderRegistry.tryGet(providerId);
-  if (!provider) {
-    throw new Error(missingProviderMessage(providerId));
-  }
-  return resolver.get();
+  cached ??= new PiAgentBackend({
+    registry: sandboxProviderRegistry,
+    activeProviderId: getActiveSandboxProviderId,
+  });
+  return cached;
 }
 
-/** Force the next `getAgentBackend()` call to rebuild the singleton. */
+/** Drop cached provider instances after a credential or selection change. */
 export function resetAgentBackend(): void {
-  resolver.reset();
+  cached = null;
   sandboxProviderRegistry.reset();
 }

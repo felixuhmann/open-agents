@@ -10,6 +10,7 @@ import {
   buildSandboxSessionId,
   parseSandboxSessionId,
 } from "../sandbox-provider/sessionId.js";
+import { resolveProviderForNewSandbox } from "../sandbox-provider/activeProvider.js";
 import type { SandboxProviderRegistry } from "../sandbox-provider/registry.js";
 import type {
   SandboxHandle,
@@ -28,7 +29,11 @@ import {
   DEFAULT_SANDBOX_COMMAND_POLICY,
   DEFAULT_SANDBOX_NETWORK_POLICY,
 } from "../services/sandboxPolicy.js";
-import { registerAgentSandbox, touchSandboxActivity } from "../services/sandboxes.js";
+import {
+  markSandboxDeletedBySessionId,
+  registerAgentSandbox,
+  touchSandboxActivity,
+} from "../services/sandboxes.js";
 import { buildAuthorProfileContext } from "../services/userProfileContext.js";
 import {
   isRunCancelledError,
@@ -61,6 +66,7 @@ import type {
   AgentRunContext,
   AgentSession,
   CreateSessionInput,
+  MountedSession,
   RunObservabilityContext,
   SessionResource,
   UploadFileInput,
@@ -111,7 +117,12 @@ export class PiAgentBackend implements AgentBackend {
   constructor(private readonly deps: PiAgentBackendDeps) {}
 
   async createSession(input: CreateSessionInput): Promise<AgentSession> {
-    const provider = await this.deps.registry.get(await this.deps.activeProviderId());
+    // The only operation gated on the deployment-wide selection. Everything
+    // else routes through the session's own recorded provider.
+    const provider = await resolveProviderForNewSandbox(
+      this.deps.registry,
+      await this.deps.activeProviderId(),
+    );
     const lifecycle = DEFAULT_DAYTONA_LIFECYCLE;
     const baseAgent = await getAgentById(input.agentId);
     let sandboxPolicy: SandboxPolicyBundle = baseAgent
@@ -164,8 +175,6 @@ export class PiAgentBackend implements AgentBackend {
       sessionId,
       lifecyclePolicy: lifecycle,
       surface: input.surface,
-      conversationId: input.conversationId,
-      threadId: input.threadId,
       state: handle.state,
     });
 
@@ -200,9 +209,9 @@ export class PiAgentBackend implements AgentBackend {
     sessionId: string,
     resources: SessionResource[],
     observability?: RunObservabilityContext,
-  ): Promise<void> {
-    if (!resources.length) return;
-    await this.withHandle(
+  ): Promise<MountedSession> {
+    if (!resources.length) return {};
+    const workspaceDir = await this.withHandle(
       sessionId,
       async (handle) => {
         await this.materializeResources(
@@ -210,12 +219,30 @@ export class PiAgentBackend implements AgentBackend {
           resources,
           observability ? { runId: observability.runId, sessionId } : undefined,
         );
+        return handle.workspaceDir;
       },
       observability?.runId,
     );
     log.info("sandbox: mounted session resources", {
       sessionId,
       resourceCount: resources.length,
+    });
+    return { workspaceDir };
+  }
+
+  /**
+   * Delete a sandbox through its *own* provider and retire the row. Used
+   * when a replacement sandbox loses the pointer race, so the deployment is
+   * not left paying for a sandbox nothing references.
+   */
+  async discardSession(sessionId: string): Promise<void> {
+    const session = parseSandboxSessionId(sessionId);
+    const provider = await this.deps.registry.get(session.provider);
+    await provider.delete(session.providerSandboxId);
+    await markSandboxDeletedBySessionId(sessionId);
+    log.info("sandbox: discarded superseded session", {
+      sessionId,
+      provider: session.provider,
     });
   }
 

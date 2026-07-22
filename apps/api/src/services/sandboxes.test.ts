@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toSandboxSummary, type SandboxRowWithRelations } from "./sandboxSummary.js";
+import {
+  pickCurrentSandbox,
+  toSandboxSummary,
+  type SandboxRowWithRelations,
+} from "./sandboxSummary.js";
 
 /**
  * Characterization of the `AgentSandbox` → `SandboxSummaryDto` projection the
@@ -102,6 +106,76 @@ void test("error state fields survive the projection", () => {
   assert.equal(summary.state, "error");
   assert.equal(summary.errorReason, "quota exceeded");
   assert.equal(summary.recoverable, true);
+});
+
+// --------------------------------------------------- current-sandbox lookup
+
+/**
+ * After a Daytona → broker rotation the conversation points at its
+ * replacement sandbox. Resolving "the sandbox for this conversation" by the
+ * owner link alone can still surface the retired row, which would let an
+ * operator stop or delete a sandbox the agent is not running on.
+ */
+
+function lookup(options: {
+  ownerSessionId: string | null;
+  rows: Record<string, string>;
+  linked?: string;
+}) {
+  const calls: string[] = [];
+  return {
+    calls,
+    run: () =>
+      pickCurrentSandbox<string>({
+        ownerSessionId: () => {
+          calls.push("owner");
+          return Promise.resolve(options.ownerSessionId);
+        },
+        bySessionId: (sessionId) => {
+          calls.push(`session:${sessionId}`);
+          return Promise.resolve(options.rows[sessionId] ?? null);
+        },
+        byOwnerLink: () => {
+          calls.push("link");
+          return Promise.resolve(options.linked ?? null);
+        },
+      }),
+  };
+}
+
+void test("the row matching the owner's own session pointer wins after a rotation", async () => {
+  const found = lookup({
+    ownerSessionId: "broker:agent_1:sbx-new",
+    rows: { "broker:agent_1:sbx-new": "row_new" },
+    // The obsolete Daytona row is what an unordered owner-link query returns.
+    linked: "row_old",
+  });
+
+  assert.equal(await found.run(), "row_new");
+  assert.equal(found.calls.includes("link"), false);
+});
+
+void test("an owner with no pointer falls back to the linked row", async () => {
+  const found = lookup({ ownerSessionId: null, rows: {}, linked: "row_backfilled" });
+
+  assert.equal(await found.run(), "row_backfilled");
+  assert.deepEqual(found.calls, ["owner", "link"]);
+});
+
+void test("a pointer with no sandbox row falls back rather than reporting nothing", async () => {
+  const found = lookup({
+    ownerSessionId: "daytona:agent_1:sbx-legacy",
+    rows: {},
+    linked: "row_legacy",
+  });
+
+  assert.equal(await found.run(), "row_legacy");
+});
+
+void test("no pointer and no link means there is no current sandbox", async () => {
+  const found = lookup({ ownerSessionId: null, rows: {} });
+
+  assert.equal(await found.run(), null);
 });
 
 void test("lifecycle policy is validated, not passed through blindly", () => {

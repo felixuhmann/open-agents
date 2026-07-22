@@ -29,6 +29,28 @@ const REDACTED_QUERY_KEYS = new Set([
   "bearer",
 ]);
 
+/**
+ * Response code a thrown error selects, or `null` when it is an unexpected
+ * fault. Any error carrying a string `message` and an integer 4xx/5xx
+ * `status` qualifies — `HttpError` from the auth middleware and
+ * `AgentBackendError` from the sandbox provider domain both do — so a
+ * provider that is unreachable or cannot archive reaches the caller as a
+ * 503/409 with the reason instead of a bare 500.
+ */
+type HandlerStatus = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 503;
+
+function statusOf(err: unknown): HandlerStatus | null {
+  if (typeof err !== "object" || err === null) return null;
+  if (!("status" in err) || !("message" in err)) return null;
+  const { status, message } = err;
+  if (typeof message !== "string") return null;
+  if (typeof status !== "number" || !Number.isInteger(status)) return null;
+  if (status < 400 || status > 599) return null;
+  // Narrowed to a response code; the union above only documents the ones
+  // handlers actually select.
+  return status as HandlerStatus;
+}
+
 function redactQuery(q: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(q)) {
@@ -119,23 +141,21 @@ export function applyRequestLogMiddleware(
       return c.json({ error: message }, 400);
     }
 
-    log.error("http: handler threw", {
+    // A domain error that carries a status is an answer, not a fault: log it
+    // at `warn` and hand the caller the actionable message. Only genuinely
+    // unexpected throws become an opaque 500.
+    const status = statusOf(err);
+    const logged = {
       reqId: c.get("reqId"),
       err: err instanceof Error ? (err.stack ?? err.message) : String(err),
       path: c.req.path,
       method: c.req.method,
-    });
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "status" in err &&
-      "message" in err &&
-      typeof (err as { status?: unknown }).status === "number"
-    ) {
-      const status = (err as { status: number }).status;
-      const message = (err as { message: string }).message;
-      return c.json({ error: message }, status as 400 | 401 | 403 | 404 | 409 | 500);
+    };
+    if (status !== null) {
+      log.warn("http: handler rejected the request", { ...logged, status });
+      return c.json({ error: (err as { message: string }).message }, status);
     }
+    log.error("http: handler threw", logged);
     return c.text("internal error", 500);
   });
 }

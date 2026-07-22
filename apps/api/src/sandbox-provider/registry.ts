@@ -50,13 +50,14 @@ export function createSandboxProviderRegistry(
 
     const factory = factories[id];
     if (!factory) {
-      throw new AgentBackendError(`Unknown sandbox provider: ${id}`);
+      throw new AgentBackendError(`Unknown sandbox provider: ${id}`, { status: 400 });
     }
     const provider = await factory();
     if (!provider) {
       // Not cached: configuring it later must take effect without a reset.
       const unconfigured = new AgentBackendError(
         `Sandbox provider "${id}" is not configured for this deployment.`,
+        { status: 503 },
       );
       Object.defineProperty(unconfigured, UNCONFIGURED, { value: true });
       throw unconfigured;

@@ -323,8 +323,27 @@ void test("a session on a different provider is not resumed", () => {
   assert.equal(isSessionProviderMismatch("broker:agent_1:sbx-1", "daytona"), true);
 });
 
-void test("an absent or unparseable session id is not treated as a mismatch", () => {
+void test("an absent session id is not a mismatch — that path creates a session anyway", () => {
   assert.equal(isSessionProviderMismatch(null, "broker"), false);
+  assert.equal(isSessionProviderMismatch(undefined, "broker"), false);
   assert.equal(isSessionProviderMismatch("", "broker"), false);
-  assert.equal(isSessionProviderMismatch("garbage", "broker"), false);
+});
+
+void test("a stored session id nobody can parse rotates instead of being resumed", () => {
+  // Resuming these is a guaranteed failure: the backend parses the same id
+  // and throws, leaving the conversation pointer stuck on a dead value.
+  for (const stored of [
+    "garbage",
+    "daytona:agent_1",
+    "daytona:agent_1:sbx-1:extra",
+    "daytona::sbx-1",
+  ]) {
+    assert.equal(isSessionProviderMismatch(stored, "daytona"), true, stored);
+    assert.equal(isSessionProviderMismatch(stored, "broker"), true, stored);
+  }
+});
+
+void test("a session id naming a provider this build does not know rotates", () => {
+  assert.equal(isSessionProviderMismatch("modal:agent_1:sbx-1", "daytona"), true);
+  assert.equal(isSessionProviderMismatch("modal:agent_1:sbx-1", "broker"), true);
 });

@@ -133,7 +133,7 @@ function fakeProvider(options: FakeProviderOptions) {
   return { provider, calls, states };
 }
 
-function fakeRepository(rows: SandboxLifecycleRow[]) {
+function fakeRepository(rows: SandboxLifecycleRow[], workflowOwned: string[] = []) {
   const applied: { rowId: string; state: string }[] = [];
   const deleted: string[] = [];
   const cleared: string[] = [];
@@ -147,6 +147,7 @@ function fakeRepository(rows: SandboxLifecycleRow[]) {
   const repository: SandboxLifecycleRepository = {
     getRow: (id) => Promise.resolve(rows.find((r) => r.id === id) ?? null),
     listActive: () => Promise.resolve([...rows]),
+    listWorkflowOwnedSessionIds: () => Promise.resolve(new Set(workflowOwned)),
     listKnownProviderSandboxIds: (provider) =>
       Promise.resolve(known.get(provider) ?? new Set<string>()),
     applySnapshot: (rowId, snap) => {
@@ -169,8 +170,9 @@ function fakeRepository(rows: SandboxLifecycleRow[]) {
 function lifecycleFor(
   rows: SandboxLifecycleRow[],
   providers: Partial<Record<SandboxProviderId, SandboxProvider | null>>,
+  workflowOwned: string[] = [],
 ) {
-  const repo = fakeRepository(rows);
+  const repo = fakeRepository(rows, workflowOwned);
   const registry = createSandboxProviderRegistry(
     Object.fromEntries(
       Object.entries(providers).map(([id, provider]) => [
@@ -245,11 +247,29 @@ void test("archive and recover fail with an actionable message when the provider
       (err: unknown) =>
         err instanceof AgentBackendError &&
         err.message.includes("broker") &&
-        err.message.includes(action),
+        err.message.includes(action) &&
+        // Reaches the API caller as a conflict, not an opaque 500: no retry
+        // or credential change makes this provider able to archive.
+        err.status === 409,
       `${action} should report an unsupported capability`,
     );
   }
   assert.deepEqual(broker.calls, []);
+});
+
+void test("a provider that is currently unavailable fails the action with 503, not 500", async () => {
+  const { lifecycle } = lifecycleFor(
+    [row({ provider: "broker", sessionId: "broker:agent_1:sbx-1" })],
+    { broker: null },
+  );
+
+  await assert.rejects(
+    () => lifecycle.stop("row_1"),
+    (err: unknown) =>
+      err instanceof AgentBackendError &&
+      err.status === 503 &&
+      err.message.includes("broker"),
+  );
 });
 
 void test("archive and recover still work on a provider that supports them", async () => {
@@ -270,18 +290,24 @@ void test("a row naming an unknown provider fails locally with a clear message",
 
   await assert.rejects(
     () => lifecycle.syncFromProvider("row_x"),
-    (err: unknown) => err instanceof AgentBackendError && err.message.includes("modal"),
+    (err: unknown) =>
+      err instanceof AgentBackendError &&
+      err.message.includes("modal") &&
+      err.status === 409,
   );
 });
 
-void test("acting on a missing row reports the row id", async () => {
+void test("acting on a missing row reports the row id as a 404", async () => {
   const { lifecycle } = lifecycleFor([], {
     daytona: fakeProvider({ id: "daytona" }).provider,
   });
 
   await assert.rejects(
     () => lifecycle.syncFromProvider("nope"),
-    (err: unknown) => err instanceof AgentBackendError && err.message.includes("nope"),
+    (err: unknown) =>
+      err instanceof AgentBackendError &&
+      err.message.includes("nope") &&
+      err.status === 404,
   );
 });
 
@@ -389,6 +415,78 @@ void test("reconcile stops long-idle and orphaned sandboxes", async () => {
   assert.ok(daytona.calls.includes("stop:sbx-stale"));
   assert.ok(daytona.calls.includes("stop:sbx-orphan"));
   assert.equal(daytona.calls.includes("stop:sbx-live"), false);
+});
+
+void test("a workflow's sandbox is owned by its mapping, not an orphan to reap", async () => {
+  const daytona = fakeProvider({
+    id: "daytona",
+    states: new Map([["sbx-wf", "started"]]),
+  });
+  const workflowRow = row({
+    id: "row_wf",
+    providerSandboxId: "sbx-wf",
+    sessionId: "daytona:agent_1:sbx-wf",
+    // Workflow sandboxes carry neither link — the mapping is the owner.
+    conversationId: null,
+    threadId: null,
+    createdAt: LONG_AGO,
+  });
+  const fixture = lifecycleFor([workflowRow], { daytona: daytona.provider }, [
+    "daytona:agent_1:sbx-wf",
+  ]);
+
+  const result = await fixture.lifecycle.reconcile();
+
+  assert.equal(result.orphansStopped, 0);
+  assert.equal(daytona.calls.includes("stop:sbx-wf"), false);
+});
+
+void test("a workflow sandbox with no mapping left is still reaped as an orphan", async () => {
+  const daytona = fakeProvider({
+    id: "daytona",
+    states: new Map([["sbx-wf", "started"]]),
+  });
+  const fixture = lifecycleFor(
+    [
+      row({
+        id: "row_wf",
+        providerSandboxId: "sbx-wf",
+        sessionId: "daytona:agent_1:sbx-wf",
+        conversationId: null,
+        threadId: null,
+        createdAt: LONG_AGO,
+      }),
+    ],
+    { daytona: daytona.provider },
+    ["daytona:agent_1:some-other-sandbox"],
+  );
+
+  const result = await fixture.lifecycle.reconcile();
+
+  assert.equal(result.orphansStopped, 1);
+  assert.ok(daytona.calls.includes("stop:sbx-wf"));
+});
+
+void test("a workflow sandbox the provider lost clears its mapping", async () => {
+  const daytona = fakeProvider({ id: "daytona", missing: new Set(["sbx-wf"]) });
+  const fixture = lifecycleFor(
+    [
+      row({
+        id: "row_wf",
+        providerSandboxId: "sbx-wf",
+        sessionId: "daytona:agent_1:sbx-wf",
+        conversationId: null,
+        threadId: null,
+      }),
+    ],
+    { daytona: daytona.provider },
+    ["daytona:agent_1:sbx-wf"],
+  );
+
+  const result = await fixture.lifecycle.reconcile();
+
+  assert.equal(result.pointersCleared, 1);
+  assert.deepEqual(fixture.cleared, ["row_wf"]);
 });
 
 // ----------------------------------------------------------------- orphans

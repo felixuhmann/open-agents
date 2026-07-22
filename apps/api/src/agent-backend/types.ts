@@ -14,7 +14,7 @@ export interface AgentBackend {
     sessionId: string,
     resources: SessionResource[],
     observability?: RunObservabilityContext,
-  ): Promise<void>;
+  ): Promise<MountedSession>;
   streamUntilIdle(
     sessionId: string,
     userMessage: string,
@@ -22,7 +22,22 @@ export interface AgentBackend {
     context?: AgentRunContext,
   ): Promise<string>;
   uploadFile(input: UploadFileInput): Promise<AgentFile>;
+  /**
+   * Destroy a sandbox this process created but will not use — a replacement
+   * that lost the pointer race, or a partially-initialized session. Retires
+   * the `AgentSandbox` row so reconciliation does not chase it.
+   */
+  discardSession(sessionId: string): Promise<void>;
 }
+
+/**
+ * What connecting to an existing session revealed. Returned so a resumed run
+ * can report the same sandbox metadata a newly created one does, without
+ * spending an extra connect purely to log it.
+ */
+export type MountedSession = {
+  workspaceDir?: string;
+};
 
 export type AgentSession = {
   id: string;
@@ -60,10 +75,13 @@ export type CreateSessionInput = {
   resources?: SessionResource[];
   /** Pinned published version whose skill bindings should be materialized. */
   agentVersionId?: string;
-  /** Link sandbox metadata to a chat conversation. */
-  conversationId?: string;
-  /** Link sandbox metadata to an email thread. */
-  threadId?: string;
+  /**
+   * Surface label recorded on the sandbox row. The *link* to a specific
+   * conversation or thread is not set here: it is a unique column that a
+   * replacement sandbox has to take over from its predecessor, so it is
+   * claimed transactionally alongside the session pointer
+   * (`sandboxSessionClaim.ts`) once the sandbox exists.
+   */
   surface?: "chat" | "email";
   observability?: RunObservabilityContext;
 };
@@ -156,9 +174,22 @@ export type AgentStreamEvent =
 
 export type AgentEventHandler = (event: AgentStreamEvent) => void;
 
+/**
+ * Failure in the sandbox/agent domain.
+ *
+ * `status` marks the errors that are a *normal answer* to an API call rather
+ * than a server fault — "that provider is not reachable", "this provider
+ * cannot archive". The app's `onError` hook turns it into that response code
+ * with the message intact, so an operator sees what to fix instead of
+ * "internal error". Runtime failures deliberately leave it unset and stay
+ * 500s.
+ */
 export class AgentBackendError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  readonly status?: number;
+
+  constructor(message: string, options?: { cause?: unknown; status?: number }) {
     super(message, options);
     this.name = "AgentBackendError";
+    if (options?.status !== undefined) this.status = options.status;
   }
 }

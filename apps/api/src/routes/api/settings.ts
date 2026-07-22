@@ -12,6 +12,7 @@ import {
   listAppSettings,
   setAppSetting,
 } from "../../services/appSettings.js";
+import { rejectGenericAppSettingMutation } from "../../services/appSettingPolicy.js";
 import {
   deleteBrandingAsset,
   MAX_BRANDING_BYTES,
@@ -21,7 +22,6 @@ import type { AppVariables } from "../../server/types.js";
 
 export const settingsRoutes = new Hono<{ Variables: AppVariables }>();
 
-const ALLOWED: AppSettingKey[] = Object.values(APP_SETTING_KEYS);
 const UPLOADABLE_SETTINGS = new Set<AppSettingKey>([
   APP_SETTING_KEYS.EMAIL_FOOTER_LOGO_URL,
   APP_SETTING_KEYS.FAVICON_URL,
@@ -64,8 +64,9 @@ settingsRoutes.get("/", async (c) => {
 settingsRoutes.put("/:key", async (c) => {
   requireAdmin(c);
   const key = c.req.param("key") as AppSettingKey;
-  if (!ALLOWED.includes(key)) {
-    return c.json({ error: "unknown setting key" }, 400);
+  const rejected = rejectGenericAppSettingMutation(key);
+  if (rejected) {
+    return c.json({ error: rejected.error }, rejected.status);
   }
   const body = SetAppSettingInput.parse(await c.req.json());
   const trimmed = body.value.trim();
@@ -81,8 +82,9 @@ settingsRoutes.put("/:key", async (c) => {
 settingsRoutes.delete("/:key", async (c) => {
   requireAdmin(c);
   const key = c.req.param("key") as AppSettingKey;
-  if (!ALLOWED.includes(key)) {
-    return c.json({ error: "unknown setting key" }, 400);
+  const rejected = rejectGenericAppSettingMutation(key);
+  if (rejected) {
+    return c.json({ error: rejected.error }, rejected.status);
   }
   if (isUploadableSetting(key)) {
     const existing = await getAppSetting(key);

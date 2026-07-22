@@ -1,18 +1,24 @@
 import { getAgentBackend } from "../agent-backend/instance.js";
-import type { SessionResource } from "../agent-backend/types.js";
+import type { AgentBackend, SessionResource } from "../agent-backend/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { touchSandboxActivity } from "./sandboxes.js";
 import { isSessionProviderMismatch } from "./sandboxProviderSettings.js";
 import { getActiveSandboxProviderId } from "./sandboxProviderSettingsInstance.js";
-import type { ResolvedSession } from "./sessions.js";
+import { claimSandboxSession } from "./sandboxSessionClaim.js";
+import { prismaSandboxSessionClaimStore } from "./sandboxSessionClaimStore.js";
+import { describeResumedSession, type ResolvedSession } from "./resolvedSession.js";
 
-export type WorkflowSessionScope = { conversationId: string } | { emailThreadId: string };
+export type { WorkflowSessionScope } from "./sandboxSessionClaim.js";
+import type { WorkflowSessionScope } from "./sandboxSessionClaim.js";
 
 /**
- * Resolve the Daytona session for one workflow step. Sessions are keyed per
+ * Resolve the sandbox session for one workflow step. Sessions are keyed per
  * (workflow conversation or email thread, agent) so each agent keeps its own
  * sandbox + memory across turns.
+ *
+ * The mapping is unique on that key, so two steps starting together race for
+ * it; the claim elects one and destroys the loser's sandbox.
  */
 export async function resolveWorkflowStepSession(
   agent: { id: string; slug: string },
@@ -55,13 +61,7 @@ export async function resolveWorkflowStepSession(
   }
 
   if (existing && !providerChanged) {
-    if (resources.length > 0) {
-      await backend.mountSessionResources(existing.sessionId, resources, {
-        runId: observabilityRunId,
-      });
-    }
-    await touchSandboxActivity(existing.sessionId);
-    return { sessionId: existing.sessionId, sandboxCreated: false };
+    return resume(backend, existing.sessionId, resources, observabilityRunId);
   }
 
   const session = await backend.createSession({
@@ -72,23 +72,21 @@ export async function resolveWorkflowStepSession(
     agentVersionId,
     observability: { runId: observabilityRunId },
   });
-  if (existing) {
-    // Repoint the existing row; the old sandbox row stays for audit.
-    await prisma.workflowAgentSession.update({
-      where: { id: existing.id },
-      data: { sessionId: session.id },
-    });
-  } else {
-    await prisma.workflowAgentSession.create({
-      data: {
-        ...("conversationId" in scope
-          ? { conversationId: scope.conversationId }
-          : { emailThreadId: scope.emailThreadId }),
-        agentId: agent.id,
-        sessionId: session.id,
-      },
-    });
+
+  const claim = await claimSandboxSession(
+    { store: prismaSandboxSessionClaimStore, discard: (id) => backend.discardSession(id) },
+    {
+      owner: { surface: "workflow", agentId: agent.id, scope },
+      expectedSessionId: existing?.sessionId ?? null,
+      sessionId: session.id,
+    },
+  );
+
+  if (!claim.claimed) {
+    // Another step already bound this slot; run on its sandbox.
+    return resume(backend, claim.sessionId, resources, observabilityRunId);
   }
+
   log.info("workflow-sessions: created", {
     ...scope,
     agentId: agent.id,
@@ -102,4 +100,18 @@ export async function resolveWorkflowStepSession(
     providerSandboxId: session.providerSandboxId,
     workspaceDir: session.workspaceDir,
   };
+}
+
+async function resume(
+  backend: AgentBackend,
+  sessionId: string,
+  resources: SessionResource[],
+  runId: string,
+): Promise<ResolvedSession> {
+  const mounted =
+    resources.length > 0
+      ? await backend.mountSessionResources(sessionId, resources, { runId })
+      : {};
+  await touchSandboxActivity(sessionId);
+  return describeResumedSession(sessionId, mounted.workspaceDir);
 }

@@ -21,6 +21,30 @@ export function parseLifecyclePolicy(raw: unknown): SandboxLifecyclePolicy {
   return SandboxLifecyclePolicySchema.parse(raw);
 }
 
+/**
+ * Which sandbox "the sandbox for this conversation/thread" means.
+ *
+ * The owner's own session pointer is authoritative. After a provider switch
+ * the conversation points at its replacement sandbox while the retired row
+ * may still be around, so resolving by the owner link alone can hand the
+ * admin UI the obsolete provider's row and let an operator stop or delete a
+ * sandbox the agent is not using. The link is only a fallback, for rows that
+ * predate a pointer (backfilled history) or an owner whose pointer was
+ * cleared.
+ */
+export async function pickCurrentSandbox<T>(deps: {
+  ownerSessionId: () => Promise<string | null>;
+  bySessionId: (sessionId: string) => Promise<T | null>;
+  byOwnerLink: () => Promise<T | null>;
+}): Promise<T | null> {
+  const sessionId = await deps.ownerSessionId();
+  if (sessionId) {
+    const current = await deps.bySessionId(sessionId);
+    if (current) return current;
+  }
+  return deps.byOwnerLink();
+}
+
 export function toSandboxSummary(row: SandboxRowWithRelations): SandboxSummaryDto {
   return {
     id: row.id,

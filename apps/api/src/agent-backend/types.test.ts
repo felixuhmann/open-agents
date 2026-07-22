@@ -25,7 +25,16 @@ void test("AgentBackendError keeps its name, message, and original cause", () =>
   assert.equal(err.cause, cause);
 });
 
-void test("a backend implementation satisfies the four-method orchestrator contract", async () => {
+void test("a domain error can select the response an API caller sees", () => {
+  const unavailable = new AgentBackendError("broker is unreachable", { status: 503 });
+  const runtime = new AgentBackendError("Sandbox run failed: ECONNRESET");
+
+  assert.equal(unavailable.status, 503);
+  // Runtime faults stay 500s; only operator-actionable states opt in.
+  assert.equal(runtime.status, undefined);
+});
+
+void test("a backend implementation satisfies the orchestrator contract", async () => {
   const calls: string[] = [];
   const resource: SessionResource = {
     type: "file",
@@ -51,7 +60,9 @@ void test("a backend implementation satisfies the four-method orchestrator contr
       calls.push(
         `mount:${sessionId}:${resources.length}:${observability?.runId ?? "none"}`,
       );
-      return Promise.resolve();
+      // Connecting reveals the workspace, so a resumed run can report the
+      // same sandbox metadata a newly created one does.
+      return Promise.resolve({ workspaceDir: "/home/daytona" });
     },
     streamUntilIdle: (sessionId, userMessage, onEvent, context) => {
       onEvent?.({ kind: "delta", text: "hi", rawType: "pi.text_delta" });
@@ -59,13 +70,18 @@ void test("a backend implementation satisfies the four-method orchestrator contr
       return Promise.resolve("hi");
     },
     uploadFile: (input) => Promise.resolve({ id: `daytona-file-${input.filename}` }),
+    discardSession: (sessionId) => {
+      calls.push(`discard:${sessionId}`);
+      return Promise.resolve();
+    },
   };
 
   const session = await backend.createSession({
     agentId: "agent_1",
     agentSlug: "researcher",
+    // The conversation/thread link is claimed after creation, not passed in:
+    // it is a unique column a replacement sandbox has to take over.
     surface: "chat",
-    conversationId: "conv_1",
     resources: [resource],
   });
   assert.equal(session.id, "daytona:agent_1:sandbox-1");
@@ -73,7 +89,10 @@ void test("a backend implementation satisfies the four-method orchestrator contr
   assert.equal(session.workspaceDir, "/home/daytona");
   assert.equal(session.skillsManifest?.materialized, 1);
 
-  await backend.mountSessionResources(session.id, [resource], { runId: "run_1" });
+  const mounted = await backend.mountSessionResources(session.id, [resource], {
+    runId: "run_1",
+  });
+  assert.equal(mounted.workspaceDir, "/home/daytona");
 
   const events: AgentStreamEvent[] = [];
   const output = await backend.streamUntilIdle(
@@ -92,10 +111,14 @@ void test("a backend implementation satisfies the four-method orchestrator contr
   });
   assert.equal(file.id, "daytona-file-a.txt");
 
+  // A sandbox that loses the pointer race is destroyed, not left running.
+  await backend.discardSession(session.id);
+
   assert.deepEqual(calls, [
     "createSession:agent_1:chat",
     "mount:daytona:agent_1:sandbox-1:1:run_1",
     "stream:daytona:agent_1:sandbox-1:do the thing:chat",
+    "discard:daytona:agent_1:sandbox-1",
   ]);
 });
 
