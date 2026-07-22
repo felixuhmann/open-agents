@@ -7,7 +7,8 @@ import type { SandboxProviderId } from "../sandbox-provider/types.js";
  * shared Pi model/tool loop on top of them.
  */
 export interface AgentBackend {
-  runtime: "daytona";
+  /** The shared Pi model/tool loop. Sandbox choice lives on the session. */
+  runtime: "pi";
   createSession(input: CreateSessionInput): Promise<AgentSession>;
   mountSessionResources(
     sessionId: string,

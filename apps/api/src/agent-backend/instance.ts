@@ -1,29 +1,54 @@
-import { getServiceSecret, SERVICE_KEYS } from "../secrets/service.js";
+import {
+  activeSandboxProviderId,
+  sandboxProviderRegistry,
+} from "../sandbox-provider/instance.js";
+import type { SandboxProviderId } from "../sandbox-provider/types.js";
 import { createAgentBackendResolver } from "./backendResolver.js";
-import { DaytonaAgentBackend } from "./daytona.js";
+import { PiAgentBackend } from "./pi.js";
 import type { AgentBackend } from "./types.js";
 
 /**
- * Lazy AgentBackend factory. The Daytona API key lives in the encrypted
- * Secret store, so the backend can only be constructed after setup has
- * populated it. Callers go through `getAgentBackend()` and get an error if
- * the deployment isn't configured yet.
+ * Lazy AgentBackend factory. The runtime itself is provider-neutral, but it
+ * can only run once the deployment's active sandbox provider is configured
+ * (Daytona's API key lives in the encrypted Secret store). Callers go through
+ * `getAgentBackend()` and get an actionable error if setup hasn't run.
  *
- * The underlying SDK client is stateless apart from the API key, so a single
- * instance is safe to share. We rebuild it after credential rotation.
+ * The instance is cached per active provider and rebuilt after a selection or
+ * credential change (`resetAgentBackend()`).
  */
 
+function missingProviderMessage(id: SandboxProviderId): string {
+  if (id === "daytona") {
+    return "Daytona API key is not configured. Complete setup at /setup.";
+  }
+  return `Sandbox provider "${id}" is not configured. Complete setup at /setup.`;
+}
+
 const resolver = createAgentBackendResolver<AgentBackend>({
-  loadCredentialKey: () => getServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY),
-  build: (daytonaApiKey) => new DaytonaAgentBackend(daytonaApiKey),
-  missingCredentialMessage: "Daytona API key is not configured. Complete setup at /setup.",
+  loadCredentialKey: async () => {
+    const providerId = await activeSandboxProviderId();
+    const provider = await sandboxProviderRegistry.tryGet(providerId);
+    return provider ? providerId : null;
+  },
+  build: () =>
+    new PiAgentBackend({
+      registry: sandboxProviderRegistry,
+      activeProviderId: activeSandboxProviderId,
+    }),
+  missingCredentialMessage: "",
 });
 
-export function getAgentBackend(): Promise<AgentBackend> {
+export async function getAgentBackend(): Promise<AgentBackend> {
+  const providerId = await activeSandboxProviderId();
+  const provider = await sandboxProviderRegistry.tryGet(providerId);
+  if (!provider) {
+    throw new Error(missingProviderMessage(providerId));
+  }
   return resolver.get();
 }
 
 /** Force the next `getAgentBackend()` call to rebuild the singleton. */
 export function resetAgentBackend(): void {
   resolver.reset();
+  sandboxProviderRegistry.reset();
 }

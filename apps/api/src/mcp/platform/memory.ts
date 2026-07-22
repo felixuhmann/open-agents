@@ -2,7 +2,6 @@ import { posix as path } from "node:path";
 import type { Prisma } from "@open-agents/db";
 import { z } from "zod";
 import { prisma } from "../../db.js";
-import { ensureSandboxDir } from "../../sandbox-provider/daytona/files.js";
 import { remapWorkspacePath } from "../../services/sandboxShell.js";
 import { defineTool, type PlatformHandler } from "../types.js";
 
@@ -174,7 +173,7 @@ export const memoryHandler: PlatformHandler = {
       input: ExportInput,
       handler: async (input, ctx) => {
         if (!ctx.sandbox) {
-          throw new Error("memory_export requires an active Daytona sandbox");
+          throw new Error("memory_export requires an active sandbox");
         }
 
         const rows = await prisma.memoryDoc.findMany({
@@ -193,8 +192,7 @@ export const memoryHandler: PlatformHandler = {
           2,
         );
         const remotePath = resolveSandboxPath(input.path, ctx.sandbox.workspaceDir);
-        await ensureSandboxDir(ctx.sandbox.fs, path.dirname(remotePath));
-        await ctx.sandbox.fs.uploadFile(Buffer.from(content, "utf8"), remotePath);
+        await ctx.sandbox.writeFile(remotePath, Buffer.from(content, "utf8"));
 
         return {
           path: remotePath,

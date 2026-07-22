@@ -21,14 +21,18 @@ export type PlatformHandlerCtx = {
   sandbox?: PlatformSandboxCtx;
 };
 
+/**
+ * Provider-neutral sandbox access for platform tools. Deliberately a narrow
+ * slice of `SandboxHandle` so no provider SDK type reaches MCP tooling.
+ */
 export type PlatformSandboxCtx = {
   workspaceDir: string;
   /** Download a sandbox file using the same path semantics as managed tools. */
   downloadFile(path: string): Promise<Buffer>;
-  fs: {
-    createFolder(path: string, mode: string): Promise<unknown>;
-    uploadFile(content: Buffer, path: string): Promise<unknown>;
-  };
+  /** Write bytes, creating the parent directory tree as needed. */
+  writeFile(path: string, bytes: Uint8Array): Promise<void>;
+  /** Idempotently create a directory tree. */
+  makeDir(path: string): Promise<void>;
 };
 
 /**

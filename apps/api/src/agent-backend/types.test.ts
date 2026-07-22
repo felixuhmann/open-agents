@@ -37,7 +37,7 @@ void test("a backend implementation satisfies the four-method orchestrator contr
   };
 
   const backend: AgentBackend = {
-    runtime: "daytona",
+    runtime: "pi",
     createSession: (input: CreateSessionInput) => {
       calls.push(`createSession:${input.agentId}:${input.surface ?? "none"}`);
       return Promise.resolve({

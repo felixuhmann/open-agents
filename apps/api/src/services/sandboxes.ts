@@ -5,13 +5,17 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 import {
   DAYTONA_PROVIDER,
-  buildDaytonaSessionId,
   createDaytonaClient,
   fetchDaytonaSandbox,
   getDaytonaApiKey,
   parseDaytonaSessionId,
   snapshotFromSandbox,
 } from "./daytonaSandbox.js";
+import {
+  buildSandboxSessionId,
+  tryParseSandboxSessionId,
+} from "../sandbox-provider/sessionId.js";
+import type { SandboxProviderId } from "../sandbox-provider/types.js";
 import { wrapDaytonaError } from "../sandbox-provider/daytona/errors.js";
 import { AgentBackendError } from "../agent-backend/types.js";
 import {
@@ -28,8 +32,12 @@ import {
 export { toSandboxSummary };
 
 export type RegisterSandboxInput = {
+  /** Provider that owns the sandbox. Defaults to Daytona for legacy callers. */
+  provider?: SandboxProviderId;
   agentId: string;
   providerSandboxId: string;
+  /** Session id the caller already built. Derived when omitted. */
+  sessionId?: string;
   lifecyclePolicy?: SandboxLifecyclePolicy;
   surface?: "chat" | "email";
   conversationId?: string;
@@ -43,19 +51,22 @@ export type RegisterSandboxInput = {
 export async function registerAgentSandbox(
   input: RegisterSandboxInput,
 ): Promise<AgentSandbox> {
-  const sessionId = buildDaytonaSessionId(input.agentId, input.providerSandboxId);
+  const provider = input.provider ?? DAYTONA_PROVIDER;
+  const sessionId =
+    input.sessionId ??
+    buildSandboxSessionId(provider, input.agentId, input.providerSandboxId);
   const lifecyclePolicy = input.lifecyclePolicy ?? DEFAULT_DAYTONA_LIFECYCLE;
   const now = new Date();
 
   const row = await prisma.agentSandbox.upsert({
     where: {
       provider_providerSandboxId: {
-        provider: DAYTONA_PROVIDER,
+        provider,
         providerSandboxId: input.providerSandboxId,
       },
     },
     create: {
-      provider: DAYTONA_PROVIDER,
+      provider,
       providerSandboxId: input.providerSandboxId,
       sessionId,
       state: input.state ?? "started",
@@ -79,6 +90,7 @@ export async function registerAgentSandbox(
 
   log.info("sandboxes: registered", {
     sandboxId: row.id,
+    provider,
     providerSandboxId: input.providerSandboxId,
     sessionId,
     surface: input.surface,
@@ -87,11 +99,12 @@ export async function registerAgentSandbox(
 }
 
 export async function touchSandboxActivity(sessionId: string): Promise<void> {
-  const ref = parseDaytonaSessionId(sessionId);
+  const ref = tryParseSandboxSessionId(sessionId);
+  if (!ref) return;
   await prisma.agentSandbox.updateMany({
     where: {
-      provider: DAYTONA_PROVIDER,
-      providerSandboxId: ref.sandboxId,
+      provider: ref.provider,
+      providerSandboxId: ref.providerSandboxId,
     },
     data: { lastActivityAt: new Date() },
   });

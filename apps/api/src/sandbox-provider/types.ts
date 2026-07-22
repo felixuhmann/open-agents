@@ -127,6 +127,16 @@ export interface SandboxProvider {
   validatePolicy(policy: SandboxPolicyBundle): void;
   create(input: SandboxCreateInput): Promise<SandboxHandle>;
   connect(providerSandboxId: string): Promise<SandboxHandle>;
+  /**
+   * Optional richer `connect` that also reports which lifecycle transitions
+   * were required, so the caller can emit `sandbox.recovered` /
+   * `sandbox.started` run events.
+   */
+  connectWithTransitions?(providerSandboxId: string): Promise<{
+    handle: SandboxHandle;
+    previousState: string;
+    transitions: ("recover" | "start")[];
+  }>;
   inspect(providerSandboxId: string): Promise<SandboxSnapshot>;
   start(providerSandboxId: string): Promise<SandboxSnapshot>;
   stop(providerSandboxId: string): Promise<SandboxSnapshot>;
