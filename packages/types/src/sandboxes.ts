@@ -39,3 +39,15 @@ export const SandboxSummarySchema = z.object({
 });
 
 export type SandboxSummaryDto = z.infer<typeof SandboxSummarySchema>;
+
+/**
+ * A sandbox a provider still owns that has no `AgentSandbox` row. Reported
+ * per provider so admins can see which backend is leaking resources.
+ */
+export const SandboxOrphanSchema = z.object({
+  provider: SandboxProviderIdSchema,
+  providerSandboxId: z.string(),
+  state: z.string(),
+  agentId: z.string().optional(),
+});
+export type SandboxOrphan = z.infer<typeof SandboxOrphanSchema>;
