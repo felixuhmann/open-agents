@@ -129,7 +129,9 @@ void test("normalized stream events carry the upstream rawType for observability
   ];
 
   assert.equal(
-    events.every((event) => typeof event.rawType === "string" && event.rawType.length > 0),
+    events.every(
+      (event) => typeof event.rawType === "string" && event.rawType.length > 0,
+    ),
     true,
   );
   assert.deepEqual(

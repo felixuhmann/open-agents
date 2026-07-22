@@ -46,10 +46,7 @@ void test("summary projects the row's own provider and provider sandbox id", () 
 
   assert.equal(summary.provider, "daytona");
   assert.equal(summary.providerSandboxId, "3f6b0e1c-0000-4000-8000-000000000001");
-  assert.equal(
-    summary.sessionId,
-    "daytona:agent_1:3f6b0e1c-0000-4000-8000-000000000001",
-  );
+  assert.equal(summary.sessionId, "daytona:agent_1:3f6b0e1c-0000-4000-8000-000000000001");
 });
 
 void test("non-Daytona rows project their own provider verbatim", () => {

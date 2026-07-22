@@ -151,10 +151,7 @@ void test("bound skills are described with their unpacked sandbox paths", () => 
     workspaceDir: "/home/agent",
   });
 
-  assert.ok(
-    prompt.includes("/home/agent/.agents/skills/weekly-report/SKILL.md"),
-    prompt,
-  );
+  assert.ok(prompt.includes("/home/agent/.agents/skills/weekly-report/SKILL.md"), prompt);
   assert.ok(prompt.includes("pinned v3"));
 });
 
@@ -168,10 +165,7 @@ void test("only bound managed tools are exposed", () => {
     deps: NO_ATTACHMENTS,
   });
 
-  assert.deepEqual(
-    tools.map((tool) => tool.name).sort(),
-    ["bash", "read"],
-  );
+  assert.deepEqual(tools.map((tool) => tool.name).sort(), ["bash", "read"]);
 });
 
 void test("attach_run_file appears only for a run and pulls bytes through the handle", async () => {

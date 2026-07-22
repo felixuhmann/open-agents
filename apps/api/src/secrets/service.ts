@@ -1,4 +1,6 @@
 import { prisma } from "../db.js";
+import { APP_SETTING_KEYS, getAppSetting } from "../services/appSettings.js";
+import { parseActiveSandboxProviderId } from "../services/sandboxProviderSettings.js";
 import { seal, unseal } from "./crypto.js";
 
 /**
@@ -154,9 +156,17 @@ export async function deleteToolSecrets(bindingId: string): Promise<void> {
   });
 }
 
-/** Whether the deployment has any service-credential rows yet. */
+/**
+ * Whether the deployment has the service credentials its selected sandbox
+ * provider needs. Only Daytona stores a credential here; the broker's token
+ * comes from server-side env / token file and never touches the database.
+ */
 export async function isServiceSetupComplete(): Promise<boolean> {
-  const required: ServiceKey[] = [SERVICE_KEYS.DAYTONA_API_KEY];
+  const provider = parseActiveSandboxProviderId(
+    await getAppSetting(APP_SETTING_KEYS.SANDBOX_PROVIDER),
+  );
+  const required: ServiceKey[] =
+    provider === "daytona" ? [SERVICE_KEYS.DAYTONA_API_KEY] : [];
   for (const k of required) {
     const v = await getServiceSecret(k);
     if (!v) return false;

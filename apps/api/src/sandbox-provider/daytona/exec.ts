@@ -7,7 +7,10 @@ import {
   TOOL_OUTPUT_EMIT_MIN_CHARS,
   truncateText,
 } from "../../services/sandboxLimits.js";
-import { checkShellCommand, type ShellPolicyContext } from "../../services/shellPolicy.js";
+import {
+  checkShellCommand,
+  type ShellPolicyContext,
+} from "../../services/shellPolicy.js";
 import type { DaytonaSandboxLike } from "./client.js";
 
 const SHELL_SESSION_ID = "open-agents-shell";

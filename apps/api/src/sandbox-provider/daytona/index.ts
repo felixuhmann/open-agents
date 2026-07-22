@@ -169,7 +169,10 @@ export class DaytonaSandboxProvider implements SandboxProvider {
       const workspaceDir = await resolveSandboxWorkspaceDir(ready);
       return new DaytonaSandboxHandle(ready, workspaceDir);
     } catch (err) {
-      throw wrapDaytonaError(err, `Failed to connect to Daytona sandbox ${providerSandboxId}`);
+      throw wrapDaytonaError(
+        err,
+        `Failed to connect to Daytona sandbox ${providerSandboxId}`,
+      );
     }
   }
 
@@ -185,8 +188,11 @@ export class DaytonaSandboxProvider implements SandboxProvider {
   }> {
     try {
       const sandbox = await this.client().get(providerSandboxId);
-      const { sandbox: ready, previousState, transitions } =
-        await ensureDaytonaSandboxReady(sandbox);
+      const {
+        sandbox: ready,
+        previousState,
+        transitions,
+      } = await ensureDaytonaSandboxReady(sandbox);
       const workspaceDir = await resolveSandboxWorkspaceDir(ready);
       return {
         handle: new DaytonaSandboxHandle(ready, workspaceDir),
@@ -194,7 +200,10 @@ export class DaytonaSandboxProvider implements SandboxProvider {
         transitions,
       };
     } catch (err) {
-      throw wrapDaytonaError(err, `Failed to connect to Daytona sandbox ${providerSandboxId}`);
+      throw wrapDaytonaError(
+        err,
+        `Failed to connect to Daytona sandbox ${providerSandboxId}`,
+      );
     }
   }
 
@@ -202,7 +211,10 @@ export class DaytonaSandboxProvider implements SandboxProvider {
     try {
       return snapshotFromSandbox(await this.client().get(providerSandboxId));
     } catch (err) {
-      throw wrapDaytonaError(err, `Failed to inspect Daytona sandbox ${providerSandboxId}`);
+      throw wrapDaytonaError(
+        err,
+        `Failed to inspect Daytona sandbox ${providerSandboxId}`,
+      );
     }
   }
 

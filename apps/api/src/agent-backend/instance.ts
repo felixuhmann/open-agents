@@ -1,7 +1,5 @@
-import {
-  activeSandboxProviderId,
-  sandboxProviderRegistry,
-} from "../sandbox-provider/instance.js";
+import { sandboxProviderRegistry } from "../sandbox-provider/instance.js";
+import { getActiveSandboxProviderId } from "../services/sandboxProviderSettingsInstance.js";
 import type { SandboxProviderId } from "../sandbox-provider/types.js";
 import { createAgentBackendResolver } from "./backendResolver.js";
 import { PiAgentBackend } from "./pi.js";
@@ -26,20 +24,20 @@ function missingProviderMessage(id: SandboxProviderId): string {
 
 const resolver = createAgentBackendResolver<AgentBackend>({
   loadCredentialKey: async () => {
-    const providerId = await activeSandboxProviderId();
+    const providerId = await getActiveSandboxProviderId();
     const provider = await sandboxProviderRegistry.tryGet(providerId);
     return provider ? providerId : null;
   },
   build: () =>
     new PiAgentBackend({
       registry: sandboxProviderRegistry,
-      activeProviderId: activeSandboxProviderId,
+      activeProviderId: getActiveSandboxProviderId,
     }),
   missingCredentialMessage: "",
 });
 
 export async function getAgentBackend(): Promise<AgentBackend> {
-  const providerId = await activeSandboxProviderId();
+  const providerId = await getActiveSandboxProviderId();
   const provider = await sandboxProviderRegistry.tryGet(providerId);
   if (!provider) {
     throw new Error(missingProviderMessage(providerId));

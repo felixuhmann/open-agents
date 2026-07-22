@@ -22,12 +22,3 @@ export const sandboxProviderRegistry = createSandboxProviderRegistry({
 export function resetSandboxProviders(id?: SandboxProviderId): void {
   sandboxProviderRegistry.reset(id);
 }
-
-/**
- * Provider that new sandboxes are created on, deployment-wide. Existing
- * sandbox rows and session ids always dispatch through their own recorded
- * provider instead.
- */
-export function activeSandboxProviderId(): Promise<SandboxProviderId> {
-  return Promise.resolve("daytona");
-}

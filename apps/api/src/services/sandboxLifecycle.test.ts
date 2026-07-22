@@ -264,20 +264,20 @@ void test("archive and recover still work on a provider that supports them", asy
 
 void test("a row naming an unknown provider fails locally with a clear message", async () => {
   const daytona = fakeProvider({ id: "daytona" });
-  const { lifecycle } = lifecycleFor(
-    [row({ id: "row_x", provider: "modal" })],
-    { daytona: daytona.provider },
-  );
+  const { lifecycle } = lifecycleFor([row({ id: "row_x", provider: "modal" })], {
+    daytona: daytona.provider,
+  });
 
   await assert.rejects(
     () => lifecycle.syncFromProvider("row_x"),
-    (err: unknown) =>
-      err instanceof AgentBackendError && err.message.includes("modal"),
+    (err: unknown) => err instanceof AgentBackendError && err.message.includes("modal"),
   );
 });
 
 void test("acting on a missing row reports the row id", async () => {
-  const { lifecycle } = lifecycleFor([], { daytona: fakeProvider({ id: "daytona" }).provider });
+  const { lifecycle } = lifecycleFor([], {
+    daytona: fakeProvider({ id: "daytona" }).provider,
+  });
 
   await assert.rejects(
     () => lifecycle.syncFromProvider("nope"),
@@ -302,10 +302,7 @@ void test("reconcile syncs every provider's rows", async () => {
 
   assert.equal(result.synced, 2);
   assert.equal(result.errors, 0);
-  assert.deepEqual(
-    fixture.applied.map((a) => a.rowId).sort(),
-    ["row_b", "row_d"],
-  );
+  assert.deepEqual(fixture.applied.map((a) => a.rowId).sort(), ["row_b", "row_d"]);
 });
 
 void test("one unavailable provider does not block reconciling the other", async () => {
@@ -350,10 +347,9 @@ void test("a single failing row does not abort the reconcile job", async () => {
 
 void test("a sandbox the provider no longer has clears its session pointer", async () => {
   const daytona = fakeProvider({ id: "daytona", missing: new Set(["sbx-gone"]) });
-  const fixture = lifecycleFor(
-    [row({ id: "row_gone", providerSandboxId: "sbx-gone" })],
-    { daytona: daytona.provider },
-  );
+  const fixture = lifecycleFor([row({ id: "row_gone", providerSandboxId: "sbx-gone" })], {
+    daytona: daytona.provider,
+  });
 
   const result = await fixture.lifecycle.reconcile();
 

@@ -1,16 +1,15 @@
 import { randomUUID } from "node:crypto";
-import {
-  Agent,
-  type AgentEvent,
-  type AgentMessage,
-} from "@earendil-works/pi-agent-core";
+import { Agent, type AgentEvent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import {
   ReasoningLevelSchema,
   type SandboxPolicyBundle,
   type SandboxResourceMounted,
 } from "@open-agents/types";
-import { buildSandboxSessionId, parseSandboxSessionId } from "../sandbox-provider/sessionId.js";
+import {
+  buildSandboxSessionId,
+  parseSandboxSessionId,
+} from "../sandbox-provider/sessionId.js";
 import type { SandboxProviderRegistry } from "../sandbox-provider/registry.js";
 import type {
   SandboxHandle,
@@ -264,9 +263,7 @@ export class PiAgentBackend implements AgentBackend {
                 makeDir: (path) => handle.makeDir(path),
                 downloadFile: async (input) =>
                   Buffer.from(
-                    await handle.readFile(
-                      resolveSandboxPath(input, handle.workspaceDir),
-                    ),
+                    await handle.readFile(resolveSandboxPath(input, handle.workspaceDir)),
                   ),
               },
             },

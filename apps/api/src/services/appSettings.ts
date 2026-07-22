@@ -23,6 +23,11 @@ export const APP_SETTING_KEYS = {
   EMAIL_DISCLAIMER: "email_disclaimer",
   /** Default outbound `From:` header for legacy email threads. */
   INBOUND_FROM: "inbound_from",
+  /**
+   * Sandbox provider new sandboxes are created on, deployment-wide.
+   * Absent means `daytona` (see `sandboxProviderSettings.ts`).
+   */
+  SANDBOX_PROVIDER: "sandbox_provider",
 } as const;
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[keyof typeof APP_SETTING_KEYS];

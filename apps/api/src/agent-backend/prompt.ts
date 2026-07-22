@@ -1,8 +1,5 @@
 import type { HydratedAgent } from "../agents/service.js";
-import {
-  skillSandboxRootFor,
-  skillSlugFromName,
-} from "../services/skillSandboxPaths.js";
+import { skillSandboxRootFor, skillSlugFromName } from "../services/skillSandboxPaths.js";
 
 /**
  * Runtime system prompt for the shared Pi loop.

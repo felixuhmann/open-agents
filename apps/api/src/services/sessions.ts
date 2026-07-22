@@ -6,6 +6,8 @@ import type { SandboxProviderId } from "../sandbox-provider/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { touchSandboxActivity } from "./sandboxes.js";
+import { isSessionProviderMismatch } from "./sandboxProviderSettings.js";
+import { getActiveSandboxProviderId } from "./sandboxProviderSettingsInstance.js";
 
 export type ResolvedSession = {
   sessionId: string;
@@ -38,8 +40,22 @@ export async function resolveEmailSessionId(
   observabilityRunId?: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
+  const activeProvider = await getActiveSandboxProviderId();
 
-  if (thread.sessionId) {
+  // A session created on a provider that is no longer active is not resumed:
+  // we create a fresh sandbox on the active provider and repoint the thread.
+  // Pi conversation context lives in Postgres and survives; workspace files
+  // do not.
+  const providerChanged = isSessionProviderMismatch(thread.sessionId, activeProvider);
+  if (providerChanged) {
+    log.warn("sessions: replacing email thread session after provider change", {
+      threadId: thread.id,
+      previousSessionId: thread.sessionId,
+      activeProvider,
+    });
+  }
+
+  if (thread.sessionId && !providerChanged) {
     log.info("sessions: resuming email thread", {
       threadId: thread.id,
       sessionId: thread.sessionId,
@@ -111,8 +127,23 @@ export async function resolveChatSessionId(
   observabilityRunId?: string,
 ): Promise<ResolvedSession> {
   const backend = await getAgentBackend();
+  const activeProvider = await getActiveSandboxProviderId();
 
-  if (conversation.sessionId) {
+  // See `resolveEmailSessionId`: a provider switch means a new sandbox on
+  // next use, with the model conversation context preserved.
+  const providerChanged = isSessionProviderMismatch(
+    conversation.sessionId,
+    activeProvider,
+  );
+  if (providerChanged) {
+    log.warn("sessions: replacing chat session after provider change", {
+      conversationId: conversation.id,
+      previousSessionId: conversation.sessionId,
+      activeProvider,
+    });
+  }
+
+  if (conversation.sessionId && !providerChanged) {
     log.info("sessions: resuming chat conversation", {
       conversationId: conversation.id,
       sessionId: conversation.sessionId,

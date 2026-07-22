@@ -3,6 +3,8 @@ import type { SessionResource } from "../agent-backend/types.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { touchSandboxActivity } from "./sandboxes.js";
+import { isSessionProviderMismatch } from "./sandboxProviderSettings.js";
+import { getActiveSandboxProviderId } from "./sandboxProviderSettingsInstance.js";
 import type { ResolvedSession } from "./sessions.js";
 
 export type WorkflowSessionScope = { conversationId: string } | { emailThreadId: string };
@@ -40,7 +42,19 @@ export async function resolveWorkflowStepSession(
           },
         });
 
-  if (existing) {
+  const activeProvider = await getActiveSandboxProviderId();
+  const providerChanged =
+    existing !== null && isSessionProviderMismatch(existing.sessionId, activeProvider);
+  if (providerChanged) {
+    log.warn("workflow-sessions: replacing session after provider change", {
+      ...scope,
+      agentId: agent.id,
+      previousSessionId: existing?.sessionId,
+      activeProvider,
+    });
+  }
+
+  if (existing && !providerChanged) {
     if (resources.length > 0) {
       await backend.mountSessionResources(existing.sessionId, resources, {
         runId: observabilityRunId,
@@ -58,15 +72,23 @@ export async function resolveWorkflowStepSession(
     agentVersionId,
     observability: { runId: observabilityRunId },
   });
-  await prisma.workflowAgentSession.create({
-    data: {
-      ...("conversationId" in scope
-        ? { conversationId: scope.conversationId }
-        : { emailThreadId: scope.emailThreadId }),
-      agentId: agent.id,
-      sessionId: session.id,
-    },
-  });
+  if (existing) {
+    // Repoint the existing row; the old sandbox row stays for audit.
+    await prisma.workflowAgentSession.update({
+      where: { id: existing.id },
+      data: { sessionId: session.id },
+    });
+  } else {
+    await prisma.workflowAgentSession.create({
+      data: {
+        ...("conversationId" in scope
+          ? { conversationId: scope.conversationId }
+          : { emailThreadId: scope.emailThreadId }),
+        agentId: agent.id,
+        sessionId: session.id,
+      },
+    });
+  }
   log.info("workflow-sessions: created", {
     ...scope,
     agentId: agent.id,

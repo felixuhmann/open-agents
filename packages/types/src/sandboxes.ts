@@ -51,3 +51,36 @@ export const SandboxOrphanSchema = z.object({
   agentId: z.string().optional(),
 });
 export type SandboxOrphan = z.infer<typeof SandboxOrphanSchema>;
+
+export const SandboxProviderCapabilitiesSchema = z.object({
+  networkModes: z.array(z.enum(["deny-all", "unrestricted", "cidr-allowlist"])),
+  archive: z.boolean(),
+  recover: z.boolean(),
+});
+export type SandboxProviderCapabilitiesDto = z.infer<
+  typeof SandboxProviderCapabilitiesSchema
+>;
+
+/** One selectable provider and whether this deployment can currently use it. */
+export const SandboxProviderInfoSchema = z.object({
+  id: SandboxProviderIdSchema,
+  /** Configured (credentials/URL present) and reachable. */
+  available: z.boolean(),
+  /** Why it is unavailable, when it is. Never contains credentials. */
+  detail: z.string().nullable(),
+  capabilities: SandboxProviderCapabilitiesSchema.nullable(),
+});
+export type SandboxProviderInfoDto = z.infer<typeof SandboxProviderInfoSchema>;
+
+export const SandboxProviderStatusSchema = z.object({
+  /** Provider new sandboxes are created on, deployment-wide. */
+  active: SandboxProviderIdSchema,
+  providers: z.array(SandboxProviderInfoSchema),
+  warnings: z.array(z.string()),
+});
+export type SandboxProviderStatusDto = z.infer<typeof SandboxProviderStatusSchema>;
+
+export const SelectSandboxProviderInput = z.object({
+  provider: SandboxProviderIdSchema,
+});
+export type SelectSandboxProviderInput = z.infer<typeof SelectSandboxProviderInput>;

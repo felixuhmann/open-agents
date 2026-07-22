@@ -193,10 +193,11 @@ void test("capabilities advertise Daytona's real feature set", () => {
   const provider = providerFor(client);
 
   assert.equal(provider.id, "daytona");
-  assert.deepEqual(
-    [...provider.capabilities.networkModes].sort(),
-    ["cidr-allowlist", "deny-all", "unrestricted"],
-  );
+  assert.deepEqual([...provider.capabilities.networkModes].sort(), [
+    "cidr-allowlist",
+    "deny-all",
+    "unrestricted",
+  ]);
   assert.equal(provider.capabilities.archive, true);
   assert.equal(provider.capabilities.recover, true);
 });
@@ -396,7 +397,8 @@ void test("connect refuses an unrecoverable errored sandbox", async () => {
 
   await assert.rejects(
     () => providerFor(client).connect("sbx-broken"),
-    (err: unknown) => err instanceof AgentBackendError && err.message.includes("disk full"),
+    (err: unknown) =>
+      err instanceof AgentBackendError && err.message.includes("disk full"),
   );
 });
 

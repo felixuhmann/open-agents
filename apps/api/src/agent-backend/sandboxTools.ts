@@ -197,9 +197,7 @@ function bashTool(
       const p = params as { command: string; cwd?: string; timeoutSeconds?: number };
       const result = await handle.exec({
         command: p.command,
-        cwd: p.cwd
-          ? resolveSandboxPath(p.cwd, handle.workspaceDir)
-          : handle.workspaceDir,
+        cwd: p.cwd ? resolveSandboxPath(p.cwd, handle.workspaceDir) : handle.workspaceDir,
         timeoutSeconds: p.timeoutSeconds,
         policy,
         onOutput: (chunk) =>
@@ -368,7 +366,9 @@ function grepTool(
           emitToolOutput(handle, onEvent, "grep", toolCallId, chunk.stream, chunk.text),
       });
       return {
-        content: [{ type: "text", text: truncate(formatCommandResult(result), maxOutput) }],
+        content: [
+          { type: "text", text: truncate(formatCommandResult(result), maxOutput) },
+        ],
         details: result,
       };
     },
@@ -399,7 +399,9 @@ function webFetchTool(
         policy,
       });
       return {
-        content: [{ type: "text", text: truncate(formatCommandResult(result), maxOutput) }],
+        content: [
+          { type: "text", text: truncate(formatCommandResult(result), maxOutput) },
+        ],
         details: result,
       };
     },

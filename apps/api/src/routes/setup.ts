@@ -1,10 +1,16 @@
+import { SandboxProviderIdSchema } from "@open-agents/types";
 import { Hono } from "hono";
 import { z } from "zod";
 import { createUserWithPassword } from "../auth/index.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { resetAgentBackend } from "../agent-backend/instance.js";
-import { APP_SETTING_KEYS, setAppSetting } from "../services/appSettings.js";
+import {
+  APP_SETTING_KEYS,
+  invalidateAppSetting,
+  setAppSetting,
+} from "../services/appSettings.js";
+import { sandboxProviderSettings } from "../services/sandboxProviderSettingsInstance.js";
 import {
   invalidateServiceSecret,
   isServiceSetupComplete,
@@ -19,7 +25,10 @@ export const SETUP_PREFIX = "/api/setup";
 export const setupRoutes = new Hono<{ Variables: AppVariables }>();
 
 const SetupBody = z.object({
-  daytonaApiKey: z.string().min(1),
+  /** Sandbox provider this deployment runs on. Defaults to Daytona. */
+  sandboxProvider: SandboxProviderIdSchema.default("daytona"),
+  /** Required only when Daytona is the selected provider. */
+  daytonaApiKey: z.string().min(1).optional(),
   anthropicApiKey: z.string().optional(),
   openaiApiKey: z.string().optional(),
   openrouterApiKey: z.string().optional(),
@@ -45,10 +54,10 @@ setupRoutes.get("/status", async (c) => {
 });
 
 /**
- * One-shot deployment bootstrap. Creates the first admin user, persists
- * Daytona, model-provider, and Mailgun service credentials encrypted in
- * Postgres, and resets the in-process backend so subsequent calls pick up
- * the new key.
+ * One-shot deployment bootstrap. Creates the first admin user, records the
+ * chosen sandbox provider, persists provider/model/Mailgun service
+ * credentials encrypted in Postgres, and resets the in-process backend so
+ * subsequent calls pick up the new configuration.
  *
  * Refuses to run a second time once any user exists — rotate values via
  * the admin Settings UI (`/api/secrets`) instead.
@@ -61,6 +70,13 @@ setupRoutes.post("/", async (c) => {
 
   const body = SetupBody.parse(await c.req.json());
 
+  if (body.sandboxProvider === "daytona" && !body.daytonaApiKey) {
+    return c.json(
+      { error: "daytonaApiKey is required when using the Daytona provider" },
+      400,
+    );
+  }
+
   const adminUser = await createUserWithPassword({
     email: body.admin.email,
     name: body.admin.name,
@@ -68,7 +84,10 @@ setupRoutes.post("/", async (c) => {
     role: "admin",
   });
 
-  await setServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY, body.daytonaApiKey);
+  if (body.daytonaApiKey) {
+    await setServiceSecret(SERVICE_KEYS.DAYTONA_API_KEY, body.daytonaApiKey);
+  }
+  await setAppSetting(APP_SETTING_KEYS.SANDBOX_PROVIDER, body.sandboxProvider);
   if (body.anthropicApiKey) {
     await setServiceSecret(SERVICE_KEYS.ANTHROPIC_API_KEY, body.anthropicApiKey);
   }
@@ -91,7 +110,20 @@ setupRoutes.post("/", async (c) => {
     await setAppSetting(APP_SETTING_KEYS.INBOUND_FROM, body.inboundFrom);
   }
   invalidateServiceSecret();
+  invalidateAppSetting();
   resetAgentBackend();
+
+  // A broker selection is only accepted once the broker actually answers.
+  if (body.sandboxProvider !== "daytona") {
+    try {
+      await sandboxProviderSettings.select(body.sandboxProvider);
+    } catch (err) {
+      await setAppSetting(APP_SETTING_KEYS.SANDBOX_PROVIDER, "daytona");
+      invalidateAppSetting();
+      resetAgentBackend();
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  }
 
   log.info("setup: completed", {
     adminId: adminUser.id,

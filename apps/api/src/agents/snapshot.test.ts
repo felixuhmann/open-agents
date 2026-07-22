@@ -143,9 +143,7 @@ void test("unknown schema versions are rejected rather than silently coerced", (
 });
 
 void test("snapshots missing required identity fields are rejected", () => {
-  assert.throws(() =>
-    AgentConfigSnapshot.parse({ ...LEGACY_V1_PAYLOAD, modelId: "" }),
-  );
+  assert.throws(() => AgentConfigSnapshot.parse({ ...LEGACY_V1_PAYLOAD, modelId: "" }));
   assert.throws(() =>
     AgentConfigSnapshot.parse({ ...LEGACY_V1_PAYLOAD, managedTools: undefined }),
   );

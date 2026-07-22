@@ -34,10 +34,7 @@ export type DaytonaProcessLike = {
     onStdout: (chunk: string) => void,
     onStderr: (chunk: string) => void,
   ): Promise<unknown>;
-  getSessionCommand(
-    sessionId: string,
-    cmdId: string,
-  ): Promise<DaytonaSessionCommandLike>;
+  getSessionCommand(sessionId: string, cmdId: string): Promise<DaytonaSessionCommandLike>;
 };
 
 export type DaytonaNetworkSettings = {

@@ -129,7 +129,8 @@ export function createSandboxLifecycle(deps: SandboxLifecycleDeps): SandboxLifec
     syncFromProvider: (rowId) =>
       act(rowId, (provider, row) => provider.inspect(row.providerSandboxId)),
 
-    start: (rowId) => act(rowId, (provider, row) => provider.start(row.providerSandboxId)),
+    start: (rowId) =>
+      act(rowId, (provider, row) => provider.start(row.providerSandboxId)),
 
     stop: (rowId) => act(rowId, (provider, row) => provider.stop(row.providerSandboxId)),
 

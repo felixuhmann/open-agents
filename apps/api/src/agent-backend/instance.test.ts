@@ -20,7 +20,8 @@ function fixture(initialKey: string | null) {
   const resolver = createAgentBackendResolver<FakeBackend>({
     loadCredentialKey: () => Promise.resolve(key),
     build: (credentialKey) => ({ id: ++builds, key: credentialKey }),
-    missingCredentialMessage: "Daytona API key is not configured. Complete setup at /setup.",
+    missingCredentialMessage:
+      "Daytona API key is not configured. Complete setup at /setup.",
   });
   return {
     resolver,
