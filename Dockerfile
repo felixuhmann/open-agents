@@ -20,6 +20,10 @@ COPY apps/web/package.json apps/web/
 COPY packages/db/package.json packages/db/
 COPY packages/types/package.json packages/types/
 COPY packages/tsconfig/package.json packages/tsconfig/
+# The sandbox broker client is pinned as a local tarball until its public
+# release exists, so it has to be present before install resolves it.
+# See vendor/sandbox-broker/README.md for the swap to the release URL.
+COPY vendor/ vendor/
 # postinstall in @open-agents/db runs `prisma generate`, which needs
 # prisma/schema.prisma — not copied in this stage. Codegen runs in `pnpm build`.
 RUN pnpm install --frozen-lockfile --ignore-scripts
