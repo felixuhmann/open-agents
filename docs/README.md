@@ -17,6 +17,12 @@ first time, dip into individual files later.
 | [`operations.md`](operations.md)                   | When something is broken in production and you need to figure out why.                                                                          |
 | [`todos.md`](todos.md)                             | Future v1.x / v2 ideas explicitly out of scope for v1.                                                                                          |
 
+### Proposals (RFCs, not yet implemented)
+
+| File                                                                | What it argues                                                                                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`proposals/memory-redesign.md`](proposals/memory-redesign.md)      | Replace the `memory` MCP-CRUD tool with mounted memory stores (Anthropic-native + Daytona-materialised). Collapse `platform` + third-party MCP into one `mcp` category. |
+
 ## Other reference material
 
 - [`../AGENTS.md`](../AGENTS.md) — repo conventions every code change
