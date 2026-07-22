@@ -77,6 +77,17 @@ setupRoutes.post("/", async (c) => {
     );
   }
 
+  // Provider readiness must be checked before creating the one-shot admin or
+  // writing credentials. Otherwise a failed check leaves a user behind and
+  // permanently locks this route as "setup already complete".
+  if (body.sandboxProvider !== "daytona") {
+    try {
+      await sandboxProviderSettings.preflight(body.sandboxProvider);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  }
+
   const adminUser = await createUserWithPassword({
     email: body.admin.email,
     name: body.admin.name,
@@ -112,18 +123,6 @@ setupRoutes.post("/", async (c) => {
   invalidateServiceSecret();
   invalidateAppSetting();
   resetAgentBackend();
-
-  // A broker selection is only accepted once the broker actually answers.
-  if (body.sandboxProvider !== "daytona") {
-    try {
-      await sandboxProviderSettings.select(body.sandboxProvider);
-    } catch (err) {
-      await setAppSetting(APP_SETTING_KEYS.SANDBOX_PROVIDER, "daytona");
-      invalidateAppSetting();
-      resetAgentBackend();
-      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
-    }
-  }
 
   log.info("setup: completed", {
     adminId: adminUser.id,

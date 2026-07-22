@@ -170,6 +170,35 @@ void test("status warns when the active provider is unusable", async () => {
 
 // ---------------------------------------------------------------- select
 
+void test("preflight verifies availability without mutating deployment state", async () => {
+  const f = fixture({
+    stored: "daytona",
+    providers: { daytona: fakeProvider("daytona"), broker: fakeProvider("broker") },
+  });
+
+  await f.settings.preflight("broker");
+
+  assert.deepEqual(f.writes, []);
+  assert.equal(f.stored(), "daytona");
+  assert.equal(f.resets(), 0);
+});
+
+void test("preflight fails closed without mutating deployment state", async () => {
+  const f = fixture({
+    stored: "daytona",
+    providers: { daytona: fakeProvider("daytona"), broker: null },
+  });
+
+  await assert.rejects(
+    () => f.settings.preflight("broker"),
+    (err: unknown) => err instanceof Error && err.message.includes("broker"),
+  );
+
+  assert.deepEqual(f.writes, []);
+  assert.equal(f.stored(), "daytona");
+  assert.equal(f.resets(), 0);
+});
+
 void test("selecting an available provider persists it and resets cached providers", async () => {
   const f = fixture({
     providers: { daytona: fakeProvider("daytona"), broker: fakeProvider("broker") },

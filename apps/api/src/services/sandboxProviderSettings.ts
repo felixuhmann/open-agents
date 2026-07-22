@@ -71,6 +71,8 @@ export type SandboxProviderSettingsDeps = {
 export type SandboxProviderSettings = {
   getActiveProviderId(): Promise<SandboxProviderId>;
   describe(): Promise<SandboxProviderStatusDto>;
+  /** Verify that a provider can be selected without mutating deployment state. */
+  preflight(id: SandboxProviderId): Promise<void>;
   select(id: SandboxProviderId): Promise<SandboxProviderStatusDto>;
 };
 
@@ -104,6 +106,17 @@ export function createSandboxProviderSettings(
     };
   }
 
+  async function preflight(id: SandboxProviderId): Promise<void> {
+    const info = await inspect(id);
+    if (!info.available) {
+      throw new AgentBackendError(
+        `Cannot select sandbox provider "${id}"${
+          info.detail ? `: ${info.detail}` : "."
+        } The current selection is unchanged.`,
+      );
+    }
+  }
+
   async function describeWith(active: SandboxProviderId) {
     const providers: SandboxProviderInfoDto[] = [];
     for (const id of SANDBOX_PROVIDER_IDS) {
@@ -128,19 +141,14 @@ export function createSandboxProviderSettings(
       return describeWith(await getActiveProviderId());
     },
 
+    preflight,
+
     /**
      * Health-check the target *before* persisting. If it is unusable the
      * setting is left exactly as it was.
      */
     async select(id: SandboxProviderId): Promise<SandboxProviderStatusDto> {
-      const info = await inspect(id);
-      if (!info.available) {
-        throw new AgentBackendError(
-          `Cannot select sandbox provider "${id}"${
-            info.detail ? `: ${info.detail}` : "."
-          } The current selection is unchanged.`,
-        );
-      }
+      await preflight(id);
 
       const current = await getActiveProviderId();
       if (current !== id) {
