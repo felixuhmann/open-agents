@@ -54,6 +54,16 @@ Every `AgentSandbox` row and session id records the provider that created
 it, and lifecycle calls dispatch through _that_ provider — switching the
 active provider never strands old rows.
 
+The selection gates exactly one thing: `createSession()`. Connecting,
+streaming, mounting, and managing an existing sandbox go through the
+session's own provider, so an outage on the newly selected provider must
+never stop work on sessions that live elsewhere. When a session does have to
+move providers, the conversation/thread link and the session pointer are
+both unique, so they are taken together by a compare-and-swap
+([`sandboxSessionClaim.ts`](apps/api/src/services/sandboxSessionClaim.ts)):
+one racer wins and the loser's sandbox is destroyed rather than left
+running.
+
 When adding provider behaviour, put it behind the interface. If a provider
 cannot honour a policy it must **fail closed** with an actionable message
 rather than approximating it: broker v1 has no CIDR allow list, so an agent

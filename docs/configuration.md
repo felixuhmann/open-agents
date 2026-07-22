@@ -116,6 +116,13 @@ These values are returned as plaintext by `/api/settings` and edited from
 | `inbound_from`          | [`apps/api/src/jobs/sendEmail.ts`](../apps/api/src/jobs/sendEmail.ts) — last-resort `From:` for legacy threads. Per-thread `inboundAddress` always wins.                                                                                        |
 | `sandbox_provider`      | Active sandbox provider (`daytona` or `broker`), chosen in Setup and changeable in `/settings/sandboxes`. **Absent means `daytona`**, so deployments predating the setting are unaffected. Written only after the target passes a health check. |
 
+`sandbox_provider` is **reserved**: it is not listed or writable through
+`/api/settings`, which stores arbitrary text and would let a caller select a
+provider that is unconfigured or unreachable. It moves only through
+`PUT /api/sandbox-provider`, which health-checks the target first, leaves the
+stored selection untouched when that fails, and resets the cached provider
+instances afterwards. The generic route answers `409` and names that endpoint.
+
 ## Per-tool secrets
 
 Some platform MCP tools need credentials per binding (e.g. an OAuth token
