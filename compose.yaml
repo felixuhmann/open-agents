@@ -32,6 +32,7 @@ services:
   # These one-shot services ensure `docker compose up --build` loads them into
   # the same Docker daemon exposed to the control plane.
   opensandbox-guest-image:
+    profiles: ["docker-opensandbox-diagnostic"]
     build:
       context: docker
       dockerfile: opensandbox-guest.Dockerfile
@@ -40,6 +41,7 @@ services:
     restart: "no"
 
   opensandbox-egress-image:
+    profiles: ["docker-opensandbox-diagnostic"]
     build:
       context: docker
       dockerfile: opensandbox-egress.Dockerfile
@@ -48,6 +50,7 @@ services:
     restart: "no"
 
   opensandbox:
+    profiles: ["docker-opensandbox-diagnostic"]
     image: ${OPENSANDBOX_SERVER_IMAGE:-docker.io/opensandbox/server:v0.2.2@sha256:8f8762af7565ed9c6f9dbcf009dd56727aa1fef8ce58a17f2b007b88cfe542bb}
     restart: unless-stopped
     depends_on:
@@ -86,8 +89,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      opensandbox:
-        condition: service_healthy
     ports:
       - "${APP_PORT:-3000}:3000"
     env_file:
@@ -100,9 +101,11 @@ services:
       UPLOAD_SIGNING_SECRET: ${UPLOAD_SIGNING_SECRET:?set UPLOAD_SIGNING_SECRET in docker/.env}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
-      OPENSANDBOX_BASE_URL: http://opensandbox:8080
+      OPENSANDBOX_BASE_URL: ${OPENSANDBOX_BASE_URL:?set OPENSANDBOX_BASE_URL to the private Kubernetes OpenSandbox endpoint}
       OPENSANDBOX_API_KEY: ${OPENSANDBOX_API_KEY:?set OPENSANDBOX_API_KEY in docker/.env}
       OPENSANDBOX_IMAGE: ${OPENSANDBOX_IMAGE:-open-agents-opensandbox-guest:1.0.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Deliberately no Docker/containerd socket or runtime credentials.
     volumes:
       - skill_bundles:/app/apps/api/data/skills

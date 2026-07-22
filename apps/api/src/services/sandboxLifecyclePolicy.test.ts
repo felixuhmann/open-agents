@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPastAutoStopInterval } from "./sandboxLifecyclePolicy.js";
+import {
+  DEFAULT_SANDBOX_LIFECYCLE,
+  isPastAutoStopInterval,
+} from "./sandboxLifecyclePolicy.js";
 
 const NOW = new Date("2026-07-20T12:00:00.000Z");
+
+void test("default lifecycle disables provider pause until snapshot support is configured", () => {
+  assert.equal(DEFAULT_SANDBOX_LIFECYCLE.autoStopInterval, -1);
+});
 
 void test("uses each sandbox lifecycle policy auto-stop interval", () => {
   assert.equal(

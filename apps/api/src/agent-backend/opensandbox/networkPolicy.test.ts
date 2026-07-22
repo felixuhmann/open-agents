@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildNetworkPolicy,
+  fingerprintNetworkPolicy,
+  NETWORK_POLICY_METADATA_KEY,
   parseAllowListTargets,
+  planNetworkPolicyFromMetadata,
   planNetworkPolicyUpdate,
 } from "./networkPolicy.js";
 
@@ -79,5 +82,32 @@ void test("requires recreation when default action changes", () => {
       { defaultAction: "deny", egress: [{ action: "allow", target: "api.example" }] },
     ),
     { kind: "recreate" },
+  );
+});
+
+void test("accepts reconnect only when provider metadata matches the desired policy", () => {
+  const desired = {
+    defaultAction: "deny" as const,
+    egress: [{ action: "allow" as const, target: "api.example.com" }],
+  };
+  assert.equal(
+    planNetworkPolicyFromMetadata(
+      { [NETWORK_POLICY_METADATA_KEY]: fingerprintNetworkPolicy(desired) },
+      desired,
+    ),
+    "noop",
+  );
+  assert.equal(planNetworkPolicyFromMetadata({}, desired), "recreate");
+  assert.equal(
+    planNetworkPolicyFromMetadata(
+      {
+        [NETWORK_POLICY_METADATA_KEY]: fingerprintNetworkPolicy({
+          defaultAction: "deny",
+          egress: [],
+        }),
+      },
+      desired,
+    ),
+    "recreate",
   );
 });

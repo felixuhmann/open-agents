@@ -1,7 +1,11 @@
 import type { NetworkPolicy } from "@alibaba-group/opensandbox";
 import type { SandboxNetworkPolicy } from "@open-agents/types";
 import { AgentBackendError } from "../types.js";
-import { buildNetworkPolicy } from "./networkPolicy.js";
+import {
+  buildNetworkPolicy,
+  fingerprintNetworkPolicy,
+  NETWORK_POLICY_METADATA_KEY,
+} from "./networkPolicy.js";
 import { SANDBOX_WORKSPACE_DIR } from "./session.js";
 
 /** Keep the guest alive so we can exec into it for the session lifetime. */
@@ -52,6 +56,7 @@ export function buildCreateSpec(input: BuildCreateSpecInput): CreateSandboxSpec 
     metadata: {
       "open-agents-agent-id": input.agentId,
       "open-agents-agent-slug": input.agentSlug ?? "",
+      [NETWORK_POLICY_METADATA_KEY]: fingerprintNetworkPolicy(policy),
     },
     networkPolicy: policy,
     ...(input.resourceLimits ? { resource: input.resourceLimits } : {}),

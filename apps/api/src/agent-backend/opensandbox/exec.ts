@@ -207,9 +207,24 @@ export async function runSandboxCommand(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
+      shellSessions.delete(input.handle.id);
       void input.handle.interrupt(sessionId).catch(() => undefined);
       reject(new Error(`command timed out after ${timeoutSeconds}s`));
     }, timeoutSeconds * 1000);
+  });
+
+  let abortListener: (() => void) | undefined;
+  const cancellationPromise = new Promise<never>((_resolve, reject) => {
+    if (!input.signal) return;
+    abortListener = () => {
+      shellSessions.delete(input.handle.id);
+      void input.handle.interrupt(sessionId).catch(() => undefined);
+      const error = new Error("command cancelled");
+      error.name = "AbortError";
+      reject(error);
+    };
+    if (input.signal.aborted) abortListener();
+    else input.signal.addEventListener("abort", abortListener, { once: true });
   });
 
   let execution: CommandExecution;
@@ -223,12 +238,13 @@ export async function runSandboxCommand(
         input.signal,
       ),
       timeoutPromise,
+      cancellationPromise,
     ]);
   } catch (err) {
     if (timer) clearTimeout(timer);
     batcher.finish();
     if (input.signal?.aborted) {
-      await input.handle.interrupt(sessionId).catch(() => undefined);
+      shellSessions.delete(input.handle.id);
       return {
         exitCode: 130,
         stdout: "",
@@ -248,6 +264,8 @@ export async function runSandboxCommand(
     };
   } finally {
     if (timer) clearTimeout(timer);
+    if (abortListener && input.signal)
+      input.signal.removeEventListener("abort", abortListener);
   }
 
   const { stdout: liveOut, stderr: liveErr } = batcher.finish();

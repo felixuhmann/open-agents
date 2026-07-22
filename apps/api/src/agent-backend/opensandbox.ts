@@ -40,7 +40,7 @@ import { wrapOpenSandboxError } from "./opensandboxErrors.js";
 import { buildCreateSpec } from "./opensandbox/createSpec.js";
 import {
   buildNetworkPolicy,
-  planNetworkPolicyUpdate,
+  planNetworkPolicyFromMetadata,
 } from "./opensandbox/networkPolicy.js";
 import {
   buildOpenSandboxSessionId,
@@ -508,7 +508,7 @@ export class OpenSandboxAgentBackend implements AgentBackend {
     desiredNetworkPolicy?: SandboxNetworkPolicy,
   ): Promise<T> {
     const session = parseOpenSandboxSessionId(sessionId);
-    const { handle, resumed } = await this.transport.connect(session.sandboxId);
+    const { handle, info, resumed } = await this.transport.connect(session.sandboxId);
     try {
       const workspaceDir = SANDBOX_WORKSPACE_DIR;
       if (observabilityRunId && resumed) {
@@ -525,20 +525,10 @@ export class OpenSandboxAgentBackend implements AgentBackend {
       }
       if (desiredNetworkPolicy) {
         const desired = buildNetworkPolicy(desiredNetworkPolicy).policy;
-        const current = await handle.getNetworkPolicy();
-        const update = planNetworkPolicyUpdate(current, desired);
-        if (update.kind === "recreate") {
+        if (planNetworkPolicyFromMetadata(info.metadata, desired) === "recreate") {
           throw new AgentBackendError(
-            "Sandbox network policy cannot be applied safely in place because its default action changed. Delete this sandbox so the next run recreates it with the published policy.",
+            "Sandbox network policy differs from the policy enforced at creation. Delete this sandbox so the next run recreates it with the published policy; Docker dns+nft policy changes are not applied in place.",
           );
-        }
-        if (update.kind === "patch") {
-          if (update.deleteTargets.length > 0) {
-            await handle.deleteEgressRules(update.deleteTargets);
-          }
-          if (update.addRules.length > 0) {
-            await handle.patchEgressRules(update.addRules);
-          }
         }
       }
       await touchSandboxActivity(sessionId);

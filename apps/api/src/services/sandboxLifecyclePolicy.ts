@@ -1,12 +1,12 @@
 import type { SandboxLifecyclePolicy } from "@open-agents/types";
 
 /**
- * Default lifecycle policy stored on each `AgentSandbox` row. OpenSandbox has
- * pause/resume but no non-destructive provider TTL. The application reconcile
- * job enforces `autoStopInterval`; cold archive and automatic delete are disabled.
+ * Default lifecycle policy stored on each `AgentSandbox` row. Automatic provider
+ * pause is disabled until Kubernetes snapshot registry support is configured and
+ * verified; cold archive and automatic delete are also disabled.
  */
 export const DEFAULT_SANDBOX_LIFECYCLE: SandboxLifecyclePolicy = {
-  autoStopInterval: 15,
+  autoStopInterval: -1,
   autoArchiveInterval: -1,
   autoDeleteInterval: -1,
 };

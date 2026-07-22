@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCreateSpec } from "./createSpec.js";
+import {
+  fingerprintNetworkPolicy,
+  NETWORK_POLICY_METADATA_KEY,
+} from "./networkPolicy.js";
 
 const NET = { internetEnabled: true, allowList: "", protectInternalNetwork: true };
 
@@ -18,7 +22,13 @@ void test("builds a create spec with image, keep-alive entrypoint, workspace and
   assert.deepEqual(spec.metadata, {
     "open-agents-agent-id": "agent-1",
     "open-agents-agent-slug": "support-bot",
+    [NETWORK_POLICY_METADATA_KEY]: fingerprintNetworkPolicy(spec.networkPolicy),
   });
+  assert.match(
+    spec.metadata[NETWORK_POLICY_METADATA_KEY] ?? "",
+    /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,61}[A-Za-z0-9])?$/,
+  );
+  assert.ok((spec.metadata[NETWORK_POLICY_METADATA_KEY]?.length ?? 64) <= 63);
   assert.equal(spec.networkPolicy.defaultAction, "allow");
   assert.deepEqual(spec.rejectedNetworkEntries, []);
 });

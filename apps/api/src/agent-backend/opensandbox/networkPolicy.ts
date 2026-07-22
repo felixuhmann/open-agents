@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { NetworkPolicy, NetworkRule } from "@alibaba-group/opensandbox";
 import type { SandboxNetworkPolicy } from "@open-agents/types";
 
@@ -36,6 +37,34 @@ export type NetworkPolicyUpdatePlan =
   | { kind: "noop" }
   | { kind: "recreate" }
   | { kind: "patch"; deleteTargets: string[]; addRules: NetworkRule[] };
+
+export const NETWORK_POLICY_METADATA_KEY = "open-agents-network-policy";
+
+export function serializeNetworkPolicy(policy: NetworkPolicy): string {
+  return JSON.stringify({
+    defaultAction: policy.defaultAction ?? "deny",
+    egress: (policy.egress ?? []).map((rule) => ({
+      action: rule.action,
+      target: rule.target,
+    })),
+  });
+}
+
+export function fingerprintNetworkPolicy(policy: NetworkPolicy): string {
+  const digest = createHash("sha256")
+    .update(serializeNetworkPolicy(policy))
+    .digest("hex");
+  return `sha256-${digest.slice(0, 40)}`;
+}
+
+export function planNetworkPolicyFromMetadata(
+  metadata: Record<string, string>,
+  desired: NetworkPolicy,
+): "noop" | "recreate" {
+  return metadata[NETWORK_POLICY_METADATA_KEY] === fingerprintNetworkPolicy(desired)
+    ? "noop"
+    : "recreate";
+}
 
 export function planNetworkPolicyUpdate(
   current: NetworkPolicy,

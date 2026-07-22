@@ -1,0 +1,98 @@
+opensandbox-controller:
+  controller:
+    image:
+      repository: docker.io/opensandbox/controller
+      tag: v0.2.0
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 25m
+        memory: 64Mi
+    snapshot:
+      imageCommitterImage: ""
+      containerdSocketPath: ""
+      registry: ""
+  crds:
+    install: true
+    keep: true
+
+opensandbox-server:
+  server:
+    image:
+      repository: docker.io/opensandbox/server
+      tag: v0.2.2
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    env:
+      - name: OPENSANDBOX_SERVER_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: opensandbox-api-key
+            key: api-key
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+    volumeMounts:
+      - name: data
+        mountPath: /var/lib/opensandbox
+    volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: opensandbox-server-data
+  configToml: |
+    [server]
+    host = "0.0.0.0"
+    port = 80
+    max_sandbox_timeout_seconds = 86400
+
+    [log]
+    level = "INFO"
+
+    [runtime]
+    type = "kubernetes"
+    execd_image = "docker.io/opensandbox/execd:v1.0.21"
+
+    [kubernetes]
+    namespace = "opensandbox"
+    workload_provider = "batchsandbox"
+    batchsandbox_template_file = "/etc/opensandbox/example.batchsandbox-template.yaml"
+    image_pull_policy = "IfNotPresent"
+    sandbox_create_timeout_seconds = 240
+    informer_enabled = true
+    informer_resync_seconds = 300
+    informer_watch_timeout_seconds = 60
+
+    [egress]
+    image = "open-agents-opensandbox-egress:1.1.4-hardened"
+    mode = "dns+nft"
+    disable_ipv6 = true
+
+    [secure_runtime]
+    type = "kata"
+    k8s_runtime_class = "kata-qemu"
+
+    [store]
+    type = "sqlite"
+    path = "/var/lib/opensandbox/opensandbox.db"

@@ -116,11 +116,15 @@ void test("policy-blocked commands never reach the sandbox", async () => {
   assert.equal(result.exitCode, 1);
 });
 
-void test("a hung command times out, interrupts the session, and reports exit 124", async () => {
+void test("a hung command times out, interrupts the session, and recreates it for the next command", async () => {
   resetShellSessions();
-  const handle = makeHandle(
-    () => new Promise<CommandExecution>(() => undefined), // never resolves
-  );
+  let calls = 0;
+  const handle = makeHandle(() => {
+    calls += 1;
+    return calls === 1
+      ? new Promise<CommandExecution>(() => undefined)
+      : Promise.resolve(completedExecution());
+  });
   const result = await runSandboxCommand({
     handle,
     command: "sleep 999",
@@ -131,13 +135,28 @@ void test("a hung command times out, interrupts the session, and reports exit 12
   assert.equal(result.exitCode, 124);
   assert.match(result.stderr, /timed out/);
   assert.deepEqual(handle.interrupted, ["session-1"]);
+
+  const after = await runSandboxCommand({
+    handle,
+    command: "echo recovered",
+    cwd: "/workspace",
+    workspaceDir: "/workspace",
+  });
+  assert.equal(after.exitCode, 0);
+  assert.equal(handle.createdSessions, 2);
 });
 
-void test("an aborted signal cancels the command and reports exit 130", async () => {
+void test("an aborted signal promptly interrupts the session, reports exit 130, and recovers", async () => {
   resetShellSessions();
-  const handle = makeHandle(() => Promise.resolve(completedExecution()));
+  let calls = 0;
+  const handle = makeHandle(() => {
+    calls += 1;
+    return calls === 1
+      ? new Promise<CommandExecution>(() => undefined)
+      : Promise.resolve(completedExecution());
+  });
   const controller = new AbortController();
-  controller.abort();
+  setTimeout(() => controller.abort(), 10);
   const result = await runSandboxCommand({
     handle,
     command: "long-task",
@@ -147,6 +166,15 @@ void test("an aborted signal cancels the command and reports exit 130", async ()
   });
   assert.equal(result.exitCode, 130);
   assert.match(result.combined, /cancelled/);
+  const after = await runSandboxCommand({
+    handle,
+    command: "echo recovered",
+    cwd: "/workspace",
+    workspaceDir: "/workspace",
+  });
+  assert.equal(after.exitCode, 0);
+  assert.equal(handle.createdSessions, 2);
+  assert.deepEqual(handle.interrupted, ["session-1"]);
 });
 
 void test("output over the policy limit is truncated", async () => {

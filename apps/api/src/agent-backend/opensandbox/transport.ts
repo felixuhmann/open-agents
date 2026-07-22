@@ -46,6 +46,7 @@ export type SandboxInfoSnapshot = {
 
 export type ConnectResult = {
   handle: SandboxHandle;
+  info: SandboxInfoSnapshot;
   previousState: CanonicalSandboxState;
   /** True when the sandbox had to be resumed from a paused state to connect. */
   resumed: boolean;
@@ -163,6 +164,7 @@ export class SdkOpenSandboxTransport implements OpenSandboxTransport {
 
   async connect(sandboxId: string): Promise<ConnectResult> {
     const info = await this.manager.getSandboxInfo(sandboxId);
+    const snapshot = toSnapshot(info);
     const previousState = mapOpenSandboxState(info.status?.state);
     const action = planConnectAction(previousState);
     if (action === "error") {
@@ -175,13 +177,23 @@ export class SdkOpenSandboxTransport implements OpenSandboxTransport {
         connectionConfig: this.connectionConfig,
         sandboxId,
       });
-      return { handle: wrapSandbox(sandbox), previousState, resumed: true };
+      return {
+        handle: wrapSandbox(sandbox),
+        info: snapshot,
+        previousState,
+        resumed: true,
+      };
     }
     const sandbox = await Sandbox.connect({
       connectionConfig: this.connectionConfig,
       sandboxId,
     });
-    return { handle: wrapSandbox(sandbox), previousState, resumed: false };
+    return {
+      handle: wrapSandbox(sandbox),
+      info: snapshot,
+      previousState,
+      resumed: false,
+    };
   }
 
   async getInfo(sandboxId: string): Promise<SandboxInfoSnapshot> {

@@ -1,26 +1,31 @@
 # Deployment
 
-Ship the platform as a **single Docker image**: the Hono API serves the built SPA,
+Ship the application as a **single Docker image**: the Hono API serves the built SPA,
 runs pg-boss workers, and applies Prisma migrations on container start.
+
+> **Production sandbox requirement:** deploy OpenSandbox on Kubernetes with the
+> `kata-qemu` RuntimeClass by following [OpenSandbox on k3s with Kata](./opensandbox-kubernetes.md).
+> Docker-mode OpenSandbox is retained only under the explicit
+> `docker-opensandbox-diagnostic` Compose profile. Live verification showed that
+> Docker's host-side `dns+nft` sidecar is not a reliable enforcement boundary for
+> traffic crossing the Kata VM tap path.
 
 ## Architecture
 
-```
-                    ┌─────────────────────────────┐        ┌──────────────────────────────┐
-  Browser / Mailgun │  app (Docker)               │  HTTP  │  opensandbox (Docker)        │
-        ───────────▶│  :3000  API + SPA + workers │ ──────▶│  OpenSandbox Server + Kata   │
-                    │  volume: apps/api/data/skills│        │  host Docker socket, runtime │
-                    └──────────────┬──────────────┘        │  = kata (Kata Containers)    │
-                                   │ DATABASE_URL           └──────────────────────────────┘
-                                   ▼
-                    ┌─────────────────────────────┐
-                    │  Postgres 16                │
-                    └─────────────────────────────┘
+```text
+Browser / Mailgun -> Open Agents app -> Postgres
+                              |
+                              v
+                   OpenSandbox Server (k3s)
+                              |
+                              v
+                   BatchSandbox pod (kata-qemu)
+                    guest + egress in one KVM VM
 ```
 
-Only the `opensandbox` service receives the host Docker socket; the `app`
-service never does. The host Docker daemon must have Kata installed and
-registered as a runtime named `kata-runtime`.
+The Open Agents application receives no Docker/containerd socket or Kubernetes
+credential. Runtime access is confined to the OpenSandbox Kubernetes controller
+and snapshot jobs when snapshot support is explicitly configured.
 
 The container entrypoint runs `prisma migrate deploy` before `node dist/index.js`.
 The Node process starts with working directory `apps/api` so static assets resolve
@@ -28,22 +33,18 @@ to `../web/dist` (see `apps/api/src/routes/web.ts`).
 
 ## Quick start (Docker Compose)
 
-For a single host or staging environment:
+For a single-host application deployment, first deploy OpenSandbox using the
+Kubernetes guide and set `OPENSANDBOX_BASE_URL` to its private/internal endpoint:
 
 ```bash
-cp docker/.env.example docker/.env   # set every blank secret
-docker compose --env-file docker/.env -p open-agents create
-
-# OpenSandbox 0.2.2 publishes execd/HTTP ports on 0.0.0.0. Permit only this
-# Compose subnet, then drop every other host ingress to the allocation range.
-SUBNET="$(docker network inspect -f '{{(index .IPAM.Config 0).Subnet}}' open-agents_default)"
-sudo iptables -C DOCKER-USER -s "$SUBNET" -p tcp --dport 40000:41000 -j ACCEPT 2>/dev/null || \
-  sudo iptables -I DOCKER-USER 1 -s "$SUBNET" -p tcp --dport 40000:41000 -j ACCEPT
-sudo iptables -C DOCKER-USER -p tcp --dport 40000:41000 -j DROP 2>/dev/null || \
-  sudo iptables -I DOCKER-USER 2 -p tcp --dport 40000:41000 -j DROP
+cp docker/.env.example docker/.env   # set every blank secret and OpenSandbox endpoint
 
 docker compose --env-file docker/.env -p open-agents up --build -d
 ```
+
+The default Compose project starts only Open Agents and Postgres. The diagnostic
+Docker OpenSandbox profile is not a production deployment and must not be used
+as a substitute for the Kubernetes/Kata setup.
 
 Open `http://localhost:3000` (or your `PUBLIC_BASE_URL`) and complete the
 **Setup wizard**. Model-provider and Mailgun credentials are stored in
@@ -55,7 +56,7 @@ credential (the OpenSandbox runtime is deployment env configuration, see
 Compose provisions:
 
 - **Postgres 16** with a named volume (`postgres_data`)
-- **OpenSandbox Server + Kata** as a dedicated `opensandbox` service (see below)
+- **Open Agents API + SPA + workers**, configured to call the external private OpenSandbox endpoint
 - **Skill bundle storage** at `apps/api/data/skills` (`skill_bundles` volume)
 
 Override the published port with `APP_PORT` in `docker/.env`.
