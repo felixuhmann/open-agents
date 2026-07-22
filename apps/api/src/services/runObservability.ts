@@ -4,8 +4,11 @@ import type {
   SandboxRunEventContext,
 } from "@open-agents/types";
 import { appendEvent } from "../runs/events.js";
-import { MAX_TOOL_OUTPUT_CHARS, truncateText } from "./daytonaLimits.js";
-import { buildDaytonaSessionId, parseDaytonaSessionId } from "./daytonaSandbox.js";
+import { MAX_TOOL_OUTPUT_CHARS, truncateText } from "./sandboxLimits.js";
+import {
+  buildSandboxSessionId,
+  parseSandboxSessionId,
+} from "../sandbox-provider/sessionId.js";
 
 const SENSITIVE_KEY =
   /secret|password|token|api[_-]?key|authorization|bearer|credential|private[_-]?key/i;
@@ -76,11 +79,11 @@ export function sandboxContextFromSession(
   state?: string,
   previousState?: string,
 ): SandboxRunEventContext {
-  const ref = parseDaytonaSessionId(sessionId);
+  const ref = parseSandboxSessionId(sessionId);
   return {
-    provider: "daytona",
-    providerSandboxId: ref.sandboxId,
-    sessionId: buildDaytonaSessionId(ref.agentId, ref.sandboxId),
+    provider: ref.provider,
+    providerSandboxId: ref.providerSandboxId,
+    sessionId: buildSandboxSessionId(ref.provider, ref.agentId, ref.providerSandboxId),
     ...(workspaceDir ? { workspaceDir } : {}),
     ...(state ? { state } : {}),
     ...(previousState ? { previousState } : {}),

@@ -11,6 +11,7 @@ import { profileRoutes } from "../routes/api/profile.js";
 import { publicChatRoutes } from "../routes/api/publicChat.js";
 import { runsRoutes } from "../routes/api/runs.js";
 import { sandboxesRoutes } from "../routes/api/sandboxes.js";
+import { sandboxProviderRoutes } from "../routes/api/sandboxProvider.js";
 import { scheduledTasksRoutes } from "../routes/api/scheduledTasks.js";
 import { secretsRoutes } from "../routes/api/secrets.js";
 import { settingsRoutes } from "../routes/api/settings.js";
@@ -100,6 +101,7 @@ export function buildApp(): Hono<{ Variables: AppVariables }> {
   app.route("/api/profile", profileRoutes);
   app.route("/api/public", publicChatRoutes);
   app.route("/api/runs", runsRoutes);
+  app.route("/api/sandbox-provider", sandboxProviderRoutes);
   app.route("/api/sandboxes", sandboxesRoutes);
   app.route("/api/scheduled-tasks", scheduledTasksRoutes);
   app.route("/api/secrets", secretsRoutes);

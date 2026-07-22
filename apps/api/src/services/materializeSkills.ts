@@ -1,44 +1,22 @@
-import { posix as path } from "node:path";
 import type {
   SkillMaterializationEntry,
   SkillMaterializationManifest,
 } from "@open-agents/types";
 import yauzl from "yauzl";
 import type { HydratedAgent } from "../agents/service.js";
-import { type DaytonaSandboxFs, ensureSandboxDir } from "./daytonaShell.js";
+import type { SandboxHandle } from "../sandbox-provider/types.js";
+import { skillSandboxRootFor, skillSlugFromName } from "./skillSandboxPaths.js";
 import { log } from "../log.js";
 import { readSkillBundle } from "./skills.js";
 
-/**
- * Subdirectory of the sandbox working directory where bound skills are
- * unpacked. Combined with the resolved workspaceDir (see
- * `resolveSandboxWorkspaceDir`) to produce an absolute mount path.
- */
-export const SKILL_SANDBOX_SUBDIR = ".agents/skills";
+export {
+  SKILL_SANDBOX_SUBDIR,
+  skillSandboxRootFor,
+  skillSlugFromName,
+} from "./skillSandboxPaths.js";
 
-/**
- * Resolve the absolute directory inside the sandbox where skill bundles
- * should be unpacked, given the sandbox's actual working directory.
- */
-export function skillSandboxRootFor(workspaceDir: string): string {
-  const base = workspaceDir.endsWith("/") ? workspaceDir.slice(0, -1) : workspaceDir;
-  return `${base}/${SKILL_SANDBOX_SUBDIR}`;
-}
-
-export type SkillSandbox = {
-  fs: DaytonaSandboxFs & {
-    uploadFile(content: Buffer, remotePath: string): Promise<unknown>;
-  };
-};
-
-export function skillSlugFromName(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "skill";
-}
+/** Minimal slice of `SandboxHandle` skill materialization needs. */
+export type SkillSandbox = Pick<SandboxHandle, "writeFile">;
 
 function normalizeZipEntryPath(fileName: string): string | null {
   const normalized = fileName.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -142,19 +120,17 @@ async function uploadSkillFile(
   remotePath: string,
   content: Buffer,
 ): Promise<void> {
-  await ensureSandboxDir(sandbox.fs, path.dirname(remotePath));
-  await sandbox.fs.uploadFile(content, remotePath);
+  await sandbox.writeFile(remotePath, content);
 }
 
 /**
- * Copy each pinned skill bundle from local disk into the Daytona sandbox.
+ * Copy each pinned skill bundle from local disk into the sandbox.
  * Skills are unpacked under `<workspaceDir>/.agents/skills/<slug>/` so the
  * Pi agent can read them with the same paths as Cursor-style skill folders.
  *
- * `workspaceDir` MUST be the sandbox's actual working directory (resolved
- * via `resolveSandboxWorkspaceDir`). Passing `/workspace` on an image whose
- * WORKDIR is `/home/daytona` will cause the daemon to fail with
- * `mkdir /workspace: permission denied`.
+ * `workspaceDir` MUST be the sandbox's actual working directory as reported
+ * by the provider handle. Passing `/workspace` on an image whose WORKDIR is
+ * `/home/daytona` will fail with `mkdir /workspace: permission denied`.
  */
 export async function materializeAgentSkills(
   sandbox: SkillSandbox,

@@ -23,6 +23,7 @@ export const AppSettingKey = z.enum([
   "email_footer_logo_url",
   "email_disclaimer",
   "inbound_from",
+  "sandbox_provider",
 ]);
 export type AppSettingKey = z.infer<typeof AppSettingKey>;
 

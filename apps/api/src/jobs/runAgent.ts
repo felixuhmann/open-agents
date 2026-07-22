@@ -7,8 +7,9 @@ import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent, subscribe } from "../runs/events.js";
 import { streamRunWithEvents } from "../services/runStream.js";
-import { uploadPendingChatAttachments } from "../services/chatAttachments.js";
-import { uploadPendingAttachments } from "../services/attachments.js";
+import { prepareChatAttachments } from "../services/chatAttachments.js";
+import { prepareEmailAttachments } from "../services/attachments.js";
+import { toSessionResources } from "../services/attachmentResources.js";
 import {
   resolveChatSessionId,
   resolveEmailSessionId,
@@ -204,22 +205,17 @@ async function runEmailTurn(
   });
   if (!incoming) throw new Error(`Incoming message not found: ${data.emailMessageId}`);
 
-  const newlyUploaded = await uploadPendingAttachments(data.emailMessageId);
-  const hasNewAttachments = newlyUploaded.length > 0;
-  const resources: SessionResource[] = newlyUploaded.map((f) => ({
-    type: "file",
-    fileId: f.id,
-    mountPath: f.mountPath,
-    filename: f.filename,
-    mime: f.mime,
-    bytes: f.bytes,
-  }));
+  // Every attachment on the message, not just newly uploaded ones: a retry
+  // or a post-switch sandbox still needs the bytes written into it.
+  const resources: SessionResource[] = toSessionResources(
+    await prepareEmailAttachments(data.emailMessageId),
+  );
 
   const resolved = await resolveEmailSessionId(
     baseAgent,
     { id: thread.id, sessionId: thread.sessionId, subject: thread.subject },
     resources,
-    hasNewAttachments,
+    resources.length > 0,
     run.agentVersionId ?? undefined,
     runId,
   );
@@ -284,16 +280,9 @@ async function runChatTurn(
   });
   if (!message) throw new Error(`Chat message not found: ${data.chatMessageId}`);
 
-  const newlyUploaded = await uploadPendingChatAttachments(data.chatMessageId);
-  const hasNewAttachments = newlyUploaded.length > 0;
-  const resources: SessionResource[] = newlyUploaded.map((f) => ({
-    type: "file",
-    fileId: f.id,
-    mountPath: f.mountPath,
-    filename: f.filename,
-    mime: f.mime,
-    bytes: f.bytes,
-  }));
+  const resources: SessionResource[] = toSessionResources(
+    await prepareChatAttachments(data.chatMessageId),
+  );
 
   const resolved = await resolveChatSessionId(
     baseAgent,
@@ -303,7 +292,7 @@ async function runChatTurn(
       title: conversation.title,
     },
     resources,
-    hasNewAttachments,
+    resources.length > 0,
     run.agentVersionId ?? undefined,
     runId,
   );
@@ -369,7 +358,7 @@ async function appendRunStarted(runId: string, resolved: ResolvedSession): Promi
       type: "run.started",
       runId,
       sessionId: resolved.sessionId,
-      backend: "daytona",
+      ...(resolved.provider ? { provider: resolved.provider } : {}),
       ...(resolved.providerSandboxId
         ? { providerSandboxId: resolved.providerSandboxId }
         : {}),

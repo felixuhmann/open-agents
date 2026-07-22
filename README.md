@@ -4,12 +4,12 @@
 
 Deploy custom ai agents that bring real value to your org in minutes. No coding required. Upload your skill bundles. Select tools for the agent. Sandboxed in the cloud. Observable by default.
 
-Single-tenant agent platform powered by Daytona sandboxes and Pi.
+Single-tenant agent platform powered by isolated agent sandboxes and Pi.
 One deployment per customer; admins create, configure, and share agents
 through a web UI without writing any code.
 
 ```
-Browser SPA ──▶ Hono API ──▶ Postgres + pg-boss ──▶ Daytona sandbox + Pi loop
+Browser SPA ──▶ Hono API ──▶ Postgres + pg-boss ──▶ agent sandbox + Pi loop
                   │
                   └──▶ Mailgun (catch-all webhook)
 ```
@@ -24,7 +24,7 @@ Each agent has up to two surfaces:
 
 The agent definition (system prompt, tools, skills, third-party MCP servers,
 ACL, surface toggles) is owned by **our** Postgres. Publishing freezes a local
-`AgentVersion` snapshot; Daytona is the runtime and Postgres is the source of
+`AgentVersion` snapshot; a sandbox provider is the runtime and Postgres is the source of
 truth.
 
 ## Repo layout
@@ -32,7 +32,7 @@ truth.
 ```
 .
 ├── apps/
-│   ├── api/        Hono backend + pg-boss workers + Daytona orchestration
+│   ├── api/        Hono backend + pg-boss workers + sandbox orchestration
 │   └── web/        Vite + React + TanStack Query + better-auth/react SPA
 ├── packages/
 │   ├── db/         Prisma 7 schema + generated client (@open-agents/db)
@@ -63,9 +63,16 @@ Open `http://localhost:3000` and complete the setup wizard. See
 [`docs/deployment.md`](docs/deployment.md) for production hosting notes.
 
 Open `http://localhost:5173`. The first request will redirect you to the
-**Setup wizard**, where you create the first admin user and paste your
-Daytona, model-provider, and Mailgun credentials. Everything else (creating agents,
-uploading skills, rotating secrets) happens in the SPA from there.
+**Setup wizard**, where you create the first admin user, choose a sandbox
+provider, and paste your model-provider and Mailgun credentials. Everything
+else (creating agents, uploading skills, rotating secrets) happens in the SPA
+from there.
+
+Sandboxes run on **Daytona** (managed; needs an API key) or on a **self-hosted
+broker** (Docker containers on your own host; no third-party account, no
+per-sandbox ports). Daytona is the default and stays the default for any
+deployment that never chooses — see
+[`docker/sandbox-broker/README.md`](docker/sandbox-broker/README.md).
 
 Required bootstrap environment (see `[apps/api/.env.example](apps/api/.env.example)`):
 
@@ -80,7 +87,10 @@ Required bootstrap environment (see `[apps/api/.env.example](apps/api/.env.examp
 
 Daytona, model-provider, and Mailgun key/domain/signing key are **not**
 environment variables. They live AES-GCM encrypted in the `Secret` table
-and are managed from **Settings → Secrets** in the UI.
+and are managed from **Settings → Secrets** in the UI. The self-hosted
+broker's URL and token are the exception: they are infrastructure config
+(`SANDBOX_BROKER_URL`, `SANDBOX_BROKER_TOKEN`/`_FILE`) and never reach the
+browser or the database.
 
 Branding values, email footer copy, and the default outbound `From:`
 header live in the plaintext `AppSetting` table and are edited from
@@ -99,7 +109,7 @@ header live in the plaintext `AppSetting` table and are edited from
 - `[docs/operations.md](docs/operations.md)` — logging, retries, and how
   to debug a sideways run.
 - `[docs/mcp-tools.md](docs/mcp-tools.md)` — registering platform tools
-  and external MCP servers for Daytona runs.
+  and external MCP servers for sandbox runs.
 
 ## Key technologies
 

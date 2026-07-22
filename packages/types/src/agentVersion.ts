@@ -5,8 +5,15 @@ import {
 } from "./sandboxPolicy.js";
 import { ReasoningLevelSchema } from "./modelCatalog.js";
 
-/** Discriminator for the frozen config payload schema. */
-export const AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION = 1 as const;
+/**
+ * Schema version new publishes write.
+ *
+ * v1 froze `runtime.backend: "daytona"` at publish time. That was never
+ * routing information — the provider a run actually used is a property of
+ * its `AgentSandbox` row — so v2 drops it. v1 rows stay immutable and keep
+ * parsing; the source version is preserved for audit display.
+ */
+export const AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION = 2 as const;
 
 export const AgentConfigToolBinding = z.object({
   bindingId: z.string(),
@@ -50,24 +57,37 @@ export type AgentConfigSubagentBinding = z.infer<typeof AgentConfigSubagentBindi
 /** @deprecated Alias for `AgentConfigMcpServer`. */
 export type AgentConfigThirdPartyMcp = AgentConfigMcpServer;
 
-export const AgentConfigRuntime = z.object({
-  backend: z.literal("daytona"),
-  /** Frozen sandbox security policy for Daytona runs. */
-  sandbox: z
-    .object({
-      network: SandboxNetworkPolicySchema,
-      command: SandboxCommandPolicySchema,
-    })
-    .optional(),
-});
-export type AgentConfigRuntime = z.infer<typeof AgentConfigRuntime>;
+/** Frozen sandbox security policy. Optional on both schema versions. */
+const AgentConfigSandboxPolicy = z
+  .object({
+    network: SandboxNetworkPolicySchema,
+    command: SandboxCommandPolicySchema,
+  })
+  .optional();
 
-/**
- * Provider-neutral frozen agent config stored in `AgentVersion.payload`.
- * Captures everything a run needs to audit against the exact runtime definition.
- */
-export const AgentConfigSnapshot = z.object({
-  schemaVersion: z.literal(AGENT_CONFIG_SNAPSHOT_SCHEMA_VERSION),
+/** v1 runtime: sandbox policy plus the publish-time Daytona backend pin. */
+export const AgentConfigRuntimeV1 = z.object({
+  backend: z.literal("daytona"),
+  sandbox: AgentConfigSandboxPolicy,
+});
+
+/** v2 runtime: sandbox policy only. */
+export const AgentConfigRuntimeV2 = z.object({
+  sandbox: AgentConfigSandboxPolicy,
+});
+
+/** Normalized runtime shape both versions parse into. */
+export type AgentConfigRuntime = {
+  /**
+   * Publish-time backend pin, present only on schema-v1 rows. Retained for
+   * audit; it does NOT decide which provider a run uses.
+   */
+  backend?: "daytona";
+  sandbox?: z.infer<typeof AgentConfigSandboxPolicy>;
+};
+
+/** Fields every schema version shares. */
+const agentConfigSnapshotFields = {
   systemPrompt: z.string(),
   modelProvider: z.string().min(1),
   modelId: z.string().min(1),
@@ -89,8 +109,38 @@ export const AgentConfigSnapshot = z.object({
   skillBindings: z.array(AgentConfigSkillBinding),
   /** Agents this agent may delegate to, each pinned to a published version. */
   subagentBindings: z.array(AgentConfigSubagentBinding).default([]),
-  runtime: AgentConfigRuntime,
+};
+
+/** Historical schema. Immutable: these rows are never rewritten. */
+export const AgentConfigSnapshotV1 = z.object({
+  schemaVersion: z.literal(1),
+  ...agentConfigSnapshotFields,
+  runtime: AgentConfigRuntimeV1,
 });
+
+/** Current schema. The sandbox provider is no longer an agent-level setting. */
+export const AgentConfigSnapshotV2 = z.object({
+  schemaVersion: z.literal(2),
+  ...agentConfigSnapshotFields,
+  runtime: AgentConfigRuntimeV2,
+});
+
+/**
+ * Provider-neutral frozen agent config stored in `AgentVersion.payload`.
+ *
+ * Parsing accepts either schema version and yields one normalized internal
+ * representation, keeping `schemaVersion` so the builder UI can show which
+ * schema a historical version was published under.
+ */
+export const AgentConfigSnapshot = z
+  .discriminatedUnion("schemaVersion", [AgentConfigSnapshotV1, AgentConfigSnapshotV2])
+  .transform((parsed) => {
+    const runtime: AgentConfigRuntime = {
+      ...("backend" in parsed.runtime ? { backend: parsed.runtime.backend } : {}),
+      ...(parsed.runtime.sandbox ? { sandbox: parsed.runtime.sandbox } : {}),
+    };
+    return { ...parsed, runtime };
+  });
 export type AgentConfigSnapshot = z.infer<typeof AgentConfigSnapshot>;
 
 export const AgentVersionSummaryDto = z.object({

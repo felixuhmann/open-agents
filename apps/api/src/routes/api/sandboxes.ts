@@ -9,7 +9,7 @@ import {
   getSandboxForConversation,
   getSandboxForThread,
   listSandboxes,
-  listUnregisteredDaytonaSandboxes,
+  listOrphanedSandboxes,
   recoverSandbox,
   reconcileSandboxes,
   startSandbox,
@@ -34,7 +34,7 @@ sandboxesRoutes.get("/", async (c) => {
 
 sandboxesRoutes.get("/orphans", async (c) => {
   requireAdmin(c);
-  const orphans = await listUnregisteredDaytonaSandboxes();
+  const orphans = await listOrphanedSandboxes();
   return c.json({ orphans });
 });
 

@@ -50,6 +50,9 @@ importers:
       '@react-email/render':
         specifier: ^2.0.7
         version: 2.0.8(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@sandbox-broker/client':
+        specifier: https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-client-0.1.0-rc.2.tgz
+        version: https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-client-0.1.0-rc.2.tgz
       better-auth:
         specifier: ^1.4.6
         version: 1.6.9(@opentelemetry/api@1.9.0)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@6.0.3))(typescript@6.0.3))(mysql2@3.15.3)(next@16.2.3(@opentelemetry/api@1.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(pg@8.20.0)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@6.0.3))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -2914,6 +2917,14 @@ packages:
     resolution: {integrity: sha512-hPt/bgL5cE+Qp+/TPHBqptcAgPzgj46mPcg/16zNUmbQk0j+mOEQV/+Lqu8QRtDV3Ek95Q6FeFITpuhl6OTsAA==}
     cpu: [x64]
     os: [win32]
+
+  '@sandbox-broker/client@https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-client-0.1.0-rc.2.tgz':
+    resolution: {integrity: sha512-F1HRWittAI9M3kJDsmEO1wH17wKdLA6KdkOX/mwmou6DWout/UIJGpY+c9tSRAcg94DqCzwDcb09jcO+e+YBVg==, tarball: https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-client-0.1.0-rc.2.tgz}
+    version: 0.1.0-rc.2
+
+  '@sandbox-broker/contracts@https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-contracts-0.1.0-rc.2.tgz':
+    resolution: {integrity: sha512-PlCrDLHhWgMR9yuirAYv078sjPiS9Eu20kTX8XshLU86MQUvaGsLll4xnRcCuxtdn24LuknmEvM5fslO1X55iw==, tarball: https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-contracts-0.1.0-rc.2.tgz}
+    version: 0.1.0-rc.2
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -9452,6 +9463,16 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.60.3':
     optional: true
+
+  '@sandbox-broker/client@https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-client-0.1.0-rc.2.tgz':
+    dependencies:
+      '@sandbox-broker/contracts': https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-contracts-0.1.0-rc.2.tgz
+      zod: 3.25.76
+
+  '@sandbox-broker/contracts@https://github.com/felixuhmann/sandbox-broker/releases/download/v0.1.0-rc.2/sandbox-broker-contracts-0.1.0-rc.2.tgz':
+    dependencies:
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
 
   '@sec-ant/readable-stream@0.4.1': {}
 

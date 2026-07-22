@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentSummaryDto,
   AnalyticsSummary,
@@ -892,12 +892,72 @@ export function useSandboxOrphans() {
     queryFn: () =>
       api<{
         orphans: Array<{
+          provider: SandboxProviderId;
           providerSandboxId: string;
           state: string;
           agentId?: string;
         }>;
       }>("/api/sandboxes/orphans"),
   });
+}
+
+export type SandboxProviderId = "daytona" | "broker";
+
+export type SandboxProviderCapabilities = {
+  networkModes: Array<"deny-all" | "unrestricted" | "cidr-allowlist">;
+  archive: boolean;
+  recover: boolean;
+};
+
+export type SandboxProviderInfo = {
+  id: SandboxProviderId;
+  available: boolean;
+  /** Why it is unavailable, when it is. Never contains credentials. */
+  detail: string | null;
+  capabilities: SandboxProviderCapabilities | null;
+};
+
+export type SandboxProviderStatus = {
+  /** Provider new sandboxes are created on, deployment-wide. */
+  active: SandboxProviderId;
+  providers: SandboxProviderInfo[];
+  warnings: string[];
+};
+
+/**
+ * Deployment-wide sandbox provider selection. Reports availability, health,
+ * and capabilities only — broker tokens live server-side and are never sent
+ * to the browser.
+ */
+export function useSandboxProviderStatus() {
+  return useQuery({
+    queryKey: ["sandbox-provider"],
+    queryFn: () => api<SandboxProviderStatus>("/api/sandbox-provider"),
+  });
+}
+
+export function useSelectSandboxProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: SandboxProviderId) =>
+      api<SandboxProviderStatus>("/api/sandbox-provider", {
+        method: "PUT",
+        json: { provider },
+      }),
+    onSuccess: async (status) => {
+      qc.setQueryData(["sandbox-provider"], status);
+      // Row-level provider badges and available actions both change.
+      await qc.invalidateQueries({ queryKey: ["sandboxes"] });
+    },
+  });
+}
+
+/** Capabilities of one provider, for gating row actions in the UI. */
+export function providerCapabilities(
+  status: SandboxProviderStatus | undefined,
+  provider: string,
+): SandboxProviderCapabilities | null {
+  return status?.providers.find((p) => p.id === provider)?.capabilities ?? null;
 }
 
 export type McpConnectionTokenSummary = {

@@ -9,7 +9,7 @@ import { getAgentById } from "../agents/service.js";
 import { prisma } from "../db.js";
 import { log } from "../log.js";
 import { appendEvent } from "../runs/events.js";
-import { truncateText } from "./daytonaLimits.js";
+import { truncateText } from "./sandboxLimits.js";
 import { summarizeToolResultForRunLog } from "./runObservability.js";
 import {
   finalizeAgentRunCancellation,
@@ -253,7 +253,7 @@ export async function runSubagent(
       type: "run.started",
       runId: childRun.id,
       sessionId: session.id,
-      backend: "daytona",
+      ...(session.provider ? { provider: session.provider } : {}),
       ...(session.providerSandboxId
         ? { providerSandboxId: session.providerSandboxId }
         : {}),

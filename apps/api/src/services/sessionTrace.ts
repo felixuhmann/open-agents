@@ -1,6 +1,9 @@
-import { AgentConfigSnapshot, type SkillMaterializationEntry } from "@open-agents/types";
+import type { SkillMaterializationEntry } from "@open-agents/types";
 import { prisma } from "../db.js";
-import { parseDaytonaSessionId } from "./daytonaSandbox.js";
+import {
+  sandboxProviderFromSessionId,
+  tryParseSandboxSessionId,
+} from "../sandbox-provider/sessionId.js";
 import { HttpError } from "../auth/middleware.js";
 
 /**
@@ -403,13 +406,24 @@ function skillsFromRunEvents(events: RunWithEvents["events"]): IssueDetailRunSki
   return materialized.payload.skills;
 }
 
-function runtimeBackendFromVersion(payload: unknown): string | null {
-  if (!payload) return null;
-  try {
-    return AgentConfigSnapshot.parse(payload).runtime.backend;
-  } catch {
-    return null;
+/**
+ * The sandbox provider a run actually used.
+ *
+ * Reads the run's own evidence (the `run.started` event, then the session id
+ * it recorded) instead of the publish-time `runtime.backend` pin that schema
+ * v1 froze — that pin never controlled routing and does not exist on v2.
+ */
+function runtimeProviderFromRun(
+  events: RunWithEvents["events"],
+  sessionId: string | null,
+): string | null {
+  const started = events.find((e) => e.type === "run.started");
+  if (started?.payload && typeof started.payload === "object") {
+    const p = started.payload as Record<string, unknown>;
+    if (typeof p.provider === "string") return p.provider;
+    if (typeof p.backend === "string") return p.backend;
   }
+  return sandboxProviderFromSessionId(sessionId);
 }
 
 function sandboxMetaFromRunEvents(events: RunWithEvents["events"]): {
@@ -447,12 +461,7 @@ function extractWorkspaceDirFromRuns(
 }
 
 function providerSandboxIdFromSessionId(sessionId: string | null): string | null {
-  if (!sessionId?.startsWith("daytona:")) return null;
-  try {
-    return parseDaytonaSessionId(sessionId).sandboxId;
-  } catch {
-    return null;
-  }
+  return tryParseSandboxSessionId(sessionId)?.providerSandboxId ?? null;
 }
 
 export function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
@@ -470,7 +479,7 @@ export function toIssueDetailRun(r: RunWithEvents): IssueDetailRun {
     id: r.id,
     surface: r.surface as "chat" | "email" | "workflow",
     sessionId,
-    runtimeBackend: runtimeBackendFromVersion(r.agentVersion?.payload),
+    runtimeBackend: runtimeProviderFromRun(r.events, sessionId),
     providerSandboxId,
     workspaceDir: sandboxMeta.workspaceDir,
     agentVersionId: r.agentVersionId,

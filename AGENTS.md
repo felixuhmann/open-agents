@@ -13,7 +13,7 @@ surface (catch-all Mailgun route → recipient `<localPart>@<MAILGUN_DOMAIN>`).
 The runtime is split across two apps in a Turborepo monorepo:
 
 - [`apps/api`](apps/api/) — Hono backend + better-auth + pg-boss workers +
-  Daytona sandbox orchestration, platform tools, third-party MCP, and Mailgun.
+  sandbox orchestration, platform tools, third-party MCP, and Mailgun.
 - [`apps/web`](apps/web/) — Vite + React + TanStack Query + better-auth/react
   SPA. The single control-plane UI for the deployment.
 
@@ -29,8 +29,45 @@ Shared code lives in [`packages/`](packages/):
 
 Agent definitions (system prompt, tools, skills, `mcp_servers`) are stored
 in **our** database. Publishing freezes the current draft into an
-`AgentVersion` snapshot; Daytona is the runtime and Postgres is the source
-of truth.
+`AgentVersion` snapshot; a sandbox provider is the runtime and Postgres is
+the source of truth.
+
+### Sandbox providers
+
+Sandbox mechanics sit behind a provider-neutral interface so the Pi
+model/tool loop never sees a vendor SDK:
+
+- [`sandbox-provider/types.ts`](apps/api/src/sandbox-provider/types.ts) —
+  the `SandboxProvider` / `SandboxHandle` contract (create, connect, exec,
+  files, lifecycle).
+- [`sandbox-provider/daytona/`](apps/api/src/sandbox-provider/daytona/) —
+  `@daytona/sdk`, using the encrypted `daytona_api_key` service secret.
+- [`sandbox-provider/broker/`](apps/api/src/sandbox-provider/broker/) — the
+  self-hosted [sandbox broker](https://github.com/felixuhmann/sandbox-broker)
+  over HTTP, configured from `SANDBOX_BROKER_URL` plus a token or token file.
+- [`agent-backend/pi.ts`](apps/api/src/agent-backend/pi.ts) — the shared Pi
+  runtime. It consumes a `SandboxHandle` and nothing provider-specific.
+
+One provider is active deployment-wide (`sandbox_provider` app setting).
+**A missing setting means Daytona**, so existing deployments are untouched.
+Every `AgentSandbox` row and session id records the provider that created
+it, and lifecycle calls dispatch through _that_ provider — switching the
+active provider never strands old rows.
+
+The selection gates exactly one thing: `createSession()`. Connecting,
+streaming, mounting, and managing an existing sandbox go through the
+session's own provider, so an outage on the newly selected provider must
+never stop work on sessions that live elsewhere. When a session does have to
+move providers, the conversation/thread link and the session pointer are
+both unique, so they are taken together by a compare-and-swap
+([`sandboxSessionClaim.ts`](apps/api/src/services/sandboxSessionClaim.ts)):
+one racer wins and the loser's sandbox is destroyed rather than left
+running.
+
+When adding provider behaviour, put it behind the interface. If a provider
+cannot honour a policy it must **fail closed** with an actionable message
+rather than approximating it: broker v1 has no CIDR allow list, so an agent
+that has one is rejected instead of being widened to unrestricted egress.
 
 ## High-level data flow
 
@@ -41,7 +78,7 @@ Browser (SPA) ─────────────▶ Hono /api/*  ──▶ 
        │                                  │
        │                                  ▼
        │                          run-agent worker
-       │                          ├─ Daytona sandbox resources
+       │                          ├─ sandbox resources (provider adapter)
        │                          ├─ Pi model/tool loop
        │                          └─ writes RunEvent rows + NOTIFY
        │
@@ -54,7 +91,7 @@ Mailgun ──▶ POST /mailgun/inbound  ──▶ resolve agent by recipient �
 ```
 
 Web chat is durable: the HTTP `POST /api/conversations/:id/messages` only
-enqueues a job; the worker streams Daytona/Pi events into the `RunEvent`
+enqueues a job; the worker streams sandbox/Pi events into the `RunEvent`
 append-only table; the SSE handler replays from `Last-Event-ID` and
 switches to live `LISTEN/NOTIFY`. If the browser drops, the run keeps
 going and the page picks up where it left off on reconnect.
@@ -137,13 +174,15 @@ recipient address against `Agent.inboundLocalPart`.
 Every capability the agent can call is a row in the `Tool` catalog,
 discriminated by `runtime`:
 
-- `managed` — the Daytona sandbox executes the tool (`bash`, `read`, `write`,
-  `edit`, `glob`, `grep`, `web_fetch`, `web_search`).
+- `managed` — the agent's sandbox executes the tool, on whichever provider is
+  active (`bash`, `read`, `write`, `edit`, `glob`, `grep`, `web_fetch`,
+  `web_search`).
 - `platform` — this backend executes the tool through a `PlatformHandler` registered in
   [`apps/api/src/mcp/platform/index.ts`](apps/api/src/mcp/platform/index.ts).
 
 Both runtimes share one binding table (`AgentToolBinding`) and one UI
-picker. Daytona translates bindings to Pi tools at run time; the rest of
+picker. The Pi runtime translates bindings to Pi tools against the active
+sandbox provider at run time; the rest of
 the codebase just sees `Tool` + `AgentToolBinding`.
 
 External (user-supplied) MCP servers stay separate as
@@ -177,7 +216,7 @@ export const memoryTools = [
 Append the handler to `PLATFORM_HANDLERS`. A boot-time
 [`seedToolCatalog()`](apps/api/src/services/seedToolCatalog.ts) call
 upserts a `Tool` row (with `runtime = platform`) and also seeds the
-Daytona-managed sandbox tool rows. Don't insert `Tool` rows by hand.
+sandbox-managed tool rows. Don't insert `Tool` rows by hand.
 
 ### Database (Prisma 7)
 
@@ -244,7 +283,12 @@ Always run before committing:
 
 ```bash
 pnpm check
+pnpm --filter @open-agents/api test
 ```
+
+The API suite is hermetic: the broker adapter's integration tests skip
+themselves unless `SANDBOX_BROKER_URL` (plus a token) is set. Run them against
+a real broker when touching `sandbox-provider/broker/`.
 
 That runs `turbo run typecheck lint` (cached, per workspace) and then a
 workspace-wide `prettier --check`. All must be green.
@@ -253,7 +297,7 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 
 ## Common gotchas
 
-- **New attachments mount into existing Daytona sandboxes** via
+- **New attachments mount into existing sandboxes** via
   `mountSessionResources`; don't rotate sessions just to add files.
 - **Service credentials are not env vars**: Daytona / model-provider / Mailgun keys live
   AES-GCM encrypted in the `Secret` table and are read via
@@ -261,13 +305,18 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
   bootstrap envs are `DATABASE_URL`, `SECRET_ENCRYPTION_KEY`,
   `BETTER_AUTH_SECRET`, `UPLOAD_SIGNING_SECRET`,
   `WEB_BASE_URL`, `PUBLIC_BASE_URL` (see `apps/api/.env.example`).
+  **The broker token is the deliberate exception**: it authenticates one
+  private container to another on a network the browser cannot reach, so it
+  comes from `SANDBOX_BROKER_TOKEN` / `SANDBOX_BROKER_TOKEN_FILE` and is never
+  stored in the database or returned by any route. Optional env vars must
+  treat an empty string as absent — Compose expands an unset `${VAR:-}` to
+  `""`, and a Daytona deployment must not fail to boot over it.
 - **Email and chat never cross-pollinate**: each surface has its own
   thread/conversation table and creates independent backend sessions.
   Don't try to share state between them.
-- **Daytona skills materialize at sandbox creation**: When
-  `DAYTONA_API_KEY` is set, `DaytonaAgentBackend.createSession` resolves the
-  sandbox's actual working directory via `resolveSandboxWorkspaceDir` (some
-  TS sandbox images use `/home/daytona` rather than `/workspace`) and
+- **Skills materialize at sandbox creation**: session creation resolves the
+  sandbox's actual working directory (Daytona TS images may use
+  `/home/daytona`; broker sandboxes are always `/workspace`) and
   unpacks each pinned `AgentSkillBinding` into `<workspaceDir>/.agents/skills/<slug>/`
   via [`materializeSkills.ts`](apps/api/src/services/materializeSkills.ts).
   Bundle bytes live on disk under `apps/api/data/skills/` (see
@@ -288,14 +337,18 @@ If you touched the Prisma schema, also run `pnpm db:migrate --name <slug>`.
 - **Run attachments use `attach_run_file`**: The Pi loop exposes
   `attach_run_file`, which pulls
   bytes from the sandbox on the orchestrator and stores `AgentAttachment` rows.
-- **Daytona sandbox lifecycle**: First-class metadata lives in the
+- **Sandbox lifecycle**: First-class metadata lives in the
   `AgentSandbox` table (`provider`, `providerSandboxId`, `state`,
   `lastActivityAt`, lifecycle policy JSON, links to agent + conversation/thread).
-  Session ids on conversations/threads remain `daytona:{agentId}:{sandboxId}`.
-  Admins manage sandboxes at `/settings/sandboxes` (`GET/POST /api/sandboxes/*`).
+  Session ids are `{provider}:{agentId}:{sandboxId}`; legacy `daytona:*` ids
+  still parse unchanged and must keep doing so.
+  Admins manage sandboxes at `/settings/sandboxes` (`GET/POST /api/sandboxes/*`)
+  and pick the active provider there (`GET/PUT /api/sandbox-provider`).
   A pg-boss `sandbox-reconcile` job (every 6h) syncs provider state, stops stale
-  VMs, and clears pointers when sandboxes are gone. New chat attachments mount into
+  sandboxes, and clears pointers when sandboxes are gone; one unavailable
+  provider must not stop the others. New chat attachments mount into
   the existing sandbox via `mountSessionResources` (no forced session rotation).
+  Archive/recover are Daytona-only and report as unsupported for broker rows.
 
 ## Local development
 
@@ -329,6 +382,19 @@ docker compose up --build
 
 The container entrypoint runs `prisma migrate deploy` before starting the API.
 Mount a volume at `apps/api/data/skills` for skill bundle persistence.
+
+The self-hosted sandbox broker is a Compose **profile** that is off by
+default, so `docker compose config` and `docker compose up` are unchanged for
+existing Daytona deployments:
+
+```bash
+COMPOSE_PROFILES=broker DOCKER_GID=$(getent group docker | cut -d: -f3) \
+  docker compose up -d --build
+```
+
+Only the broker receives `/var/run/docker.sock`; it publishes no host port and
+gets no public route, and Postgres stays off its control network. See
+[`docker/sandbox-broker/README.md`](docker/sandbox-broker/README.md).
 
 ## Cursor Cloud specific instructions
 

@@ -1,4 +1,6 @@
 import { prisma } from "../db.js";
+import { APP_SETTING_KEYS, GENERIC_APP_SETTING_KEYS } from "./appSettingPolicy.js";
+import type { AppSettingKey } from "./appSettingPolicy.js";
 
 /**
  * Deployment-wide non-secret settings (e.g. branding). Stored plaintext
@@ -7,25 +9,13 @@ import { prisma } from "../db.js";
  *
  * Reads are cached per-process; mutations invalidate the cache so
  * the next read sees the new value.
+ *
+ * The key set and which keys the generic settings route may touch live in
+ * `appSettingPolicy.ts`.
  */
 
-export const APP_SETTING_KEYS = {
-  /** Human-readable product name shown in the web app chrome and page title. */
-  PRODUCT_NAME: "product_name",
-  /** Absolute or `/static/...` URL of the browser favicon. */
-  FAVICON_URL: "favicon_url",
-  /** Absolute or `/static/...` URL of the image shown in the sidebar brand slot. */
-  SIDEBAR_LOGO_URL: "sidebar_logo_url",
-  /** Absolute or `/static/...` URL of the logo image rendered in the
-   *  outbound email footer. When empty, the footer omits the image. */
-  EMAIL_FOOTER_LOGO_URL: "email_footer_logo_url",
-  /** Plain-text disclaimer paragraph rendered in the outbound email footer. */
-  EMAIL_DISCLAIMER: "email_disclaimer",
-  /** Default outbound `From:` header for legacy email threads. */
-  INBOUND_FROM: "inbound_from",
-} as const;
-
-export type AppSettingKey = (typeof APP_SETTING_KEYS)[keyof typeof APP_SETTING_KEYS];
+export { APP_SETTING_KEYS };
+export type { AppSettingKey };
 
 const cache = new Map<string, string | null>();
 
@@ -70,15 +60,17 @@ export function invalidateAppSetting(key?: AppSettingKey): void {
 }
 
 /**
- * Snapshot of every known app setting, used by the API's GET endpoint
- * to render the General settings page. Values are plaintext — never
- * put credentials here.
+ * Snapshot of the app settings the General settings page renders as generic
+ * editable text. Values are plaintext — never put credentials here.
+ *
+ * Reserved keys are omitted: the page turns every entry into a free-form
+ * field, and `sandbox_provider` has its own health-checked editor.
  */
 export async function listAppSettings(): Promise<
   { key: AppSettingKey; value: string | null }[]
 > {
   const out: { key: AppSettingKey; value: string | null }[] = [];
-  for (const key of Object.values(APP_SETTING_KEYS)) {
+  for (const key of GENERIC_APP_SETTING_KEYS) {
     out.push({ key, value: await getAppSetting(key) });
   }
   return out;

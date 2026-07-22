@@ -1,0 +1,186 @@
+import type {
+  SandboxProviderInfoDto,
+  SandboxProviderStatusDto,
+} from "@open-agents/types";
+import { AgentBackendError } from "../agent-backend/types.js";
+import type { SandboxProviderRegistry } from "../sandbox-provider/registry.js";
+import { sandboxProviderFromSessionId } from "../sandbox-provider/sessionId.js";
+import {
+  isSandboxProviderId,
+  SANDBOX_PROVIDER_IDS,
+  type SandboxProviderId,
+} from "../sandbox-provider/types.js";
+import { log } from "../log.js";
+
+/**
+ * Deployment-wide sandbox provider selection.
+ *
+ * Exactly one provider is active for *new* sandboxes. Existing sandbox rows
+ * and session ids always dispatch through their own recorded provider, so
+ * switching never breaks history — it just means the next use of a session
+ * on the old provider gets a fresh sandbox.
+ *
+ * Storage and provider construction are injected so the rules can be
+ * exercised without a database or credentials.
+ */
+
+/** Provider assumed when no setting has ever been written. */
+export const DEFAULT_SANDBOX_PROVIDER: SandboxProviderId = "daytona";
+
+/**
+ * Interpret the stored `sandbox_provider` value.
+ *
+ * An absent value means this deployment predates the setting, so it keeps
+ * running on Daytona. An unrecognized value (hand-edited row, downgrade)
+ * also falls back rather than taking the deployment down.
+ */
+export function parseActiveSandboxProviderId(
+  raw: string | null | undefined,
+): SandboxProviderId {
+  if (!raw) return DEFAULT_SANDBOX_PROVIDER;
+  if (isSandboxProviderId(raw)) return raw;
+  log.warn("sandbox-provider: unrecognized stored selection, using default", {
+    stored: raw,
+    fallback: DEFAULT_SANDBOX_PROVIDER,
+  });
+  return DEFAULT_SANDBOX_PROVIDER;
+}
+
+/**
+ * Whether a stored session pointer must be replaced rather than resumed.
+ *
+ * An absent pointer is not a mismatch — that path creates a session anyway.
+ * A *present* pointer that cannot be parsed, or that names a provider this
+ * build does not know, is: resuming it would hand the same string to
+ * `parseSandboxSessionId` and throw, leaving the conversation, thread, or
+ * workflow mapping stuck on a value nothing can ever connect to. Rotating
+ * instead gives it a working sandbox on the active provider.
+ */
+export function isSessionProviderMismatch(
+  sessionId: string | null | undefined,
+  activeProviderId: SandboxProviderId,
+): boolean {
+  if (typeof sessionId !== "string" || sessionId.length === 0) return false;
+  const provider = sandboxProviderFromSessionId(sessionId);
+  if (!provider) {
+    log.warn("sandbox-provider: unusable session id, rotating to the active provider", {
+      sessionId,
+      activeProvider: activeProviderId,
+    });
+    return true;
+  }
+  return provider !== activeProviderId;
+}
+
+export type SandboxProviderSettingsDeps = {
+  registry: SandboxProviderRegistry;
+  readSetting: () => Promise<string | null>;
+  writeSetting: (value: string) => Promise<void>;
+  /** Invoked after a successful selection so cached instances are rebuilt. */
+  onChange?: () => void;
+};
+
+export type SandboxProviderSettings = {
+  getActiveProviderId(): Promise<SandboxProviderId>;
+  describe(): Promise<SandboxProviderStatusDto>;
+  /** Verify that a provider can be selected without mutating deployment state. */
+  preflight(id: SandboxProviderId): Promise<void>;
+  select(id: SandboxProviderId): Promise<SandboxProviderStatusDto>;
+};
+
+export function createSandboxProviderSettings(
+  deps: SandboxProviderSettingsDeps,
+): SandboxProviderSettings {
+  async function getActiveProviderId(): Promise<SandboxProviderId> {
+    return parseActiveSandboxProviderId(await deps.readSetting());
+  }
+
+  async function inspect(id: SandboxProviderId): Promise<SandboxProviderInfoDto> {
+    const provider = await deps.registry.tryGet(id);
+    if (!provider) {
+      // A provider that is present but broken (empty token file, unreadable
+      // mount) must say so — "not configured" would send an admin looking in
+      // the wrong place.
+      const failure = deps.registry.lastFailure(id);
+      return {
+        id,
+        available: false,
+        detail:
+          failure ?? `Sandbox provider "${id}" is not configured for this deployment.`,
+        capabilities: null,
+      };
+    }
+    const health = await provider.health();
+    return {
+      id,
+      available: health.available,
+      detail: health.detail ?? null,
+      capabilities: {
+        networkModes: [...provider.capabilities.networkModes],
+        archive: provider.capabilities.archive,
+        recover: provider.capabilities.recover,
+      },
+    };
+  }
+
+  async function preflight(id: SandboxProviderId): Promise<void> {
+    const info = await inspect(id);
+    if (!info.available) {
+      throw new AgentBackendError(
+        `Cannot select sandbox provider "${id}"${
+          info.detail ? `: ${info.detail}` : "."
+        } The current selection is unchanged.`,
+        // A rejected switch is a normal answer to the request, not a fault.
+        { status: 400 },
+      );
+    }
+  }
+
+  async function describeWith(active: SandboxProviderId) {
+    const providers: SandboxProviderInfoDto[] = [];
+    for (const id of SANDBOX_PROVIDER_IDS) {
+      providers.push(await inspect(id));
+    }
+    const warnings: string[] = [];
+    const activeInfo = providers.find((p) => p.id === active);
+    if (!activeInfo?.available) {
+      // The detail comes from a provider and may or may not end in a period;
+      // normalize so the sentence that follows does not run into it.
+      const detail = activeInfo?.detail?.trim();
+      const reason = detail ? `: ${detail.replace(/[.\s]+$/, "")}.` : ".";
+      warnings.push(
+        `The active sandbox provider "${active}" is unavailable${reason} New sandboxes cannot be created until it is configured and reachable.`,
+      );
+    }
+    return { active, providers, warnings } satisfies SandboxProviderStatusDto;
+  }
+
+  return {
+    getActiveProviderId,
+
+    async describe(): Promise<SandboxProviderStatusDto> {
+      return describeWith(await getActiveProviderId());
+    },
+
+    preflight,
+
+    /**
+     * Health-check the target *before* persisting. If it is unusable the
+     * setting is left exactly as it was.
+     */
+    async select(id: SandboxProviderId): Promise<SandboxProviderStatusDto> {
+      await preflight(id);
+
+      const current = await getActiveProviderId();
+      if (current !== id) {
+        await deps.writeSetting(id);
+        deps.onChange?.();
+        log.info("sandbox-provider: active provider changed", {
+          from: current,
+          to: id,
+        });
+      }
+      return describeWith(id);
+    },
+  };
+}

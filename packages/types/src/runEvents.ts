@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { SkillMaterializationEntry } from "./skills.js";
+import { SandboxProviderIdSchema } from "./sandboxes.js";
 
-/** Shared Daytona sandbox fields on run-scoped sandbox lifecycle events. */
+/** Shared sandbox fields on run-scoped sandbox lifecycle events. */
 export const SandboxRunEventContext = z.object({
-  provider: z.literal("daytona"),
+  provider: SandboxProviderIdSchema,
   providerSandboxId: z.string(),
   sessionId: z.string(),
   workspaceDir: z.string().optional(),
@@ -91,7 +92,10 @@ export const RunEventPayload = z.discriminatedUnion("type", [
     type: z.literal("run.started"),
     runId: z.string(),
     sessionId: z.string(),
+    /** Legacy field on runs recorded before providers were selectable. */
     backend: z.literal("daytona").optional(),
+    /** Sandbox provider this run actually used. */
+    provider: SandboxProviderIdSchema.optional(),
     providerSandboxId: z.string().optional(),
     workspaceDir: z.string().optional(),
   }),
