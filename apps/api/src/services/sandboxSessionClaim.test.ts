@@ -21,7 +21,9 @@ function ownerKey(owner: SandboxOwnerRef): string {
   if (owner.surface === "chat") return `chat:${owner.conversationId}`;
   if (owner.surface === "email") return `email:${owner.threadId}`;
   const scope =
-    "conversationId" in owner.scope ? owner.scope.conversationId : owner.scope.emailThreadId;
+    "conversationId" in owner.scope
+      ? owner.scope.conversationId
+      : owner.scope.emailThreadId;
   return `workflow:${scope}:${owner.agentId}`;
 }
 

@@ -17,7 +17,10 @@ import {
 
 void test("the sandbox provider key is reserved from the generic settings surface", () => {
   assert.equal(isReservedAppSettingKey(APP_SETTING_KEYS.SANDBOX_PROVIDER), true);
-  assert.equal(GENERIC_APP_SETTING_KEYS.includes(APP_SETTING_KEYS.SANDBOX_PROVIDER), false);
+  assert.equal(
+    GENERIC_APP_SETTING_KEYS.includes(APP_SETTING_KEYS.SANDBOX_PROVIDER),
+    false,
+  );
 });
 
 void test("branding keys stay generic", () => {

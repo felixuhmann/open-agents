@@ -19,7 +19,11 @@ import {
   type ReconcileSandboxesResult,
   type SandboxLifecycleRepository,
 } from "./sandboxLifecycle.js";
-import { pickCurrentSandbox, sandboxInclude, toSandboxSummary } from "./sandboxSummary.js";
+import {
+  pickCurrentSandbox,
+  sandboxInclude,
+  toSandboxSummary,
+} from "./sandboxSummary.js";
 
 export { toSandboxSummary };
 
@@ -292,7 +296,10 @@ export async function getSandboxById(id: string): Promise<SandboxSummaryDto | nu
 }
 
 function bySessionId(sessionId: string) {
-  return prisma.agentSandbox.findUnique({ where: { sessionId }, include: sandboxInclude });
+  return prisma.agentSandbox.findUnique({
+    where: { sessionId },
+    include: sandboxInclude,
+  });
 }
 
 export async function getSandboxForConversation(

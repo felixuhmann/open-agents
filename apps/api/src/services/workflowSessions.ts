@@ -74,7 +74,10 @@ export async function resolveWorkflowStepSession(
   });
 
   const claim = await claimSandboxSession(
-    { store: prismaSandboxSessionClaimStore, discard: (id) => backend.discardSession(id) },
+    {
+      store: prismaSandboxSessionClaimStore,
+      discard: (id) => backend.discardSession(id),
+    },
     {
       owner: { surface: "workflow", agentId: agent.id, scope },
       expectedSessionId: existing?.sessionId ?? null,

@@ -10,8 +10,7 @@ import { appendWorkflowEvent, subscribeWorkflow } from "../runs/workflowEvents.j
 import { redactToolArgs } from "../services/runObservability.js";
 import {
   loadWorkflowUserUploadResources,
-  uploadPendingWorkflowAttachments,
-  uploadPendingWorkflowEmailAttachments,
+  prepareWorkflowEmailAttachments,
   uploadedToSessionResources,
 } from "../services/workflowAttachments.js";
 import { buildRunUserMessage } from "../services/runUserMessage.js";
@@ -194,8 +193,9 @@ async function runPipeline(
       );
     }
     userInput = incoming.body;
-    const uploaded = await uploadPendingWorkflowEmailAttachments(incoming.id);
-    stepZeroUserResources = uploadedToSessionResources(uploaded);
+    stepZeroUserResources = uploadedToSessionResources(
+      await prepareWorkflowEmailAttachments(incoming.id),
+    );
   } else if (run.conversationId) {
     const lastUserMessage = await prisma.workflowMessage.findFirst({
       where: { conversationId: run.conversationId, role: "user" },
@@ -203,7 +203,6 @@ async function runPipeline(
     });
     userInput = lastUserMessage?.content ?? "";
     if (lastUserMessage) {
-      await uploadPendingWorkflowAttachments(lastUserMessage.id);
       stepZeroUserResources = await loadWorkflowUserUploadResources(run.conversationId);
     }
   } else {

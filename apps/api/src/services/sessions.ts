@@ -6,10 +6,7 @@ import { describeResumedSession, type ResolvedSession } from "./resolvedSession.
 import { touchSandboxActivity } from "./sandboxes.js";
 import { isSessionProviderMismatch } from "./sandboxProviderSettings.js";
 import { getActiveSandboxProviderId } from "./sandboxProviderSettingsInstance.js";
-import {
-  claimSandboxSession,
-  type SandboxOwnerRef,
-} from "./sandboxSessionClaim.js";
+import { claimSandboxSession, type SandboxOwnerRef } from "./sandboxSessionClaim.js";
 import { prismaSandboxSessionClaimStore } from "./sandboxSessionClaimStore.js";
 
 export type { ResolvedSession };
@@ -83,7 +80,10 @@ async function resolveOwnedSession(
   // The owner link and the pointer move together: both are unique, so a
   // replacement can only take them by releasing them from its predecessor.
   const claim = await claimSandboxSession(
-    { store: prismaSandboxSessionClaimStore, discard: (id) => backend.discardSession(id) },
+    {
+      store: prismaSandboxSessionClaimStore,
+      discard: (id) => backend.discardSession(id),
+    },
     {
       owner: owner.ref,
       expectedSessionId: owner.sessionId,
